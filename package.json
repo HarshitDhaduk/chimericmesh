@@ -1,0 +1,24 @@
+{
+  "name": "chimeric-mesh",
+  "version": "1.0.0",
+  "description": "ChimericMesh: Self-healing AI agent mesh stitching vintage protocols with MCP and Kiro Crew",
+  "main": "src/web/app.js",
+  "scripts": {
+    "start": "python -m uvicorn src.main:app --reload --port 8080",
+    "test": "pytest tests/",
+    "test:pbt": "pytest tests/pbt/ -v",
+    "check:ui": "node e:/Projects/taste-skill/skills/taste-skill/scripts/consistency.mjs src/web/index.html --page tech"
+  },
+  "keywords": [
+    "kiroween-2026",
+    "kiro",
+    "mcp",
+    "kiro-crew",
+    "syslog",
+    "irc",
+    "property-based-testing",
+    "taste-skill"
+  ],
+  "author": "Harshit Dhaduk",
+  "license": "MIT"
+}
