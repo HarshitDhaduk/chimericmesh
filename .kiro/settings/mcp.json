@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "chimericmesh": {
+      "command": "python",
+      "args": ["-m", "chimericmesh.mcp_server"],
+      "env": { "PYTHONPATH": "src", "CHIMERICMESH_URL": "http://127.0.0.1:8000" }
+    }
+  }
+}

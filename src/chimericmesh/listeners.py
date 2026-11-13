@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
 
 from .hub import Hub
 from .parsers import format_privmsg, irc_to_event, parse_irc_line, parse_syslog, telnet_to_event
@@ -24,9 +25,20 @@ class SyslogProtocol(asyncio.DatagramProtocol):
                 asyncio.ensure_future(self.hub.ingest(event))
 
 
+SYSLOG_RCVBUF = 4 * 1024 * 1024  # absorb bursts; the OS default drops datagrams early
+
+
 async def start_syslog(hub: Hub, host: str, port: int):
     loop = asyncio.get_running_loop()
-    transport, _ = await loop.create_datagram_endpoint(lambda: SyslogProtocol(hub), local_addr=(host, port))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, SYSLOG_RCVBUF)
+        sock.bind((host, port))
+        sock.setblocking(False)
+    except OSError:
+        sock.close()
+        raise
+    transport, _ = await loop.create_datagram_endpoint(lambda: SyslogProtocol(hub), sock=sock)
     return transport
 
 

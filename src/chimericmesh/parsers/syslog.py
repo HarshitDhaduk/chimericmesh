@@ -10,7 +10,7 @@ import re
 import time
 from datetime import datetime
 
-from ..events import Event
+from ..events import Event, infer_severity
 
 _PRI = re.compile(r"^<(\d{1,3})>")
 _RFC5424 = re.compile(
@@ -44,11 +44,13 @@ def parse_syslog(line: str, default_host: str = "unknown") -> Event:
     text = raw.strip("\r\n")
     severity, facility = 6, 1
 
+    has_pri = False
     pri = _PRI.match(text)
     if pri and int(pri.group(1)) <= 191:
         value = int(pri.group(1))
         facility, severity = divmod(value, 8)
         text = text[pri.end():]
+        has_pri = True
 
     ts: float | None = None
     host, app, message = default_host, "syslog", text
@@ -64,12 +66,17 @@ def parse_syslog(line: str, default_host: str = "unknown") -> Event:
         if m3:
             host, app, message = m3["host"], m3["app"], m3["msg"]
 
+    message = _clean(message)
+    if not has_pri:
+        # Files and forwarders often drop the <PRI> header; fall back to the text.
+        severity = infer_severity(message)
+
     return Event(
         source="syslog",
         host=_clean(host) or default_host,
         app=_clean(app) or "syslog",
         severity=severity,
-        message=_clean(message),
+        message=message,
         raw=_clean(raw),
         ts=ts if ts is not None else time.time(),
     )

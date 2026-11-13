@@ -42,7 +42,7 @@ def test_info_events_never_incidents():
 
 def test_find_code_hints(tmp_path):
     (tmp_path / "db.py").write_text("log.error('could not write block')\n")
-    inc = analyze([ev("could not write block 42 No space left", sev=3)])[0]
+    inc = analyze([ev("could not write block 42 No space left", sev=3)] * 3)[0]
     inc.sample = "could not write block 42"
     hits = find_code_hints(inc, tmp_path)
     assert hits and hits[0]["file"] == "db.py" and hits[0]["line"] == 1
@@ -92,7 +92,8 @@ def test_mcp_tools_round_trip(monkeypatch):
         hub = Hub()
         async with make_client(hub) as c:
             monkeypatch.setattr(mcp_server, "_client_factory", lambda: _Borrowed(c))
-            await hub.ingest(parse_syslog("<27>Nov 13 11:10:08 db01 pg[1]: FATAL: No space left on device"))
+            for _ in range(3):
+                await hub.ingest(parse_syslog("<27>Nov 13 11:10:08 db01 pg[1]: FATAL: No space left on device"))
             incs = await mcp_server.list_incidents()
             assert incs and incs[0]["category"] == "disk"
             one = await mcp_server.get_incident(incs[0]["id"])
@@ -189,6 +190,6 @@ def test_default_code_root_finds_sample_app_for_demo_messages():
         "upstream timed out connecting to 10.0.4.17:5432",
         "Failed password for admin from 203.0.113.9 port 442",
     ):
-        inc = analyze([ev(msg, sev=3)])[0]
+        inc = analyze([ev(msg, sev=3)] * 3)[0]
         hits = hub.code_hints(inc)
         assert hits and hits[0]["file"].endswith(".py") and "tests" not in hits[0]["file"], msg

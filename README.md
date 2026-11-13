@@ -28,6 +28,23 @@ Try it:
 - Send syslog: `<27>Nov 13 11:10:08 db01 kernel: Out of memory: Kill process 4412`
 - Open a Telnet session to port 2323 and type an `ERROR ...` line.
 
+## Replaying real logs
+
+Besides the hand-written demo traffic, you can stream real public logs into the mesh over UDP syslog:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m chimericmesh.replay --dataset openssh --rate 200   # real SSH brute-force traffic
+python -m chimericmesh.replay --dataset linux                # real /var/log/messages
+python -m chimericmesh.replay --file my.log --limit 500      # your own file
+```
+
+Samples are downloaded on first use into `data/` (git-ignored, never committed). Lines are sent exactly as they appear in the file, with no `<PRI>` header, so the parser infers severity from the text.
+
+**Data credit:** [Loghub](https://github.com/logpai/loghub) by the logpai group. The datasets are free for research and academic use; please cite Zhu et al., "Loghub: A Large Collection of System Log Datasets for AI-driven Log Analytics", ISSRE 2023. Replayed data is real but is not a live production system.
+
+What replaying real data taught us (each now has a regression test): real logs often have no `<PRI>` header, one attacker produces hundreds of near-identical lines that differ only in user and address, one-off errors are noise, and re-analyzing history on every event drops UDP packets. Incidents are now tracked incrementally and the syslog socket has a 4 MB receive buffer.
+
 ## MCP for Kiro
 
 Run `python -m chimericmesh.mcp_server` (stdio) with `PYTHONPATH=src` and `CHIMERICMESH_URL` pointing at the hub. Add it to `.kiro/settings/mcp.json`:

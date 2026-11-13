@@ -7,7 +7,7 @@ from collections import deque
 from pathlib import Path
 from typing import Awaitable, Callable
 
-from .diagnostics import Incident, analyze, find_code_hints
+from .diagnostics import Incident, IncidentTracker, find_code_hints
 from .events import Event
 from .notify import irc_summary, send_webhook, webhook_payload
 
@@ -23,7 +23,8 @@ DEFAULT_CODE_ROOT = Path(__file__).resolve().parents[2] / "examples" / "legacy_a
 class Hub:
     def __init__(self, capacity: int = 2000, code_root: Path | None = None,
                  webhook_url: str | None = None, irc_channel: str = "#ops") -> None:
-        self.events: deque[Event] = deque(maxlen=capacity)
+        self.events: deque[Event] = deque(maxlen=capacity)  # bounded log view only
+        self.tracker = IncidentTracker()  # cumulative incident state, O(1) per event
         env_root = os.environ.get("CHIMERICMESH_CODE_ROOT")
         self.code_root = code_root or (Path(env_root) if env_root else DEFAULT_CODE_ROOT)
         self.webhook_url = webhook_url or os.environ.get("CHIMERICMESH_WEBHOOK_URL")
@@ -35,31 +36,32 @@ class Hub:
 
     async def ingest(self, event: Event) -> None:
         self.events.append(event)
-        if event.severity > 4:
+        inc = self.tracker.add(event)  # O(1): updates only this event's cluster
+        if inc is None or inc.id in self.resolved or not self.tracker.qualifies(inc):
             return
-        for inc in self.incidents():
-            if inc.resolved:
-                continue
-            if inc.id not in self._announced:
-                # Open once the count is meaningful, or immediately for crit/alert/emerg.
-                if inc.severity <= 2 or inc.count >= OPEN_THRESHOLD:
-                    self._announced[inc.id] = inc.count
-                    await self._announce(inc)
-            else:
-                # Follow-up only when the cluster crosses a new milestone.
-                last = self._announced[inc.id]
-                if any(last < m <= inc.count for m in UPDATE_MILESTONES):
-                    self._announced[inc.id] = inc.count
-                    await self._announce(inc, update=True)
+        if inc.id not in self._announced:
+            # Open once the count is meaningful, or immediately for crit/alert/emerg.
+            if inc.severity <= 2 or inc.count >= OPEN_THRESHOLD:
+                self._announced[inc.id] = inc.count
+                await self._announce(inc)
+        else:
+            # Follow-up only when the cluster crosses a new milestone.
+            last = self._announced[inc.id]
+            if any(last < m <= inc.count for m in UPDATE_MILESTONES):
+                self._announced[inc.id] = inc.count
+                await self._announce(inc, update=True)
 
     def incidents(self) -> list[Incident]:
-        found = analyze(self.events)
+        found = self.tracker.incidents()
         for inc in found:
             inc.resolved = inc.id in self.resolved
         return found
 
     def get_incident(self, incident_id: str) -> Incident | None:
-        return next((i for i in self.incidents() if i.id == incident_id), None)
+        inc = self.tracker.get(incident_id)
+        if inc is not None:
+            inc.resolved = inc.id in self.resolved
+        return inc
 
     def code_hints(self, incident: Incident) -> list[dict]:
         return find_code_hints(incident, self.code_root)

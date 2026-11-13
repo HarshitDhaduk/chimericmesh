@@ -11,6 +11,12 @@ from typing import Iterable
 from .events import Event
 
 _NORMALIZERS = [
+    # Who/where values vary per attacker but not per problem (rhost=, user=, "from X").
+    (re.compile(r"\b(rhost|user|logname|ruser)=\S*", re.I), r"\1=<v>"),
+    (re.compile(r"\b(password|publickey|login)\s+for\s+(?:invalid\s+user\s+)?\S+", re.I), r"\1 for <v>"),
+    (re.compile(r"\binvalid user\s+\S+", re.I), "invalid user <v>"),
+    (re.compile(r"\bfrom\s+\S+", re.I), "from <v>"),
+    (re.compile(r"\[\d{1,3}(?:\.\d{1,3}){3}\]"), "[<ip>]"),
     (re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b"), "<ip>"),
     (re.compile(r"\b0x[0-9a-fA-F]+\b"), "<hex>"),
     (re.compile(r"\b[0-9a-f]{8,}\b"), "<hex>"),
@@ -34,7 +40,7 @@ RULES: list[tuple[str, re.Pattern[str], str, list[str]]] = [
      ["Check the target service is listening and healthy",
       "Verify firewall and routing between the hosts",
       "Add retries with backoff and a circuit breaker at the caller"]),
-    ("security", re.compile(r"authentication failure|failed password|invalid user|denied|brute", re.I),
+    ("security", re.compile(r"authentication fail(?:ure|ed)|failed password|invalid user|denied|brute|break-in", re.I),
      "Repeated authentication failures suggest credential stuffing or a misconfigured client.",
      ["Block or rate-limit the offending source address",
       "Confirm no legitimate client has stale credentials",
@@ -89,34 +95,75 @@ def incident_id(host: str, sig: str) -> str:
     return hashlib.sha1(f"{host}|{sig}".encode()).hexdigest()[:10]
 
 
-def analyze(events: Iterable[Event], min_count: int = 3, max_severity: int = 3) -> list[Incident]:
-    """Group events by (host, signature). An incident is raised when a cluster is
-    severe (<= max_severity) or repeats at least ``min_count`` times at warning or worse."""
-    clusters: dict[str, Incident] = {}
-    for ev in events:
+MAX_CLUSTERS = 5000
+
+
+class IncidentTracker:
+    """Incrementally clusters events by (host, signature) in O(1) per event.
+
+    An incident is critical or worse (<= max_severity), or repeats at least
+    ``min_count`` times at warning or worse. Counts are cumulative and independent
+    of any event buffer, so a bounded log view never loses incident history.
+    """
+
+    def __init__(self, min_count: int = 3, max_severity: int = 2) -> None:
+        self.min_count, self.max_severity = min_count, max_severity
+        self._clusters: dict[str, Incident] = {}
+
+    def qualifies(self, inc: Incident) -> bool:
+        return inc.severity <= self.max_severity or inc.count >= self.min_count
+
+    def add(self, ev: Event) -> Incident | None:
+        """Fold one event into its cluster. Returns the cluster, or None if ignored."""
         if ev.severity > 4:
-            continue
+            return None
         sig = signature(ev.message)
         if not sig:
-            continue
+            return None
         iid = incident_id(ev.host, sig)
-        inc = clusters.get(iid)
+        inc = self._clusters.get(iid)
         if inc is None:
             category, hypothesis, steps = classify(ev.message)
-            inc = clusters[iid] = Incident(
+            inc = self._clusters[iid] = Incident(
                 id=iid, host=ev.host, category=category, signature=sig,
                 severity=ev.severity, count=0, first_seen=ev.ts, last_seen=ev.ts,
                 sample=ev.message, hypothesis=hypothesis, remediation=list(steps),
             )
+            if len(self._clusters) > MAX_CLUSTERS:
+                self._evict(keep=iid)
         inc.count += 1
         inc.severity = min(inc.severity, ev.severity)
         inc.first_seen = min(inc.first_seen, ev.ts)
         inc.last_seen = max(inc.last_seen, ev.ts)
         if ev.source not in inc.sources:
             inc.sources.append(ev.source)
+        return inc
 
-    found = [i for i in clusters.values() if i.severity <= max_severity or i.count >= min_count]
-    return sorted(found, key=lambda i: (i.severity, -i.count, -i.last_seen))
+    def _evict(self, keep: str) -> None:
+        """Bound memory: drop the stalest cluster that is not yet an incident."""
+        pool = [i for i in self._clusters.values() if i.id != keep and not self.qualifies(i)]
+        pool = pool or [i for i in self._clusters.values() if i.id != keep]
+        del self._clusters[min(pool, key=lambda i: i.last_seen).id]
+
+    def get(self, incident_id: str) -> Incident | None:
+        inc = self._clusters.get(incident_id)
+        return inc if inc is not None and self.qualifies(inc) else None
+
+    def incidents(self) -> list[Incident]:
+        found = [i for i in self._clusters.values() if self.qualifies(i)]
+        return sorted(found, key=lambda i: (i.severity, -i.count, -i.last_seen))
+
+
+def analyze(events: Iterable[Event], min_count: int = 3, max_severity: int = 2) -> list[Incident]:
+    """Group events by (host, signature). An incident is raised when a cluster is
+    critical or worse (<= max_severity), or repeats at least ``min_count`` times at
+    warning or worse. One-off errors are ignored: real logs are full of them.
+
+    Batch form of IncidentTracker, handy for tests and offline analysis."""
+    tracker = IncidentTracker(min_count, max_severity)
+    for ev in events:
+        tracker.add(ev)
+    return tracker.incidents()
 
 
 _CODE_SUFFIXES = {".py", ".js", ".ts", ".c", ".h", ".go", ".java", ".rb", ".sh", ".rs"}
