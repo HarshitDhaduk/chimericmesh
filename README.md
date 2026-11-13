@@ -22,6 +22,7 @@ Ports (override with env vars): HTTP 8000, Syslog/UDP 5514, IRC 6667, Telnet 232
 
 Try it:
 
+- Run `.\scripts\demo.ps1` to send real Syslog, Telnet and IRC traffic (`-Only syslog|telnet|irc` to send one, `-Count 12` to trigger an `UPDATE` line).
 - Click "Summon a failure storm" on the dashboard, or `POST /api/demo/storm`.
 - Join IRC (`/server 127.0.0.1 6667`, `/join #ops`) and watch the bot announce incidents.
 - Send syslog: `<27>Nov 13 11:10:08 db01 kernel: Out of memory: Kill process 4412`
