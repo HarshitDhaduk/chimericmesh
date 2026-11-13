@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChimericMesh · The Crypt of Legacy Protocols</title>
+<style>
+  :root {
+    --bg: #0b0a10; --panel: #13111c; --line: #2a2640; --ink: #d9d4ee; --dim: #8a84a8;
+    --ghost: #7CFFB2; --ember: #ff8a3d; --blood: #ff4d6d; --amber: #ffd166; --violet: #9b7bff;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: radial-gradient(1200px 600px at 70% -10%, #1d1433 0%, var(--bg) 60%);
+    color: var(--ink); font: 15px/1.5 var(--mono); min-height: 100vh;
+  }
+  body::after { /* faint CRT scanlines */
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0,0,0,.18) 2px 3px);
+  }
+  header { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between;
+    padding: 24px clamp(16px, 4vw, 48px); border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 1.4rem; letter-spacing: .08em; }
+  h1 span { color: var(--ghost); text-shadow: 0 0 12px rgba(124,255,178,.55); }
+  .tag { color: var(--dim); font-size: .85rem; }
+  button { font: inherit; color: var(--bg); background: var(--ember); border: 0; padding: 10px 16px;
+    border-radius: 4px; cursor: pointer; font-weight: 700; }
+  button:hover { background: #ffa05f; }
+  button:focus-visible { outline: 3px solid var(--ghost); outline-offset: 2px; }
+  button.ghost { background: transparent; color: var(--ghost); border: 1px solid var(--ghost); padding: 6px 10px; }
+  main { display: grid; gap: 24px; padding: 24px clamp(16px, 4vw, 48px) 64px;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+  @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px; min-width: 0; }
+  h2 { margin: 0 0 14px; font-size: .9rem; letter-spacing: .14em; text-transform: uppercase; color: var(--violet); }
+  .stats { grid-column: 1 / -1; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .stat b { display: block; font-size: 2rem; color: var(--ghost); }
+  .stat span { color: var(--dim); font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; }
+  .incident { border-left: 3px solid var(--amber); padding: 12px 14px; margin-bottom: 12px; background: #0f0d17; border-radius: 0 6px 6px 0; }
+  .incident.sev-0, .incident.sev-1, .incident.sev-2, .incident.sev-3 { border-color: var(--blood); }
+  .incident.resolved { border-color: var(--ghost); opacity: .6; }
+  .incident h3 { margin: 0 0 4px; font-size: 1rem; }
+  .meta { color: var(--dim); font-size: .8rem; }
+  .sample { margin: 8px 0; padding: 8px; background: #08070d; color: var(--amber); overflow-wrap: anywhere; border-radius: 4px; }
+  ol { margin: 6px 0 10px 18px; padding: 0; }
+  .src { display: inline-block; padding: 0 6px; margin-right: 4px; border: 1px solid var(--line); border-radius: 3px; font-size: .75rem; color: var(--ghost); }
+  .log { max-height: 520px; overflow: auto; }
+  .row { display: grid; grid-template-columns: 62px 70px 1fr; gap: 10px; padding: 4px 0; border-bottom: 1px dashed #221f33; font-size: .85rem; }
+  .row .m { overflow-wrap: anywhere; }
+  .sev-err, .sev-crit, .sev-alert, .sev-emerg { color: var(--blood); }
+  .sev-warning { color: var(--amber); }
+  .empty { color: var(--dim); font-style: italic; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  form.send { display: flex; gap: 8px; margin-top: 14px; }
+  input, select { font: inherit; background: #08070d; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 8px; }
+  input[type=text] { flex: 1; min-width: 0; }
+  .sr { position: absolute; left: -9999px; }
+  @media (prefers-reduced-motion: no-preference) { .pulse { animation: pulse 2.4s ease-in-out infinite; } }
+  @keyframes pulse { 50% { text-shadow: 0 0 22px rgba(255,138,61,.9); } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1><span>CHIMERIC</span>MESH <span class="pulse" aria-hidden="true">☠</span></h1>
+    <div class="tag">Syslog · IRC · Telnet, stitched to AI agents through MCP</div>
+  </div>
+  <button id="storm" type="button">Summon a failure storm</button>
+</header>
+<main>
+  <section class="stats" aria-label="Statistics" id="stats"></section>
+  <section aria-labelledby="inc-h">
+    <h2 id="inc-h">Haunted incidents</h2>
+    <div id="incidents" aria-live="polite"></div>
+  </section>
+  <section aria-labelledby="ev-h">
+    <h2 id="ev-h">Séance log</h2>
+    <div class="log" id="events"></div>
+    <form class="send" id="sendForm">
+      <label class="sr" for="source">Protocol</label>
+      <select id="source"><option>syslog</option><option>irc</option><option>telnet</option></select>
+      <label class="sr" for="line">Log line</label>
+      <input type="text" id="line" placeholder="e.g. kernel: Out of memory: Kill process 4412" maxlength="500" required>
+      <button type="submit">Send</button>
+    </form>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
+const api = async (path, opts) => { const r = await fetch(path, opts); if (!r.ok) throw new Error(r.status); return r.json(); };
+const post = (path, body) => api(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
+const SEV = ['emerg','alert','crit','err','warning','notice','info','debug'];
+
+function renderStats(s) {
+  const box = $('stats'); box.replaceChildren();
+  const items = [['Events', s.events], ['Incidents', s.incidents], ['Open', s.open_incidents],
+    ['Syslog', s.by_source.syslog || 0], ['IRC', s.by_source.irc || 0], ['Telnet', s.by_source.telnet || 0]];
+  for (const [label, val] of items) { const d = el('div', 'stat'); d.append(el('b', '', String(val)), el('span', '', label)); box.append(d); }
+}
+
+function renderIncidents(list) {
+  const box = $('incidents'); box.replaceChildren();
+  if (!list.length) { box.append(el('p', 'empty', 'The crypt is quiet. Summon a failure storm or send a log line.')); return; }
+  for (const i of list) {
+    const d = el('article', `incident sev-${i.severity}${i.resolved ? ' resolved' : ''}`);
+    d.append(el('h3', '', `${i.category.toUpperCase()} on ${i.host} ×${i.count}`));
+    const meta = el('div', 'meta'); for (const s of i.sources) meta.append(el('span', 'src', s));
+    meta.append(`${SEV[i.severity]} · id ${i.id}${i.resolved ? ' · resolved' : ''}`); d.append(meta);
+    d.append(el('div', 'sample', i.sample), el('p', '', i.hypothesis));
+    const ol = el('ol'); i.remediation.forEach((s) => ol.append(el('li', '', s))); d.append(ol);
+    const hint = el('div', 'meta'); d.append(hint);
+    const actions = el('div', 'actions');
+    const code = el('button', 'ghost', 'Find in code'); code.type = 'button';
+    code.onclick = async () => { const h = await api(`/api/incidents/${i.id}/code`); hint.textContent = h.length ? h.map((x) => `${x.file}:${x.line}`).join('  ') : 'No matching source found.'; };
+    actions.append(code);
+    if (!i.resolved) { const r = el('button', 'ghost', 'Lay to rest'); r.type = 'button'; r.onclick = async () => { await post(`/api/incidents/${i.id}/resolve`, { note: 'via dashboard' }); refresh(); }; actions.append(r); }
+    d.append(actions); box.append(d);
+  }
+}
+
+function renderEvents(list) {
+  const box = $('events'); box.replaceChildren();
+  if (!list.length) { box.append(el('p', 'empty', 'No whispers yet.')); return; }
+  for (const e of list) {
+    const r = el('div', 'row');
+    r.append(el('span', 'meta', new Date(e.ts * 1000).toLocaleTimeString()), el('span', `sev-${e.severity_name}`, `${e.source}`), el('span', 'm', `${e.host}: ${e.message}`));
+    box.append(r);
+  }
+}
+
+async function refresh() {
+  try {
+    const [s, i, e] = await Promise.all([api('/api/stats'), api('/api/incidents'), api('/api/events?limit=60')]);
+    renderStats(s); renderIncidents(i); renderEvents(e);
+  } catch (err) { /* hub restarting; try again next tick */ }
+}
+$('storm').onclick = async () => { await post('/api/demo/storm'); refresh(); };
+$('sendForm').onsubmit = async (ev) => { ev.preventDefault(); await post('/api/ingest', { source: $('source').value, line: $('line').value, host: 'dashboard' }).catch(() => {}); $('line').value = ''; refresh(); };
+refresh(); setInterval(refresh, 2500);
+</script>
+</body>
+</html>

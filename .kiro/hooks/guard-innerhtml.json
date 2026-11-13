@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Warn on innerHTML in dashboard",
+      "trigger": "PreToolUse",
+      "description": "Keeps untrusted log text out of HTML.",
+      "matcher": "fs_write|str_replace|fs_append",
+      "action": {
+        "type": "agent",
+        "prompt": "Before writing, check the content. Log text is untrusted: do not use innerHTML, outerHTML or insertAdjacentHTML with event data in src/chimericmesh/web. Use textContent. Also never write CR/LF/NUL to IRC sockets without format_privmsg."
+      }
+    }
+  ]
+}

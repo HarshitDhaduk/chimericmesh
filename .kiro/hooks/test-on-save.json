@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Run tests on Python save",
+      "trigger": "PostFileSave",
+      "description": "Runs the unit and property tests whenever a Python file is saved.",
+      "matcher": "\\.py$",
+      "action": {
+        "type": "command",
+        "command": "python -m pytest -q -x",
+        "timeout": 120
+      }
+    }
+  ]
+}
