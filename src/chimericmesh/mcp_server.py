@@ -20,9 +20,12 @@ _client_factory = lambda: httpx.AsyncClient(base_url=BASE_URL, timeout=10.0)  # 
 mcp = MCPServer(
     "chimericmesh",
     instructions=(
-        "Bridge to legacy infrastructure (Syslog, IRC, Telnet). Start with list_incidents, "
-        "inspect with get_incident and find_code_for_incident, then announce_to_irc and "
-        "resolve_incident once a fix is applied."
+        "Bridge to legacy infrastructure (Syslog, IRC, Telnet). Remediation loop: "
+        "list_incidents -> investigate with get_incident and find_code_for_incident -> "
+        "propose_remediation (a human decides on IRC with !approve/!deny) -> poll get_proposal "
+        "until status is approved; never act while pending or denied -> do the work yourself "
+        "-> complete_proposal -> resolve_incident. The mesh never executes actions; it only "
+        "records the human decision. Use announce_to_irc for status messages."
     ),
 )
 
@@ -72,6 +75,35 @@ async def announce_to_irc(text: str, channel: str = "#ops") -> Any:
 async def resolve_incident(incident_id: str, note: str = "") -> Any:
     """Mark an incident resolved and announce it on IRC."""
     return await _call("POST", f"/api/incidents/{incident_id}/resolve", json={"note": note})
+
+
+@mcp.tool()
+async def propose_remediation(incident_id: str, action: str, details: str = "") -> Any:
+    """Ask the human operators to approve a remediation (announced on IRC). Does NOT run it.
+
+    Only act after get_proposal reports status "approved".
+    """
+    return await _call("POST", "/api/proposals",
+                       json={"incident_id": incident_id, "action": action, "details": details})
+
+
+@mcp.tool()
+async def get_proposal(proposal_id: str) -> Any:
+    """Get a proposal's status: pending, approved, denied or done. Act only when approved."""
+    return await _call("GET", f"/api/proposals/{proposal_id}")
+
+
+@mcp.tool()
+async def list_proposals(status: str | None = None) -> Any:
+    """List proposals, optionally filtered by status (pending, approved, denied, done)."""
+    params = {"status": status} if status else None
+    return await _call("GET", "/api/proposals", params=params)
+
+
+@mcp.tool()
+async def complete_proposal(proposal_id: str, note: str = "") -> Any:
+    """Report that an approved proposal's work is finished (announced on IRC)."""
+    return await _call("POST", f"/api/proposals/{proposal_id}/complete", json={"note": note})
 
 
 if __name__ == "__main__":

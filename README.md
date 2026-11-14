@@ -28,6 +28,8 @@ Try it:
 - Send syslog: `<27>Nov 13 11:10:08 db01 kernel: Out of memory: Kill process 4412`
 - Open a Telnet session to port 2323 and type an `ERROR ...` line.
 
+The dashboard's **Events seen** tile is a cumulative counter (`total_events` in `/api/stats`, with `total_by_source` and a 10 second `events_per_second`). The hub only keeps the latest 2000 events in memory for the log view (`events`, `buffer_capacity`), so the log header reads "latest N of TOTAL" once the buffer has wrapped.
+
 ## Replaying real logs
 
 Besides the hand-written demo traffic, you can stream real public logs into the mesh over UDP syslog:
@@ -107,3 +109,37 @@ No authentication; intended for localhost or trusted networks. Log text is rende
 ## License
 
 MIT
+
+## Talking to the mesh over IRC
+
+IRC is a two-way operator interface. Registered clients can send commands (messages starting with `!`) in a channel the bot is in. Commands are never ingested as log events. Replies are posted to the channel, prefixed `[mesh]`.
+
+| Command | Who | What it does |
+| --- | --- | --- |
+| `!help` | anyone | List commands |
+| `!status` | anyone | Events seen, open incidents, pending proposals |
+| `!incidents` | anyone | Up to 5 open incidents: `id category host xCOUNT severity` |
+| `!explain <id>` | anyone | Hypothesis and up to 4 remediation steps |
+| `!proposals` | anyone | Pending remediation proposals |
+| `!resolve <id> [note]` | operator | Resolve an incident |
+| `!approve <pid>` / `!deny <pid>` | operator | Decide a proposal |
+
+Operators are set with `CHIMERICMESH_OPERATORS` (comma-separated nicks, case-insensitive). If it is unset or empty, any registered nick counts as an operator. That is only acceptable on localhost or a trusted network, since IRC nicks are not authenticated here.
+
+### Human-approved remediation loop
+
+```
+agent (MCP)                 ChimericMesh / IRC #ops              human
+-----------                 ----------------------               -----
+list_incidents, get_incident, find_code_for_incident
+propose_remediation  ---->  "PROPOSAL p1 for <id> ... "  ---->  reads it
+get_proposal (poll)  <----  status: pending                      !approve p1  (or !deny p1)
+get_proposal         <----  status: approved   <-----------------
+(agent does the work itself)
+complete_proposal    ---->  "p1 DONE: <note>"
+resolve_incident     ---->  "RESOLVED <id> ..."
+```
+
+REST: `GET/POST /api/proposals`, `GET /api/proposals/{pid}`, `POST /api/proposals/{pid}/decide`, `POST /api/proposals/{pid}/complete`. MCP tools: `propose_remediation`, `get_proposal`, `list_proposals`, `complete_proposal`.
+
+Safety: ChimericMesh never executes a proposed action on any host. It only records the human decision and announces it. The agent performs the real work under its own tool permissions, and must act only when the proposal is `approved`, never while it is `pending` or `denied`. Proposals live in memory (last 200 kept).

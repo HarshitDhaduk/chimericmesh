@@ -12,3 +12,6 @@
 - [x] 10. Dashboard (R5)
 - [x] 11. Unit and property-based tests (P1-P6)
 - [ ] 12. Record demo video and write Devpost description
+- [x] 13. IRC command parser and handler, operator allowlist (R6)
+- [x] 14. Proposal state machine, REST endpoints and MCP tools (R7)
+- [x] 15. Tests for commands, proposals and P7-P9

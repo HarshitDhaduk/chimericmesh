@@ -6,6 +6,7 @@ import asyncio
 import logging
 import socket
 
+from .commands import handle_command, parse_command
 from .hub import Hub
 from .parsers import format_privmsg, irc_to_event, parse_irc_line, parse_syslog, telnet_to_event
 
@@ -115,6 +116,12 @@ class IrcServer:
         elif cmd in {"PRIVMSG", "NOTICE"}:
             # Never trust a client-supplied prefix: the sender is the registered nick.
             if info["registered"] and len(params) >= 2:
+                if params[-1].startswith("!"):
+                    # Commands are operator input, not log data: run, never ingest.
+                    command = parse_command(params[-1])
+                    if command is not None:
+                        await handle_command(self.hub, info["nick"], params[0], command)
+                    return
                 tagged = f":{info['nick']}!u@h {cmd} {params[0]} :{params[-1]}"
                 event = irc_to_event(tagged)
                 if event:

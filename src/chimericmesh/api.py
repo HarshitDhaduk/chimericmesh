@@ -36,6 +36,21 @@ class ResolveRequest(BaseModel):
     note: str = Field(default="", max_length=300)
 
 
+class ProposalRequest(BaseModel):
+    incident_id: str = Field(min_length=1, max_length=64)
+    action: str = Field(min_length=1, max_length=200)
+    details: str = Field(default="", max_length=500)
+
+
+class DecideRequest(BaseModel):
+    approve: bool
+    by: str = Field(default="api", min_length=1, max_length=30)
+
+
+class CompleteRequest(BaseModel):
+    note: str = Field(default="", max_length=300)
+
+
 def create_app(hub: Hub | None = None, start_listeners: bool = True) -> FastAPI:
     hub = hub or Hub()
     irc = IrcServer(hub)
@@ -113,6 +128,44 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True) -> FastAPI:
         if inc is None:
             raise HTTPException(404, "incident not found")
         return inc.to_dict()
+
+    # Proposals only record a human decision; nothing here executes the proposed action.
+    def _proposal_or_404(pid: str):
+        prop = hub.get_proposal(pid)
+        if prop is None:
+            raise HTTPException(404, "proposal not found")
+        return prop
+
+    @app.get("/api/proposals")
+    async def proposals(status: Literal["pending", "approved", "denied", "done"] | None = None):
+        return [p.to_dict() for p in hub.list_proposals(status)]
+
+    @app.get("/api/proposals/{pid}")
+    async def proposal(pid: str):
+        return _proposal_or_404(pid).to_dict()
+
+    @app.post("/api/proposals", status_code=201)
+    async def create_proposal(req: ProposalRequest):
+        prop = await hub.create_proposal(req.incident_id, req.action, req.details)
+        if prop is None:
+            raise HTTPException(404, "incident not found")
+        return prop.to_dict()
+
+    @app.post("/api/proposals/{pid}/decide")
+    async def decide_proposal(pid: str, req: DecideRequest):
+        _proposal_or_404(pid)
+        prop = await hub.decide(pid, req.approve, req.by)
+        if prop is None:
+            raise HTTPException(409, "proposal is not pending")
+        return prop.to_dict()
+
+    @app.post("/api/proposals/{pid}/complete")
+    async def complete_proposal(pid: str, req: CompleteRequest):
+        _proposal_or_404(pid)
+        prop = await hub.complete(pid, req.note)
+        if prop is None:
+            raise HTTPException(409, "proposal is not approved")
+        return prop.to_dict()
 
     @app.post("/api/irc/say", status_code=202)
     async def say(req: SayRequest):

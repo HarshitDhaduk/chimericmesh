@@ -95,9 +95,12 @@ const SEV = ['emerg','alert','crit','err','warning','notice','info','debug'];
 
 function renderStats(s) {
   const box = $('stats'); box.replaceChildren();
-  const items = [['Events', s.events], ['Incidents', s.incidents], ['Open', s.open_incidents],
-    ['Syslog', s.by_source.syslog || 0], ['IRC', s.by_source.irc || 0], ['Telnet', s.by_source.telnet || 0]];
-  for (const [label, val] of items) { const d = el('div', 'stat'); d.append(el('b', '', String(val)), el('span', '', label)); box.append(d); }
+  const n = (v) => Number(v || 0).toLocaleString();
+  const by = s.total_by_source || {};
+  const items = [['Events seen', n(s.total_events)], ['Events / sec', Number(s.events_per_second || 0).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })],
+    ['Incidents', n(s.incidents)], ['Open', n(s.open_incidents)],
+    ['Syslog', n(by.syslog)], ['IRC', n(by.irc)], ['Telnet', n(by.telnet)]];
+  for (const [label, val] of items) { const d = el('div', 'stat'); d.append(el('b', '', val), el('span', '', label)); box.append(d); }
 }
 
 function renderIncidents(list) {
@@ -134,6 +137,10 @@ async function refresh() {
   try {
     const [s, i, e] = await Promise.all([api('/api/stats'), api('/api/incidents'), api('/api/events?limit=60')]);
     renderStats(s); renderIncidents(i); renderEvents(e);
+    const head = $('ev-h');
+    head.textContent = s.total_events > s.buffer_capacity
+      ? `Séance log (latest ${e.length.toLocaleString()} of ${s.total_events.toLocaleString()})`
+      : 'Séance log';
   } catch (err) { /* hub restarting; try again next tick */ }
 }
 $('storm').onclick = async () => { await post('/api/demo/storm'); refresh(); };

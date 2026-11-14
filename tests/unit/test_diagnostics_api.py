@@ -108,7 +108,8 @@ def test_mcp_tools_round_trip(monkeypatch):
 def test_mcp_registers_expected_tools():
     names = {t.name for t in asyncio.run(mcp_server.mcp.list_tools())}
     assert {"list_incidents", "get_incident", "find_code_for_incident", "recent_events",
-            "announce_to_irc", "resolve_incident"} <= names
+            "announce_to_irc", "resolve_incident", "propose_remediation", "get_proposal",
+            "list_proposals", "complete_proposal"} <= names
 
 
 class _Borrowed:
