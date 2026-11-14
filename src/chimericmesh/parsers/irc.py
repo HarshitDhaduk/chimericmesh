@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from ..events import Event, extract_host, infer_severity
 
 MAX_IRC_LINE = 512  # bytes, including trailing CRLF
+CHAT_MAX_SEVERITY = 3  # most severe level (err) that free-text chat can claim
 _CRLF_NUL = re.compile(r"[\r\n\x00]+")
 
 
@@ -54,7 +55,9 @@ def irc_to_event(line: str) -> Event | None:
         source="irc",
         host=host or nick,
         app=msg.params[0],
-        severity=infer_severity(text),
+        # People talking about a problem is evidence, not proof: cap at "err" so a single
+        # chat line never opens an incident by itself (e.g. a chat about the OOM killer).
+        severity=max(CHAT_MAX_SEVERITY, infer_severity(text)),
         message=message,
         raw=line.strip("\r\n"),
         ts=time.time(),

@@ -33,15 +33,22 @@ CITATION = (
 MAX_LINE = 1024
 
 
+def download(url: str, path: Path) -> None:
+    """Fetch an https URL to ``path``. Callers pass only allowlisted URLs."""
+    if not url.startswith("https://"):
+        raise ValueError("only https downloads are allowed")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with urllib.request.urlopen(url, timeout=60) as resp:  # noqa: S310 (https, allowlisted)
+        path.write_bytes(resp.read())
+
+
 def ensure_dataset(name: str, data_dir: Path) -> Path:
     """Return the local path of a dataset, downloading it on first use."""
     if name not in DATASETS:
         raise ValueError(f"unknown dataset {name!r}; choose from {sorted(DATASETS)}")
     path = data_dir / Path(DATASETS[name]).name
     if not path.exists():
-        data_dir.mkdir(parents=True, exist_ok=True)
-        with urllib.request.urlopen(DATASETS[name], timeout=60) as resp:  # noqa: S310 (allowlisted https)
-            path.write_bytes(resp.read())
+        download(DATASETS[name], path)
     return path
 
 

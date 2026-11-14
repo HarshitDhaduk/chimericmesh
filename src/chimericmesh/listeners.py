@@ -113,10 +113,12 @@ class IrcServer:
         elif cmd == "PING":
             self._send(writer, f":{self.name} PONG {self.name} :{params[0] if params else ''}")
         elif cmd in {"PRIVMSG", "NOTICE"}:
-            tagged = f":{info['nick']}!u@h {line.strip()}" if not line.startswith(":") else line
-            event = irc_to_event(tagged)
-            if event:
-                await self.hub.ingest(event)
+            # Never trust a client-supplied prefix: the sender is the registered nick.
+            if info["registered"] and len(params) >= 2:
+                tagged = f":{info['nick']}!u@h {cmd} {params[0]} :{params[-1]}"
+                event = irc_to_event(tagged)
+                if event:
+                    await self.hub.ingest(event)
         elif cmd == "QUIT":
             raise ConnectionError
 
