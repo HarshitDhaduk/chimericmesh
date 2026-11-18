@@ -140,7 +140,7 @@ IRC is a two-way operator interface. Registered clients can send commands (messa
 | `!explain <id>` | anyone | Hypothesis and up to 4 remediation steps |
 | `!proposals` | anyone | Pending remediation proposals |
 | `!resolve <id> [note]` | operator | Resolve an incident |
-| `!approve <pid>` / `!deny <pid>` | operator | Decide a proposal |
+| `!approve <id>` / `!deny <id>` | operator | Decide a proposal |
 
 Operators are set with `CHIMERICMESH_OPERATORS` (comma-separated nicks, case-insensitive). If it is unset or empty, any registered nick counts as an operator. That is only acceptable on localhost or a trusted network, since IRC nicks are not authenticated here.
 
@@ -150,17 +150,19 @@ Operators are set with `CHIMERICMESH_OPERATORS` (comma-separated nicks, case-ins
 agent (MCP)                 ChimericMesh / IRC #ops              human
 -----------                 ----------------------               -----
 list_incidents, get_incident, find_code_for_incident
-propose_remediation  ---->  "PROPOSAL p1 for <id> ... "  ---->  reads it
-get_proposal (poll)  <----  status: pending                      !approve p1  (or !deny p1)
+propose_remediation  ---->  "PROPOSAL p1-k7f for <id> ..."  ---->  reads it
+get_proposal (poll)  <----  status: pending                      !approve p1-k7f  (or !deny p1-k7f)
 get_proposal         <----  status: approved   <-----------------
 (agent does the work itself)
-complete_proposal    ---->  "p1 DONE: <note>"
+complete_proposal    ---->  "p1-k7f DONE: <note>"
 resolve_incident     ---->  "RESOLVED <id> ..."
 ```
 
 REST: `GET/POST /api/proposals`, `GET /api/proposals/{pid}`, `POST /api/proposals/{pid}/decide`, `POST /api/proposals/{pid}/complete`. MCP tools: `propose_remediation`, `get_proposal`, `list_proposals`, `complete_proposal`.
 
 Safety: ChimericMesh never executes a proposed action on any host. It only records the human decision and announces it. The agent performs the real work under its own tool permissions, and must act only when the proposal is `approved`, never while it is `pending` or `denied`. Proposals live in memory (last 200 kept).
+
+Proposal ids look like `p1-k7f`: a sequence number plus a short tag that is unique per hub run (`/api/stats` reports it as `run_id`). Ids are unique per hub run; after a restart, re-create the proposal. An id from before the restart answers 404 (REST) or "no proposal" (`!approve`) instead of pointing at a new, unrelated proposal.
 
 ## A real incident, a real fix
 
@@ -170,8 +172,8 @@ Safety: ChimericMesh never executes a proposed action on any host. It only recor
 2. Run the service: `python examples/legacy_app/run.py`. It sends syslog to the hub.
 3. Open the dashboard and wait for the `network` incident about the upstream timeout.
 4. In Kiro, pick the `mesh-responder` agent and ask it to investigate and propose a fix.
-5. Approve with `!approve p1` in the dashboard terminal or on IRC.
-6. The agent edits the code, runs `python -m pytest examples/legacy_app/tests -q`, restarts nothing on its own, and reports the event rate. Restart `run.py` to load the fix and watch the rate fall.
+5. Approve with `!approve <id>` (for example `!approve p1-k7f`) in the dashboard terminal or on IRC.
+6. The agent re-checks the proposal, edits the code, runs `python -m pytest examples/legacy_app/tests -q`, and restarts nothing on its own. You restart `run.py` (the worker) to load the fix, then ask the agent to re-check the event rate and complete the proposal.
 7. Reset the buggy state: `git checkout -- examples/legacy_app` and `git clean -fd examples/legacy_app`.
 
 ## The dashboard terminal and guided workflow

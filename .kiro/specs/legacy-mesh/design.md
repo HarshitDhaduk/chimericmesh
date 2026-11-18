@@ -42,3 +42,7 @@ Authentication on the REST API and persistence. Bind to localhost by default.
 - **Hub**: `ChatMessage`, `transcript` deque(300), `record()` sanitizes; `say()` records every bot message before forwarding to IRC. `commands_run` counts handled commands. `workflow()` derives step state from existing hub data.
 - **API**: `/api/chat`, `/api/terminal` (identity `WEB_NICK = "dashboard"`, never client-supplied), `/api/workflow`, plus an HTTP middleware rejecting cross-origin mutating requests.
 - **Single action path**: dashboard buttons send the same `!` commands, so one `is_operator` check covers IRC and web. Transcript text is returned only as JSON and rendered with textContent.
+## Addendum: per-run proposal ids (R11)
+- **Hub**: `run_tag` (injectable, default 3 random characters from `RUN_TAG_ALPHABET`) is part of every proposal id (`p<n>-<tag>`). The in-memory store is unchanged, so after a restart old ids simply miss the lookup and give 404 or "no proposal". `stats()` adds `run_id` and `started_at`.
+- **Agent**: mesh-responder and the remediation-loop skill re-call get_proposal immediately before acting and compare status, action and incident_id; unknown ids mean the hub restarted.
+- P10: for any valid tag, proposal ids are unique within a run, have the form `p<n>-<tag>`, and round-trip through parse_command; generated tags always match the alphabet and length.

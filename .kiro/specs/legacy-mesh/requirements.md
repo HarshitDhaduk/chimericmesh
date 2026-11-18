@@ -60,3 +60,11 @@ Operators of older infrastructure emit logs over Syslog, IRC and Telnet. They ca
 2. The shipped service SHALL contain an intentional defect (unbounded immediate retries). Behaviour tests in examples/legacy_app/tests SHALL fail on it and pass after a correct fix.
 3. The main test suite SHALL pass whether or not the defect is fixed.
 4. The agent SHALL verify an approved fix (tests and event rate) and put that evidence in the complete_proposal note.
+### R11: Unique proposal ids and re-verification
+**User story:** As an operator, I want an approval to apply only to the proposal I approved, so that a hub restart can never attach an old approval to a new proposal.
+1. WHEN the hub creates a proposal THEN the system SHALL give it an id of the form `p<n>-<tag>`, where n counts up within the run and tag is 3 characters from an unambiguous lowercase alphabet chosen at hub start.
+2. WHEN a proposal id from an earlier hub run is used THEN the system SHALL answer 404 over REST and MCP, and "no proposal" for !approve and !deny, and SHALL NOT change any proposal.
+3. GET /api/stats SHALL report `run_id` (the tag) and `started_at` (epoch seconds) in addition to its existing keys.
+4. Commands SHALL stay case-insensitive for proposal ids.
+5. WHEN the agent is about to make any change THEN it SHALL call get_proposal again and confirm status approved and the same action text and incident_id. IF get_proposal fails, the id is unknown or the action differs THEN it SHALL stop and ask for a new proposal.
+6. WHEN the fix needs a process restart THEN the agent SHALL say so in the proposal details and SHALL leave the restart to the human unless the approved action includes it. WHEN the hub appears to have restarted THEN the agent SHALL report it and re-investigate.
