@@ -6,17 +6,17 @@ Conventions for every task: write the tests first and watch them fail, then impl
 
 Review round 3 (see "Review round 3 resolutions" in the design): behavioural findings are test-first sub-tasks with a letter suffix (2.2a, 9.4a, 11.2a, 11.2b, 11.3a, 11.3b) placed after the task they depend on, so no existing task number changed. Findings that are one-line changes to an existing task appear as a checklist line ending with the finding id, for example `- [ ] (L6) ...`. Within a sub-task, the failing test comes first and the implementation second.
 
-- [ ] 1. Store package skeleton and migration registry
-  - [ ] 1.1 Create the package skeleton and the migration registry
+- [x] 1. Store package skeleton and migration registry
+  - [x] 1.1 Create the package skeleton and the migration registry
     - Write `tests/unit/test_store_registry.py` first: `register` accepts a version inside the module's block, rejects a version outside it, a duplicate version and a duplicate name (`MigrationError`); `migrations()` is sorted by version; `highest()` is 0 for an empty registry.
     - Create `store/__init__.py` (empty re-exports for now), `store/errors.py` (`StoreError`, `StoreOpenError`, `StoreCorruptError`, `SchemaTooNewError`, `MigrationError`, `StoreBusyError`, `StoreFullError`, `StoreWriteError`, `StoreClosedError`, `StoreReentryError`, `InvalidTransition`, `NotFound`), and `store/migrations.py` with `Migration`, `MODULE_BLOCKS` and `MigrationRegistry` (no runner yet).
     - Create `tests/conftest.py` with the autouse isolation fixture (sets `CHIMERICMESH_HOME` to a `tmp_path` directory, removes `CHIMERICMESH_DB`) and a `FakeClock` helper fixture.
     - _Requirements: 2.2_
-  - [ ] 1.2 Add `StoreConfig` and database path resolution
+  - [x] 1.2 Add `StoreConfig` and database path resolution
     - Write `tests/unit/test_store_config.py` first: default path is `<home>/chimericmesh.db` and absolute; `CHIMERICMESH_HOME` and `CHIMERICMESH_DB` overrides; `:memory:`; a relative `CHIMERICMESH_DB` is resolved once against the current directory; starting from two different working directories with no variables opens the same file; invalid `CHIMERICMESH_MAX_EVENTS`, `CHIMERICMESH_EVENT_TTL_DAYS` and `CHIMERICMESH_REOPEN_AFTER_SECONDS` warn and fall back (100000, 7, 300); range edges (0 and 86400 accepted for reopen, 86401 rejected).
     - Implement `store/config.py`: `StoreConfig.from_env(environ)`, `resolve_home`, `resolve_db_path`; pure functions, no file access.
     - _Requirements: 1.1, 1.2, 1.3, 5.11, 6.3_
-  - [ ] 1.3 Add the dependency-direction test with the file-to-group table
+  - [x] 1.3 Add the dependency-direction test with the file-to-group table
     - Write `tests/unit/test_dependency_direction.py`: the table from the design (root `__init__.py` and `parsers/*` are `core`; `store/*` and `fsperms.py` are `store`; `notify.py`, `replay.py`, `replay_irc.py`, `hub.py`, `api.py`, `commands.py`, `listeners.py`, `mcp_server.py`, `__main__.py` are `wiring`), the "may import" table, an AST import scan that counts `TYPE_CHECKING` imports, a failure for any file without a group, a check that `core` files import no third-party package (imports between `core` files are allowed, they are the same group), and a check that `httpx` is imported only by `wiring` files. Record the follow-ups for the next map revision as a comment in the test: the map's file-to-group table and the B10 / `auto-approval` R4.8 prefix list.
     - The test must already pass on the current tree plus the files from 1.1 and 1.2.
     - _Requirements: Success Criterion 8 (and the M1 resolution in the design)_
