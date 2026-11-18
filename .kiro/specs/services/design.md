@@ -280,6 +280,8 @@ class ServiceRegistry:
 
     # ---- mutations (awaited; each is one transaction, shielded, serialized) ----
     async def create_service(self, fields: ServiceFields, *, actor: str) -> Service
+    async def create_service_with_sources(self, fields: ServiceFields, sources: Sequence[LogSourceFields], *, actor: str,
+                                          origin: Literal["user", "discovery"] = "user") -> tuple[Service, list[LogSource]]
     async def update_service(self, service_id: str, patch: ServicePatch, *, actor: str) -> Service
     async def delete_service(self, service_id: str, *, actor: str) -> None
     async def add_log_source(self, service_id: str, fields: LogSourceFields, *, actor: str,
@@ -305,6 +307,10 @@ AfterCommitCallback = Callable[[ServiceChange], Awaitable[None] | None]
 ```
 
 `name` defaults to the callable's `__qualname__` and is what `SubscriberError` reports. Passing `name` is an additive keyword over R10.1.
+
+**Atomic create with sources (added 2026-11-18, accepted from discovery O2).** `create_service_with_sources` is one `_mutate` transaction on the existing registry. It runs the same validation as `create_service` and `add_log_source` (`validate_service_fields`, `normalize_code_folder`, `validate_log_source_fields`, `normalize_log_path`, `inspect_log_path`, the tombstone check, and the caps of 100 services, 20 sources per service and 200 sources overall), inserts the service row and every source row, writes one `service_created` audit row and one `log_source_added` row per source, runs the in-transaction subscribers once per change, and fires `after_commit` after the commit. Any validation, cap, subscriber or store failure rolls back everything: no service row, no source row, no tombstone, no counters. `sources` may be empty (then it equals `create_service`). `origin` applies to every source. The ids `ls<n>` are allocated inside the transaction, so a rolled-back call burns none of them. No new requirement is added; it serves R1.1, R1.5, R1.6, R2.1, R3.1, R3.3, R3.4, R10.1 and R10.2.
+
+**Owner of `code_folder` normalization (added 2026-11-18, accepted from discovery O12).** The registry normalizes. `create_service`, `create_service_with_sources` and `update_service` call `normalize_code_folder` (with the `protected` tuple and `home` given at `load`) after `validate_service_fields` and before the transaction, and store the returned value. `validate.py` stays free of filesystem reads. Routes pass the raw string from the request body and do not normalize. A caller that wants an early error (`discovery` does) may call `normalize_code_folder` itself with the same `protected` tuple; the registry then normalizes an already normalized path, which is idempotent (Property 4).
 
 **Which callbacks fire (R10.1, R10.2, R2.5, R10.5).**
 
@@ -833,3 +839,10 @@ Statements that other specs or the capability map must reflect. This phase edits
 | 11 | The `on_*` list is a snapshot taken before `transact`; `on_*` callbacks are re-runnable; `after_commit` callbacks of quick changes may overlap and must be idempotent. | Threads paragraph, 10.2e, task 3.5 |
 | 12 | "Carried to other modules" added. L8 stays partial by design: only R4.2 and R10.2 are split into sub-criteria; R6.5, R9.3, R6.1 and R2.5 are tested by the example tests named in `tasks.md` without new ids. | Carried to other modules |
 | 13 | `seq = n` of the id; `model_fields_set` mapping for `null`; the no-op rule covers log sources; middleware order stated (the last added runs first); pure ASGI guards; the `workflow` operator flag and the preset `service_id` note are carried to other modules. | Schema, HTTP layer, `create_app` changes, task 3.4, task 6.3 |
+
+### Review resolutions, 2026-11-18 (accepted from discovery O2 and O12)
+
+| Item | Decision | Where |
+|---|---|---|
+| `create_service_with_sources` (discovery O2, N1) | Added to the registry: one transaction creates the service and its log sources, all or nothing, using the existing validation. No requirement added. | Registry section, task 3.2a |
+| `code_folder` normalization owner (discovery O12) | The registry normalizes; routes pass raw input; discovery's own check stays. | Registry section |

@@ -70,6 +70,8 @@ Groups and their files:
 | `dashboard` | `core` (types only); it reaches every module through REST and SSE routes registered by `wiring` |
 | `wiring` | every group above |
 
+Injected interfaces per module (added 2026-11-18, auto-approval O10): see the "Injected callables", "Injected interfaces" or "Injected read interface" section of each module's `.kiro/specs/<module-id>/design.md` (`store`, `services`, `auto-approval`, `agent-loop`, `dashboard`).
+
 The file layout (package names above) is a proposal for the design phase; the test only needs the file-to-group table to exist and be complete. No group other than `wiring` may import `hub`, `api`, `commands`, `listeners` or `mcp_server`. A module that must tell the hub something gets an injected callable (for example `store` receives an `announce(text)` callable for the `REOPENED` line; `auto-approval` receives the hub's `announce` and `now` callables). `core` classes that the store persists (`Event`, `Incident`) live in `core`, so `store` imports them from there. Where a lower module must tell a higher one that something changed, it exposes `subscribe(...)` (`services` R10) and the higher module registers a callback at startup. Where a lower module needs data only a higher one has (valid format names, per-source runtime status), the higher one injects it when the app is built.
 
 ### Boundary refinements against the brief (with reasons)
