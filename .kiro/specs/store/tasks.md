@@ -66,12 +66,12 @@ Review round 3 (see "Review round 3 resolutions" in the design): behavioural fin
     - **Property 21: Transaction atomicity under callback failure** (same file, `transact` with random callback lists)
     - **Validates: Requirements 3.5, 2.4**
 
-- [ ] 4. Audit log
-  - [ ] 4.1 Implement `AuditLog`
+- [x] 4. Audit log
+  - [x] 4.1 Implement `AuditLog`
     - Write `tests/unit/test_store_audit.py` first: ids increase; `read` is newest first, honours `limit` (default 100, clamped to 500) and `before`; caps (100 / 1000) and control-character stripping; a registered secret and `scheme://user:pass@host` credentials never appear in `detail` (canary test); direct SQL `UPDATE` and `DELETE` on `audit_log` fail with the trigger message; the public attributes of `AuditLog` contain only `append`, `append_tx` and `read`; trimming events leaves audit rows; `append_tx` rolls back with its transaction.
     - Create `store/audit.py`; add `Store.audit` and `Store.add_redaction` to `store/store.py`.
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6_
-  - [ ] 4.2 Write the property test for the audit log
+  - [x] 4.2 Write the property test for the audit log
     - Create `tests/pbt/test_store_audit_properties.py` (arbitrary text including control characters and surrogates).
     - **Property 18: Audit append-only**
     - **Validates: Requirements 8.1, 8.2, 8.3, 8.5**

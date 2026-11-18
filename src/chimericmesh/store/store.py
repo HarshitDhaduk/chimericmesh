@@ -14,6 +14,7 @@ from typing import TypeVar
 
 from chimericmesh import fsperms
 
+from .audit import AuditLog
 from .config import MEMORY, StoreConfig
 from .connection import open_connection
 from .migrations import MigrationRegistry, apply_migrations
@@ -69,6 +70,7 @@ class Store:
         self._last_event_id = 0
         self._dropped_events = 0
         self._closed = False
+        self.audit = AuditLog(self)
         # The finalizer sees only the state, never the store, so an unreferenced store stops its thread.
         self._finalizer = weakref.finalize(self, _stop_writer, self._state)
 
@@ -142,6 +144,10 @@ class Store:
         self._last_event_id = max(self._last_event_id, int(n))
         self._state.last_event_id = self._last_event_id
         await self.transact(lambda tx: tx.counter_raise("event_id", n))
+
+    def add_redaction(self, secret: str) -> None:
+        """Audit rows never contain `secret`; it is replaced by `[redacted]`."""
+        self.audit._add_secret(secret)
 
     # ---- shutdown --------------------------------------------------------------------------
 
