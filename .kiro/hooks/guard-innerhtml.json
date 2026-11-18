@@ -5,7 +5,7 @@
       "name": "Guard innerHTML in dashboard",
       "trigger": "PreToolUse",
       "description": "Blocks innerHTML-style sinks in src/chimericmesh/web/ writes",
-      "matcher": "fs_write|str_replace|fs_append",
+      "matcher": "^(fs_write|fs_append|str_replace)$",
       "action": {
         "type": "command",
         "command": "python .kiro/hooks/guard_innerhtml.py"
