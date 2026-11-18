@@ -4,12 +4,12 @@
     {
       "name": "Run tests on Python save",
       "trigger": "PostFileSave",
-      "description": "Runs the unit and property tests whenever a Python file is saved.",
+      "description": "Runs the unit and property tests whenever the agent saves or edits a Python file.",
       "matcher": "\\.py$",
+      "timeout": 120,
       "action": {
         "type": "command",
-        "command": "python -m pytest -q -x",
-        "timeout": 120
+        "command": "python -m pytest -q -x"
       }
     }
   ]
