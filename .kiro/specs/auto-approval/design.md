@@ -788,6 +788,7 @@ The review (`.agents/tasks/remaining-designs/review-auto-approval.md`) had 2 HIG
 | L10 | Fixed. A paused hub writes one row per proposal, and only when the service has an active rule. | `write_in_tx` | 5.1 |
 | L11 | Security sentence and open item O9. | Security | none |
 | L12 | Open item O10 (the map is outside this module). | O10 | none |
+| D-CF | 2026-11-18, user decision, option A: discovery never guesses or pre-fills a code folder. A code folder the user types at accept time is accepted through the services registry with the same normalization and too-broad checks as the services page, and needs the admin token like every accept. This replaces the earlier rule that discovery never sets a code folder. | Needs from discovery | none (discovery task 6.1) |
 
 ## Needs from store, services, discovery (flagged for the user; no approved design is changed)
 
@@ -804,7 +805,7 @@ The review (`.agents/tasks/remaining-designs/review-auto-approval.md`) had 2 HIG
 2. `registry.get(service_id)` must return the current resolved `code_folder` synchronously (it does: reads are in-memory, no I/O).
 3. `ReduceAuditLimiter.record` already returns `bool` and takes `rule_id` and `proposal_id`; no change.
 
-**Needs from discovery (recommended, constraint on the sibling design):** the discovery "accept" path must create or update a service **without** setting `code_folder`. A code folder defines the write scope of auto-approval, so only a user with the token may set it (`PATCH /api/services/{id}`); discovery may show a suggestion in the UI but must not persist one. Rules then fail with 422 `service has no code folder` until the user sets it, which is the intended order.
+**Needs from discovery (resolved 2026-11-18, user decision, option A):** discovery never guesses or pre-fills a code folder: scan results and suggestions carry none. A code folder defines the write scope of auto-approval, so it may come only from the user. A code folder the user types when accepting a suggestion is accepted through the services registry with the same normalization and too-broad checks as the services page, and needs the admin token like every accept. Without a typed folder, rules fail with 422 `service has no code folder` until the user sets it (`PATCH /api/services/{id}`), which is the intended order.
 
 ## Open items for the user
 

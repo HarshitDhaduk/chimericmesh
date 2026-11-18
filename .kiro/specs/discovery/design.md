@@ -388,7 +388,7 @@ class RegistrySink:                                                # one call to
     def __init__(self, registry: ServiceRegistry) -> None
 class Acceptor:
     def __init__(self, manager: ScanManager, sink: ServiceSink, registry: ServiceRegistry, store: Store,
-                 known_formats: frozenset[str], protected: tuple[str, ...]) -> None
+                 known_formats: frozenset[str]) -> None
     async def accept(self, suggestion_id: str, body: AcceptBody, *, actor: str) -> tuple[Service, list[LogSource]]
 ```
 
@@ -397,7 +397,7 @@ class Acceptor:
 1. `manager.find(suggestion_id)`; none gives `SuggestionNotFound` (404). In one await-free block: if the suggestion is in `scan.accepted` or `scan.accepting`, raise `AlreadyAccepted` (409); otherwise add it to `scan.accepting`. The marker is removed in a `finally` after step 4 (kept in `accepted` on success, simply removed on failure), so two concurrent accepts of one suggestion cannot both create a service.
 2. **Validate everything, create nothing** (R5.5). `validate_service_fields({"id", "name", "app_names", "protocols": ["file"], "code_folder"}, for_create=True)` builds `ServiceFields`; `app_names` defaults to the suggestion's `evidence.process` when it has one (so Syslog events from that app are also tagged to the service; an open item, O8). For each path: `validate_log_source_fields({"path", "format", "backfill_lines": 0}, known_formats=..., for_create=True)`, `normalize_log_path`, `inspect_log_path` (stat only; a directory or device gives 422). Duplicate paths in the request (after normalization) are a 422 with field `log_paths`. Any `ValidationFailed(field, reason)` is raised as is (422).
 
-   **`code_folder` is also checked here** (finding 3). `services` now states one owner (accepted 2026-11-18, O12): the registry normalizes, and routes pass raw input. Discovery keeps its own early check: `Acceptor` calls `services.paths.normalize_code_folder(raw, protected=<tuple>, home=None)` and passes the normalized value in `ServiceFields`; the registry normalizes it again, which is idempotent. `create_app` passes the same `protected` tuple it gives the registry to `Acceptor`. A home directory, a filesystem root, a protected directory, a relative path or a non-directory gives 422 `code_folder` with nothing created.
+   **`code_folder` is only ever user-typed** (finding 3; user decision 2026-11-18, option A, shared with `auto-approval`). Scan results and suggestions never contain a `code_folder` field, and discovery never guesses or pre-fills one. `AcceptBody.code_folder` is an optional value the user types at accept time. `Acceptor` passes it unchanged to `create_service_with_sources` in `ServiceFields`; the registry is the single owner of normalization and validation (services design, O12), so discovery does no folder check of its own. A home directory, a filesystem root, a protected directory such as the data directory, a relative path or a non-directory gives the services error (422 `code_folder`) with nothing created. Like every accept, it needs the admin token.
 
    **Caps are pre-checked** (finding 2). Before creating, `Acceptor` checks `len(registry.log_sources()) + n <= LIMIT_SOURCES_TOTAL (200)` and `len(registry.list()) < LIMIT_SERVICES (100)` (the `services` `Limits` values, read from the registry's limits object when exposed, else these constants) and raises `ValidationFailed("log_paths", "too many log sources")` or `ValidationFailed("id", "too many services")`. The per-service cap of 20 is already covered by the 1 to 20 path rule. These deterministic cap failures therefore give 422 with nothing created and no tombstone.
 3. `sink.create_with_sources(...)` with actor `discovery` and `origin="discovery"` on every log source (R5.2: the approved `services` design records `origin` on log sources, not on the service itself; see O9).
@@ -656,6 +656,7 @@ Every item below is resolved: the user accepted each recommended answer on 2026-
 | O13 | IIS is often not detected on Windows: `w3wp` runs only after the first request and port 80 is not a port-only port. | Resolved (accepted 2026-11-18): accept the limit, say so in the README, and rely on the hand-added path. Port 80 is not added to `PORT_ONLY_PORTS`. |
 | O14 | The MCP no-tool test reuses the tool-listing helper of `tests/unit/test_kiro_assets.py` and checks name prefixes `discovery_`, `scan_`, `suggest`. The `agent-loop` expected-tool-set test should list its tools exactly. | Resolved (accepted 2026-11-18): reuse the helper with those prefixes; add a note to `agent-loop` when that module is next touched. |
 | O15 | Suggestion and scan ids restart at 1 after a process restart. | Resolved (accepted 2026-11-18): ids restart; the dashboard reloads on a 404. |
+| O16 | The uto-approval design said discovery must never set a code folder, while accept takes an optional one. | Resolved (2026-11-18, user decision, option A): discovery never guesses or pre-fills a code folder; a user-typed one is passed unchanged to the registry, which normalizes and validates it. Task 6.1. |
 
 ## Effort estimate
 
@@ -691,7 +692,7 @@ Dependencies for the schedule: build order is `store`, `services`, `connectors`,
 |---|---|
 | 1 HIGH wildcard staleness | Addressed: `stat` returns mtime, `listdir` returns `(names, truncated)`, wildcard matches are ordered newest first before the 25 cap, truncation sets `limited`, README states the limit, open item O11. Tasks 2.1, 3.4, 4.1, 4.4, 8.3. |
 | 2 MEDIUM R5.5 default sink | Addressed: cap pre-check in `Acceptor`; N1 accepted (O2, 2026-11-18) and added to `services`; `RegistrySink` replaces the sequential fallback, so R5.5 is fully met. Task 6.1, Property 13. |
-| 3 MEDIUM `code_folder` | Addressed: `Acceptor` calls `normalize_code_folder` with the registry's `protected` tuple; O12. Tasks 6.1, 8.1. |
+| 3 MEDIUM `code_folder` | Addressed: user decision 2026-11-18 (O16): `code_folder` is user-typed only and passed unchanged; the registry validates it (O12). Tasks 6.1, 8.1. |
 | 4 MEDIUM stuck `running` | Addressed: register before the first await, `try/except BaseException` marks `failed`. Task 5.2. |
 | 5 MEDIUM 30 s covers all phases | Addressed: `deadline` and `cancel` go to `build_suggestions`. Tasks 4.1, 4.2. |
 | 6 MEDIUM executor | Addressed: dedicated `ThreadPoolExecutor(1)`, `run_in_executor`, `shutdown(wait=False, cancel_futures=True)`; test engines wait on `cancel`. Tasks 5.2, 8.1. |
