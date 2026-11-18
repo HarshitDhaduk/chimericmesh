@@ -1,0 +1,10 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "chimericmesh-remediation",
+  "version": "0.1.0",
+  "description": "Investigate Syslog, IRC and Telnet incidents through the ChimericMesh MCP server and fix them with a human-approved remediation loop.",
+  "author": {
+    "name": "ChimericMesh"
+  },
+  "keywords": ["incident", "syslog", "irc", "telnet", "chimericmesh", "remediation", "outage", "on-call"]
+}

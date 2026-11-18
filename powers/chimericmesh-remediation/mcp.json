@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "chimericmesh": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "chimericmesh.mcp_server"],
+      "env": { "PYTHONPATH": "src", "CHIMERICMESH_URL": "http://127.0.0.1:8000" }
+    }
+  }
+}
