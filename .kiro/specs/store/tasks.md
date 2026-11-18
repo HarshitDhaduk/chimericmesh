@@ -111,28 +111,28 @@ Review round 3 (see "Review round 3 resolutions" in the design): behavioural fin
     - Edit `src/chimericmesh/diagnostics.py`; keep `add(ev)` returning `Incident | None`.
     - _Requirements: 5.4, 5.5, 5.6, 5.7_
 
-- [ ] 7. Event writer, retention and event queries
-  - [ ] 7.1 Implement the bounded event queue and the batch writer
+- [x] 7. Event writer, retention and event queries
+  - [x] 7.1 Implement the bounded event queue and the batch writer
     - Write `tests/unit/test_store_events.py` first: `put` never blocks and stores nothing until the writer runs; rows are written in batches of at most 500 or after 250 ms (timing comes from the `StoreConfig` knobs `batch_rows`, `batch_ms`, `queue_limit`, tests override them); a stored row equals the event (id, ts, source, host, app, severity, message, service id, log source id, raw) plus `ingested` (the hub clock at `put`); `message` and `raw` are cut at 4096; a lone surrogate and NUL do not raise; the queue holds at most 20000 rows, drops the oldest, increments `dropped_events` and logs at most one warning per minute (fake clock); counter deltas `events_total` and `evsrc:<source>` and the `event_id` high-water mark are written in the same transaction as the batch; `close` drains pending rows; event rows are inserted with `INSERT OR IGNORE`, so a duplicate `id` in a batch is ignored, counted in `dropped_events` (batch size minus `rowcount`) and the batch still commits; `put` after `close` never raises and counts a drop.
     - Create `store/events.py` (`EventWriter.put`, batching loop hook into `store/writer.py`, `dropped_events`); wire `Store.events`.
     - _Requirements: 6.1, 6.1a, 6.2, 6.5, 7.1, 7.3_
-  - [ ] 7.2 Add retention and write-failure handling for event batches
+  - [x] 7.2 Add retention and write-failure handling for event batches
     - Extend `tests/unit/test_store_events.py` first: with `max_events=1000` the table never exceeds 1000 plus 500 plus one batch at observation points and is at most 1000 after each trim; rows whose `ingested` is older than `event_ttl_days` are removed (fake clock), including rows beyond the 5000 lowest ids, and an event with an old `ts` but fresh `ingested` (a replay) is kept; the TTL loop and the cap loop terminate by the stop rule in the design (chunks of 5000, stop on a short chunk or zero deletions); oldest means lowest id; trimming runs at least every 60 seconds and also when `approx_rows` passes `max_events + 500`; trims run in chunks of 5000 and a queued `transact` job is served between chunks; incidents, proposals and audit rows are untouched; an injected write failure retries 3 times, then the batch is dropped and counted, the deltas are put back, `store_ok` is false and the writer keeps running; the next successful batch makes `store_ok` true.
     - Edit `store/events.py` and `store/writer.py`.
     - _Requirements: 6.3, 7.4, 8.6_
-  - [ ] 7.3 Implement event queries and the id seed
+  - [x] 7.3 Implement event queries and the id seed
     - Extend `tests/unit/test_store_events.py` first: `after(after_id, limit)` returns ids above `after_id`, ascending, at most `limit`, with optional `source` and `service_id` filters; `newest(n)` returns the newest `n` ascending; `barrier()` returns only after earlier rows are committed or dropped; `max_id_sync()` is the larger of `max(events.id)` and the `event_id` counter, including after the table was emptied by retention, plus `crash_margin` (`2 * queue_limit + batch_rows`, L2) when `Store.previous_shutdown_clean` is false (open the same file after `Store._abandon()`, and the seed is above every id handed out); `after()` called on an empty table returns `[]`.
-    - [ ] (L2) Test first: with `queue_limit=100`, `batch_rows=10`, ingest while a commit is blocked so more than `batch_rows` rows are dropped during it, `Store._abandon()`, reopen: the seed is above every id handed out; `crash_margin` equals `2 * queue_limit + batch_rows`.
-    - [ ] (L5) Test first: with `batch_ms` set to 10 s and 3 rows queued, `await barrier()` returns within 1 s (it forces an immediate flush) and the rows are committed.
+    - [x] (L2) Test first: with `queue_limit=100`, `batch_rows=10`, ingest while a commit is blocked so more than `batch_rows` rows are dropped during it, `Store._abandon()`, reopen: the seed is above every id handed out; `crash_margin` equals `2 * queue_limit + batch_rows`.
+    - [x] (L5) Test first: with `batch_ms` set to 10 s and 3 rows queued, `await barrier()` returns within 1 s (it forces an immediate flush) and the rows are committed.
     - Edit `store/events.py`.
     - _Requirements: 6.1, 6.4, 6.6_
-  - [ ] 7.4 Write property tests for event rows and retention
+  - [x] 7.4 Write property tests for event rows and retention
     - Create `tests/pbt/test_store_events_properties.py`.
     - **Property 9: Event row fidelity and caps**
     - **Property 10: Retention bounds**
     - **Property 11: Events after an id**
     - **Validates: Requirements 6.1, 6.2, 6.3, 6.6, 8.6**
-  - [ ]* 7.5 Write the property test for write accounting
+  - [x]* 7.5 Write the property test for write accounting
     - Create `tests/pbt/test_store_accounting_properties.py` (small queue limit, injected failures).
     - **Property 19: Write accounting**
     - **Validates: Requirements 7.3, 7.4**

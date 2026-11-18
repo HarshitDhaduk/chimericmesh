@@ -32,6 +32,7 @@ THREAD_NAME = "store-writer"
 RETRY_DELAYS: tuple[float, ...] = (0.05, 0.2, 0.8)  # three retries after the first try (T8)
 
 _STOP = object()
+_WAKE = object()  # an event row is waiting; the hook decides when to flush
 
 _BEGIN = "BEGIN IMMEDIATE"
 _COMMIT = "COMMIT"
@@ -67,6 +68,7 @@ class WriterState:
         self.deadline: float | None = None
         self.store_ok = True
         self.last_event_id = 0
+        self.hook: Any = None  # EventWriter: batching, trimming and drain on shutdown
         self.finished = threading.Event()
 
 
@@ -218,17 +220,43 @@ def _past_deadline(state: WriterState) -> bool:
     return state.deadline is not None and time.monotonic() > state.deadline
 
 
+def _service(state: WriterState, hook: Any) -> None:
+    try:
+        hook.service(state)
+    except Exception:  # the writer thread must survive a bug in the hook
+        log.exception("store: event writer hook failed (%s)", state.path)
+
+
 def _run(state: WriterState) -> None:
+    hook = state.hook
     while True:
-        item = state.queue.get()
+        timeout = hook.next_wait() if hook is not None else None
+        try:
+            item = state.queue.get(timeout=timeout)
+        except queue.Empty:
+            item = None
         if item is _STOP:
             break
-        if state.abandon or _past_deadline(state):
-            item.deliver(None, StoreClosedError("store is closing"))
-            continue
-        _execute(state, item)
+        if item is _WAKE:
+            hook.on_wake()
+        elif item is not None:
+            if state.abandon or _past_deadline(state):
+                item.deliver(None, StoreClosedError("store is closing"))
+            else:
+                _execute(state, item)
+        if hook is not None and not state.abandon:
+            _service(state, hook)
+    _finish(state)
     _final_work(state)
 
+
+def _finish(state: WriterState) -> None:
+    if state.hook is None:
+        return
+    try:
+        state.hook.finish(state)
+    except Exception:
+        log.exception("store: draining event rows failed (%s)", state.path)
 
 # ---- control -------------------------------------------------------------------------------
 
@@ -244,6 +272,18 @@ def submit(state: WriterState, job: Job) -> None:
         state.queue.put(job)
 
 
+def wake(state: WriterState) -> bool:
+    """Tell the writer thread that event rows are waiting (starts it if needed). False when closed."""
+    with state.lock:
+        if state.stopping:
+            return False
+        if state.thread is None:
+            state.thread = threading.Thread(target=_run, args=(state,), name=THREAD_NAME, daemon=True)
+            state.thread.start()
+        state.queue.put(_WAKE)
+    return True
+
+
 def stop(state: WriterState, *, clean: bool, timeout: float, abandon: bool = False) -> bool:
     """Stop intake, drain until the deadline, finish on the writer thread. True when finished."""
     with state.lock:
@@ -254,6 +294,7 @@ def stop(state: WriterState, *, clean: bool, timeout: float, abandon: bool = Fal
             state.abandon = abandon
             state.deadline = time.monotonic() + max(timeout, 0.0)
             if state.thread is None:
+                _finish(state)
                 _final_work(state)  # nothing ever ran: finish inline on the caller's thread
             else:
                 state.queue.put(_STOP)

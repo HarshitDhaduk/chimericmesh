@@ -17,6 +17,7 @@ from chimericmesh import fsperms
 from .audit import AuditLog
 from .config import MEMORY, StoreConfig
 from .connection import open_connection
+from .events import EventWriter
 from .migrations import MigrationRegistry, apply_migrations
 from .tx import Tx
 from .writer import (
@@ -68,9 +69,10 @@ class Store:
         self.previous_shutdown_clean = previous_shutdown_clean
         self._state = WriterState(conn, path)
         self._last_event_id = 0
-        self._dropped_events = 0
         self._closed = False
         self.audit = AuditLog(self)
+        self.events = EventWriter(self._state, config, now, previous_shutdown_clean)
+        self._state.hook = self.events
         # The finalizer sees only the state, never the store, so an unreferenced store stops its thread.
         self._finalizer = weakref.finalize(self, _stop_writer, self._state)
 
@@ -137,7 +139,7 @@ class Store:
     # ---- state -----------------------------------------------------------------------------
 
     def health(self) -> StoreHealth:
-        return StoreHealth(self._state.store_ok, self._dropped_events, 0, self.path)
+        return StoreHealth(self._state.store_ok, self.events.dropped_events, self.events.queue_depth(), self.path)
 
     async def note_last_event_id(self, n: int) -> None:
         """Raise the durable ``event_id`` high-water mark to ``n`` (never lowers it)."""
