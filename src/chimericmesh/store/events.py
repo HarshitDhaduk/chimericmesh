@@ -60,6 +60,20 @@ _AFTER_UNASSIGNED = (
 _NEWEST = _COLUMNS + " ORDER BY id DESC LIMIT ?"
 _MAX_ID = "SELECT COALESCE(MAX(id), 0) FROM events"
 
+_COUNTERS = "SELECT name, value FROM counters WHERE name = 'events_total' OR name LIKE 'evsrc:%'"
+
+
+def read_counters(tx: Tx) -> tuple[int, dict[str, int]]:
+    """Cumulative event totals: (all events, per source). Source names are the sanitised counter parts."""
+    total, by_source = 0, {}
+    for row in tx.all(_COUNTERS):
+        if row[0] == "events_total":
+            total = int(row[1])
+        else:
+            by_source[row[0][len("evsrc:"):]] = int(row[1])
+    return total, by_source
+
+
 TRIM_CHUNK = 5000  # rows per delete; each chunk is its own transaction
 TRIM_SLACK = 500   # a size-cap trim starts when approx_rows passes max_events + this
 
@@ -390,6 +404,12 @@ class EventWriter:
         """The newest ``limit`` events, oldest first (startup refill of the ring)."""
         n = max(0, int(limit))
         rows = await self._read(lambda tx: tx.all(_NEWEST, (n,)))
+        return [_to_event(r) for r in reversed(rows)]
+
+    def newest_sync(self, limit: int) -> list[Event]:
+        """Blocking form of ``newest`` for the hub's startup load."""
+        n = max(0, int(limit))
+        rows = self._read_sync(lambda tx: tx.all(_NEWEST, (n,)))
         return [_to_event(r) for r in reversed(rows)]
 
     def max_id_sync(self) -> int:

@@ -192,6 +192,10 @@ class IncidentTracker:
         if self.on_evict is not None:
             self.on_evict(gone)
 
+    def known(self, incident_id: str) -> bool:
+        """True when a cluster with this id is in memory (qualified or not)."""
+        return incident_id in self._clusters
+
     def resolved_ids(self) -> set[str]:
         return {i.id for i in self._clusters.values() if i.resolved}
 

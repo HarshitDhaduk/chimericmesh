@@ -54,7 +54,6 @@ def test_a_reopening_counts_as_an_opening_in_this_run():
     asyncio.run(go())
 
 
-@pytest.mark.xfail(strict=True, reason="store-backed hub arrives in task 11.3, which removes this marker")
 def test_persisted_state_does_not_mark_steps_done(tmp_path):
     from chimericmesh.store.incidents import IncidentRow, upsert_incident
     from chimericmesh.store.proposals import create_proposal

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import random
 import time
@@ -20,6 +21,11 @@ from .events import Event
 from .hub import WEB_NICK, Hub
 from .listeners import IrcServer, start_syslog, start_telnet
 from .parsers import irc_to_event, parse_syslog, telnet_to_event
+from .store import MigrationRegistry, Store, StoreError
+from .store.config import MEMORY, resolve_db_path
+from .store.schema import core_registry
+
+log = logging.getLogger("chimericmesh.api")
 
 WEB_DIR = Path(__file__).parent / "web"
 
@@ -69,30 +75,79 @@ class TerminalRequest(BaseModel):
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 
 
-def create_app(hub: Hub | None = None, start_listeners: bool = True) -> FastAPI:
-    hub = hub or Hub()
+SHUTDOWN_SECONDS = 5.0
+
+
+def build_registry() -> MigrationRegistry:
+    """Every module's migrations. Later modules add their ``register_migrations`` call here."""
+    return core_registry()
+
+
+def _wire_store(hub: Hub | None, store: Store | None) -> tuple[Hub, Store, bool]:
+    """Apply the create_app contract. Returns (hub, store, whether the lifespan closes the store)."""
+    if hub is None:
+        if store is not None:
+            return Hub(store=store), store, False
+        opened = Store.open(resolve_db_path(), registry=build_registry())
+        return Hub(store=opened), opened, True
+    if hub.store is not None:
+        if store is not None and store is not hub.store:
+            raise ValueError("create_app: the hub is backed by a different store")
+        return hub, hub.store, False
+    owned = store is None
+    store = store or Store.open(MEMORY, registry=build_registry())  # tables, counters, audit of new modules
+    if hub.audit is None:
+        hub.audit = store.audit  # an audit sink already attached is never overwritten
+    return hub, store, owned
+
+
+def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
+               store: Store | None = None) -> FastAPI:
+    hub, store, owns_store = _wire_store(hub, store)
     irc = IrcServer(hub)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         closers = []
-        if start_listeners:
-            bind = os.environ.get("CHIMERICMESH_BIND", "127.0.0.1")
-            ports = {
-                "syslog": int(os.environ.get("CHIMERICMESH_SYSLOG_PORT", 5514)),
-                "irc": int(os.environ.get("CHIMERICMESH_IRC_PORT", 6667)),
-                "telnet": int(os.environ.get("CHIMERICMESH_TELNET_PORT", 2323)),
-            }
-            syslog_t = await start_syslog(hub, bind, ports["syslog"])
-            telnet_s = await start_telnet(hub, bind, ports["telnet"])
-            irc_s = await irc.start(bind, ports["irc"])
-            closers = [syslog_t.close, telnet_s.close, irc_s.close]
+        try:
+            if start_listeners:
+                bind = os.environ.get("CHIMERICMESH_BIND", "127.0.0.1")
+                ports = {
+                    "syslog": int(os.environ.get("CHIMERICMESH_SYSLOG_PORT", 5514)),
+                    "irc": int(os.environ.get("CHIMERICMESH_IRC_PORT", 6667)),
+                    "telnet": int(os.environ.get("CHIMERICMESH_TELNET_PORT", 2323)),
+                }
+                syslog_t = await start_syslog(hub, bind, ports["syslog"])
+                closers.append(syslog_t.close)
+                telnet_s = await start_telnet(hub, bind, ports["telnet"])
+                closers.append(telnet_s.close)
+                irc_s = await irc.start(bind, ports["irc"])
+                closers.append(irc_s.close)
+            hub.start()
+        except BaseException:
+            for close in closers:
+                close()
+            if owns_store:
+                store.close(timeout=SHUTDOWN_SECONDS, clean=False)  # a start that never served stays unclean
+            raise
         yield
+        # Shutdown order: listeners stop calling ingest, then the hub flushes, then the store closes,
+        # all against one shared deadline.
+        deadline = time.monotonic() + SHUTDOWN_SECONDS
         for close in closers:
             close()
+        await hub.aclose(max(0.1, deadline - time.monotonic()))
+        if owns_store:
+            store.close(timeout=max(0.1, deadline - time.monotonic()))
 
     app = FastAPI(title="ChimericMesh", version="0.1.0", lifespan=lifespan)
     app.state.hub = hub
+    app.state.store = store
+
+    @app.exception_handler(StoreError)
+    async def store_unavailable(request: Request, exc: StoreError):
+        log.error("store error in %s %s: %s", request.method, request.url.path, type(exc).__name__)
+        return JSONResponse({"detail": "store unavailable"}, status_code=503)
 
     @app.middleware("http")
     async def same_origin_only(request: Request, call_next):
