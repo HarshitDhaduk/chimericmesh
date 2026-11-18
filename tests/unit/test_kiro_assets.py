@@ -88,6 +88,21 @@ def test_agent_prompt_requires_concrete_proposals_and_evidence():
     for phrase in ("reversible", "exact files", "run the relevant tests", "get_incident", "recent_events",
                    "event rate", "Do not extend the change"):
         assert phrase in prompt
+def test_agent_prompt_requires_reverifying_proposal_before_acting():
+    prompt = _load(AGENT)["prompt"]
+    for phrase in ("Immediately before ANY change", "call get_proposal again", "AND the action text and incident_id",
+                   "the id is unknown", "ask for a new proposal", "Never rely on an id or an approval remembered",
+                   "hub probably restarted", "re-investigate", "process restart", "separate step the human performs"):
+        assert phrase in prompt
+
+
+def test_remediation_skill_mirrors_reverification_rules():
+    text = (POWER / "skills" / "remediation-loop" / "SKILL.md").read_text(encoding="utf-8")
+    for phrase in ("Immediately before any change", "action text and incident id", "ask for a new proposal",
+                   "remembered from earlier in the conversation", "hub probably restarted", "re-investigate",
+                   "process restart", "separate step the human performs"):
+        assert phrase in text
+
 def test_agent_never_auto_allows_mutating_tools():
     agent = _load(AGENT)
     assert _allowed_mcp_tools(agent).isdisjoint(MUTATING)
