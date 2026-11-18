@@ -108,6 +108,16 @@ Includes Hypothesis property tests for parser totality, IRC injection safety, an
 - Steering: `.kiro/steering/`
 - Hooks: `.kiro/hooks/` (tests on save, innerHTML guard)
 - MCP: `src/chimericmesh/mcp_server.py`
+- Custom agent: `.kiro/agents/mesh-responder.json`
+- Power: `powers/chimericmesh-remediation/`
+
+## Kiro agent and power
+
+**Custom agent `mesh-responder`** (`.kiro/agents/mesh-responder.json`) runs the human-approved remediation loop. It defines the `chimericmesh` MCP server inline, loads `.kiro/steering/project.md`, and auto-allows only the read-only MCP tools (`list_incidents`, `get_incident`, `find_code_for_incident`, `recent_events`, `list_proposals`, `get_proposal`). `announce_to_irc`, `propose_remediation`, `complete_proposal`, `resolve_incident`, shell and file writes ask for permission. Select it with the agent picker in Kiro IDE, or `/agent` in Kiro CLI, after trusting the workspace. Start the hub first (`python -m chimericmesh`).
+
+**Power `chimericmesh-remediation`** (`powers/chimericmesh-remediation/`) uses the Agent Plugins layout: `plugin.json`, `mcp.json`, and `skills/` (`getting-started`, `remediation-loop`, `triage`). To install it, open the Powers panel, choose Add Custom Power, then Import power from a folder, and select that directory.
+
+`tests/unit/test_kiro_assets.py` checks both files statically (JSON validity, tool names against the MCP server, consistency with `.kiro/settings/mcp.json`). It does not show that Kiro loads them.
 - PBT: `tests/pbt/`
 
 ## Security notes
