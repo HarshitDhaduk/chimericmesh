@@ -76,28 +76,28 @@ Review round 3 (see "Review round 3 resolutions" in the design): behavioural fin
     - **Property 18: Audit append-only**
     - **Validates: Requirements 8.1, 8.2, 8.3, 8.5**
 
-- [ ] 5. Proposal model, state machine and persistence
-  - [ ] 5.1 Implement the `Proposal` model and the pure transition rules
+- [x] 5. Proposal model, state machine and persistence
+  - [x] 5.1 Implement the `Proposal` model and the pure transition rules
     - Write `tests/unit/test_store_transitions.py` first: every (from, to) pair of the four statuses, with and without `HubAuthority`; the three reserved `approved` to `denied` cases accepted only with authority and origin `hub`; the same pair with a caller-supplied `decided_by` starting with a reserved prefix and no authority is rejected; `ruleman` and `expired1` are not reserved, `rule-x`, `rule:x`, `withdrawn:x`, `expired:x`, `expired-x` are; `Proposal.to_dict()` has exactly the nine baseline keys and `to_full_dict()` adds the extended ones.
     - Create `store/models.py` (`Proposal`) and `store/proposals.py` with `HubAuthority`, `check_transition`, `is_reserved_decider` and the status constants.
     - _Requirements: 4.3, 4.5, 4.6, 4.7_
-  - [ ] 5.2 Implement proposal create, transition and load
+  - [x] 5.2 Implement proposal create, transition and load
     - Write `tests/unit/test_store_proposals.py` first, on a temporary file: create `p1`, `p2`; restart and create `p3`; delete `p3` in SQL, restart, create `p4` (Success Criterion 1); lower the counter in SQL below the stored maximum and the next id is still above every stored id; two concurrent creates from `asyncio.gather` get distinct ids; transitions are checked against the current stored status inside the transaction (two concurrent `decide` calls give one winner and one `InvalidTransition`); the counter and the insert commit together (a failure after `counter_next` leaves the counter unchanged); field caps (action 200, details 500, `result_note` 300, `decided_by` 60); `decision_origin` is `user` without authority and `hub` with it; extended columns are nullable and a row without them loads; `incident_opening` and `service_id` are stored; `list_proposals` applies status and service filters before the limit.
     - Add `create_proposal`, `transition_proposal`, `get_proposal`, `list_proposals`, `load_all_proposals` to `store/proposals.py`.
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 4.1, 4.2, 4.5, 4.6, 4.7, 5.10_
-  - [ ] 5.3 Write property tests for proposal ids
+  - [x] 5.3 Write property tests for proposal ids
     - Create `tests/pbt/test_store_proposal_ids_properties.py` (random sequences of create, delete-row, trim, restart on a temporary file; concurrent creation with `asyncio.gather`).
     - **Property 1: Proposal ids are never reused**
     - **Property 3: Id format**
     - **Property 4: Concurrent creation**
     - **Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.6**
-  - [ ] 5.4 Write property tests for transitions and persistence
+  - [x] 5.4 Write property tests for transitions and persistence
     - Create `tests/pbt/test_store_proposal_properties.py`.
     - **Property 6: Transition table**
     - **Property 7: Origin is independent of `decided_by`**
     - **Property 8: Proposal round trip**
     - **Validates: Requirements 4.2, 4.3, 4.5, 4.7**
-  - [ ] 5.5 Checkpoint: run `python -m pytest -q`; everything, including the 3 to 5 tests, must pass.
+  - [x] 5.5 Checkpoint: run `python -m pytest -q`; everything, including the 3 to 5 tests, must pass.
 
 - [ ] 6. Core model changes (stdlib only, no existing test changes)
   - [ ] 6.1 Add event fields
