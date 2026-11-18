@@ -54,3 +54,9 @@ Operators of older infrastructure emit logs over Syslog, IRC and Telnet. They ca
 
 ### R9: Guided workflow
 1. GET /api/workflow SHALL report six ordered steps (traffic, incidents, ask, propose, decide, resolve) with done flags, the next step, completion, and whether `dashboard` is an operator.
+
+### R10: Real-service demo
+1. The repository SHALL ship examples/legacy_app, a runnable stdlib-only service that sends RFC 3164 syslog to the hub and emits a real, repeating network error against a local unresponsive upstream.
+2. The shipped service SHALL contain an intentional defect (unbounded immediate retries). Behaviour tests in examples/legacy_app/tests SHALL fail on it and pass after a correct fix.
+3. The main test suite SHALL pass whether or not the defect is fixed.
+4. The agent SHALL verify an approved fix (tests and event rate) and put that evidence in the complete_proposal note.

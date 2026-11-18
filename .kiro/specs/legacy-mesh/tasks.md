@@ -18,3 +18,4 @@
 - [x] 16. Hub transcript, /api/chat, /api/terminal, same-origin middleware (R8)
 - [x] 17. Hub.workflow and /api/workflow (R9)
 - [x] 18. Tests: tests/unit/test_web_terminal.py, tests/pbt/test_chat_properties.py
+- [x] 19. Real-service demo (R10): examples/legacy_app run.py, upstream.py, blackhole.py, syslog_log.py, example tests, tests/unit/test_legacy_app_wiring.py, agent prompt hardening
