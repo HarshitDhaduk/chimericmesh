@@ -129,6 +129,42 @@ def test_agent_resources_exist():
         assert (ROOT / path).is_file()
 
 
+# --- hooks ------------------------------------------------------------------
+
+HOOKS = ROOT / ".kiro" / "hooks"
+
+
+def _hooks(name: str) -> list[dict]:
+    return _load(HOOKS / name)["hooks"]
+
+
+def test_guard_hook_matcher_is_anchored_and_covers_write_tools():
+    for hook in _hooks("guard-innerhtml.json"):
+        matcher = hook["matcher"]
+        assert matcher.startswith("^") and matcher.endswith("$")
+        for tool in ("fs_write", "fs_append", "str_replace"):
+            assert re.search(matcher, tool)
+        for other in ("fs_write_extra", "my_str_replace", "read"):
+            assert not re.search(matcher, other)
+
+
+def test_hook_timeout_is_on_hook_not_action():
+    for name in ("guard-innerhtml.json", "test-on-save.json"):
+        for hook in _hooks(name):
+            assert "timeout" not in hook["action"]
+    assert _hooks("test-on-save.json")[0]["timeout"] == 120
+
+
+def test_test_on_save_description_says_agent_saves():
+    description = _hooks("test-on-save.json")[0]["description"]
+    assert "agent" in description
+
+
+def test_mcp_configs_rely_on_installed_package_prerequisite():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "pip install -e" in readme
+
+
 # --- power ------------------------------------------------------------------
 
 
