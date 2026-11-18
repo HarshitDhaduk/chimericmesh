@@ -17,7 +17,7 @@ from chimericmesh import fsperms
 from .audit import AuditLog
 from .config import MEMORY, StoreConfig
 from .connection import open_connection
-from .events import EventWriter
+from .events import EventWriter, crash_margin, event_id_high_water
 from .migrations import MigrationRegistry, apply_migrations
 from .tx import Tx
 from .writer import (
@@ -82,24 +82,32 @@ class Store:
         text = os.fspath(path)
         resolved = text if text == MEMORY else os.path.abspath(text)
         conn = open_connection(resolved, registry)
+        config = config or StoreConfig.from_env()
         try:
             apply_migrations(conn, registry, now=now)
-            clean = cls._mark_running(conn)
+            clean = cls._mark_running(conn, crash_margin(config))
             if resolved != MEMORY:
                 fsperms.secure_sidecars(resolved)
         except BaseException:
             conn.close()
             raise
-        return cls(conn, resolved, config or StoreConfig.from_env(), now, clean)
+        return cls(conn, resolved, config, now, clean)
 
     @staticmethod
-    def _mark_running(conn: sqlite3.Connection) -> bool:
-        """Read the previous shutdown flag, then set it to 0. A new database counts as clean."""
+    def _mark_running(conn: sqlite3.Connection, margin: int) -> bool:
+        """Read the previous shutdown flag, then set it to 0. A new database counts as clean.
+
+        After an unclean shutdown the event-id high-water mark is raised by ``margin`` in the same
+        transaction, once per start, so a second crash before any batch commits cannot reuse ids (B2).
+        """
         conn.execute("BEGIN IMMEDIATE")
         try:
             row = conn.execute(_SELECT_CLEAN).fetchone()
             previous_clean = row is None or row[0] == 1
-            Tx(conn).counter_set(_CLEAN_NAME, 0)
+            tx = Tx(conn)
+            if not previous_clean:
+                tx.counter_raise("event_id", event_id_high_water(tx) + margin)
+            tx.counter_set(_CLEAN_NAME, 0)
             conn.execute("COMMIT")
         except BaseException:
             if conn.in_transaction:

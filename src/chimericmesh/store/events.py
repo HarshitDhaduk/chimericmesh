@@ -60,6 +60,16 @@ _AFTER_UNASSIGNED = (
 _NEWEST = _COLUMNS + " ORDER BY id DESC LIMIT ?"
 _MAX_ID = "SELECT COALESCE(MAX(id), 0) FROM events"
 
+def crash_margin(config: StoreConfig) -> int:
+    """``2 * queue_limit + batch_rows`` (L2)."""
+    return 2 * config.queue_limit + config.batch_rows
+
+
+def event_id_high_water(tx: Tx) -> int:
+    """The larger of the highest stored event id and the ``event_id`` counter."""
+    return max(int(tx.one(_MAX_ID)[0]), tx.counter_get("event_id"))
+
+
 _COUNTERS = "SELECT name, value FROM counters WHERE name = 'events_total' OR name LIKE 'evsrc:%'"
 
 
@@ -185,7 +195,7 @@ class EventWriter:
     @property
     def crash_margin(self) -> int:
         """Ids that may have been handed out but not stored when the previous run crashed (L2)."""
-        return 2 * self._cfg.queue_limit + self._cfg.batch_rows
+        return crash_margin(self._cfg)
 
     def queue_depth(self) -> int:
         return len(self._rows)
@@ -413,9 +423,8 @@ class EventWriter:
         return [_to_event(r) for r in reversed(rows)]
 
     def max_id_sync(self) -> int:
-        """Startup seed for event ids. Blocks the caller; runs on the writer thread."""
-        def fn(tx: Tx) -> int:
-            return max(int(tx.one(_MAX_ID)[0]), tx.counter_get("event_id"))
+        """Startup seed for event ids: a pure read. Blocks the caller; runs on the writer thread.
 
-        seed = self._read_sync(fn)
-        return seed if self.previous_shutdown_clean else seed + self.crash_margin
+        After an unclean shutdown ``Store.open`` already raised the stored mark by ``crash_margin`` (B2).
+        """
+        return self._read_sync(event_id_high_water)

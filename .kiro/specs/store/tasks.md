@@ -192,7 +192,7 @@ Review round 3 (see "Review round 3 resolutions" in the design): behavioural fin
     - No production edits expected; fix any violation found in earlier tasks.
     - _Requirements: 3.8, 4.3, Success Criterion 8_
 
-- [ ] 11. Wire the store into the hub and `create_app`
+- [x] 11. Wire the store into the hub and `create_app`
   - [x] 11.1 Store-backed hub: startup load, events and counters
     - Write `tests/unit/test_hub_store_events.py` first, on a temporary file: `Hub(store=store)` loads the newest 2000 events into the ring, seeds the event id from `max_id_sync`, restores `total_events` and `total_by_source`; ingest queues rows; ids continue after restart even after the table was emptied and, after a simulated crash (`Store._abandon()`, then reopen the file; `previous_shutdown_clean` is false), continue above every id shown to a client (the `crash_margin` of 7.3, L2); a graceful `aclose` whose deadline dropped queued rows still leaves the `event_id` counter at or above the last assigned id (`note_last_event_id`); the transcript is empty after a restart (R9.1: `Hub(store=...)` does not persist or reload it); an `ingest` after `aclose` updates memory, never raises and writes nothing; `events_after` on a store-backed hub: boundary `after_id == ring_min - 1` is served from the ring, a lower `after_id` is stitched from the database then the ring with no gap and no duplicate, even while 15 000 rows are still queued (the stitch awaits `barrier()` first), id gaps from dropped rows are allowed, and a hub with an empty ring (fresh store) answers from the database only; a source `"Weird Source!"` does not poison a batch; `hub.store` is set; a bare hub keeps `store=None`.
     - Edit `src/chimericmesh/hub.py` (constructor `store=`, `_load`, `ingest` event path, `events_after`, `start`, `aclose(deadline)`).
@@ -230,7 +230,8 @@ Review round 3 (see "Review round 3 resolutions" in the design): behavioural fin
     - Write `tests/unit/test_store_integration.py` (Success Criteria 1, 2, 4 and 6 through `create_app` and `httpx.ASGITransport` on a temporary database, plus starting the app from two working directories) and `tests/unit/test_store_benchmark.py` (R7.2: 5000 events at 1000 per second from 200 signatures, all persisted within 5 seconds of the last event or `persisted + dropped == 5000`, maximum loop stall under 100 ms, including the incident-open commits; skipped when `CHIMERICMESH_SKIP_BENCH=1`).
     - Register the `slow` marker in `pyproject.toml`.
     - _Requirements: 1.2, 3.3, 5.2, 5.7, 5.8, 6.3, 7.2, Success Criteria 1 to 4 and 6_
-  - [ ] 11.6 Write the property test for event ids across restarts
+  - [x] 11.6 Write the property test for event ids across restarts
+    - Deviation (2026-11-18, B2, option B): the test found id reuse after two crashes in a row; `Store.open` now reserves the crash margin once per unclean start and `max_id_sync` is a pure read (`tests/unit/test_store_crash_margin.py`).
     - Create `tests/pbt/test_store_event_ids_properties.py` (temporary file databases, fake clock, random sequences of ingest, trim-everything, graceful restart and `Store._abandon()` crash).
     - **Property 5: Event ids strictly increase across restarts**
     - **Validates: Requirements 6.1**
@@ -239,7 +240,9 @@ Review round 3 (see "Review round 3 resolutions" in the design): behavioural fin
     - **Property 15: Incident count continuity**
     - **Property 20: Store-backed hub equals bare hub on incidents**
     - **Validates: Requirements 1.4, 5.2, 5.3, 5.9**
-  - [ ] 11.8 Final checkpoint
+  - [x] 11.8 Final checkpoint
+    - Success Criteria walk (2026-11-18). SC1: `test_store_integration.py::test_sc1_*`, `test_store_proposals.py`, `test_hub_store_proposals.py`. SC2: `test_sc2_*`, `test_hub_store_incidents.py::test_count_continues_*`. SC3: `test_store_benchmark.py` (skipped with `CHIMERICMESH_SKIP_BENCH=1`). SC4: `test_sc4_*`, `test_store_events.py` retention tests, Property 10. SC5: full suite green; `git diff --name-status <merge-base> HEAD -- tests/` lists only added files. SC6: `test_sc6_*`, `test_hub_event_ids.py` reopen tests. SC7: Properties 1, 3, 5, 6, 10, 11, 12, 18 are in `tests/pbt/`. SC8: `test_dependency_direction.py`, `test_store_static.py::test_store_imports_only_core_and_store_modules`.
+    - Gaps: optional 11.7 (Properties 15 and 20) not written; Property 15 is covered by the example tests of 11.2 and 11.2a. The Windows ACL check stays manual (2.1).
     - Run `python -m pytest -q`. The full existing suite (no existing test edited by this module) and all new tests must pass. Confirm by `git diff --stat tests/` that only new files were added under `tests/`.
     - Walk the Success Criteria 1 to 8 one by one against the tests that cover them and note any gap in this file.
     - _Requirements: all; Success Criterion 5_
