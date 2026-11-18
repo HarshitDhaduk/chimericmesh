@@ -204,8 +204,10 @@ def list_proposals(tx: Tx, *, status: str | None = None, service_id: str | None 
                    limit: int | None = None) -> list[Proposal]:
     """Newest ``limit`` matching proposals, oldest first. Filters apply before the limit."""
     params = {"status": status, "svc": service_id, "limit": -1 if limit is None else max(0, int(limit))}
-    sql = _LIST_UNASSIGNED if service_id == UNASSIGNED else _LIST
-    rows = tx.all(sql, params)  # type: ignore[arg-type]
+    if service_id == UNASSIGNED:
+        rows = tx.all(_LIST_UNASSIGNED, params)  # type: ignore[arg-type]
+    else:
+        rows = tx.all(_LIST, params)  # type: ignore[arg-type]
     return [_decode(r) for r in reversed(rows)]
 
 

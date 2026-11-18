@@ -382,8 +382,9 @@ class EventWriter:
         """Events with an id above ``after_id``, oldest first, at most ``limit``."""
         params = {"after": int(after_id), "before": before_id, "src": source, "svc": service_id,
                   "limit": max(0, int(limit))}
-        sql = _AFTER_UNASSIGNED if service_id == UNASSIGNED else _AFTER
-        return await self._read(lambda tx: [_to_event(r) for r in tx.all(sql, params)])  # type: ignore[arg-type]
+        if service_id == UNASSIGNED:
+            return await self._read(lambda tx: [_to_event(r) for r in tx.all(_AFTER_UNASSIGNED, params)])  # type: ignore[arg-type]
+        return await self._read(lambda tx: [_to_event(r) for r in tx.all(_AFTER, params)])  # type: ignore[arg-type]
 
     async def newest(self, limit: int) -> list[Event]:
         """The newest ``limit`` events, oldest first (startup refill of the ring)."""
