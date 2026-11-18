@@ -54,6 +54,12 @@ class StoreConfig:
         return replace(cfg, **overrides) if overrides else cfg  # type: ignore[arg-type]
 
 
+def env_reopen_after(environ: Mapping[str, str] | None = None) -> int:
+    """``CHIMERICMESH_REOPEN_AFTER_SECONDS`` (0 to 86400); a bad value warns and gives 300."""
+    env = os.environ if environ is None else environ
+    return _env_int(env, "CHIMERICMESH_REOPEN_AFTER_SECONDS", DEFAULT_REOPEN_AFTER, 0, 86400)
+
+
 def resolve_home(environ: Mapping[str, str] | None = None) -> str:
     """Absolute per-user home directory. Never derived from the working directory by default."""
     env = os.environ if environ is None else environ

@@ -11,7 +11,7 @@ from typing import Literal
 
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
@@ -115,9 +115,13 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True) -> FastAPI:
         return hub.stats()
 
     @app.get("/api/events")
-    async def events(limit: int = 50, source: str | None = None):
+    async def events(limit: int = 50, source: str | None = None, after_id: int | None = Query(None, ge=0),
+                     service_id: str | None = Query(None, max_length=64)):
         limit = max(1, min(limit, 500))
-        return [e.to_dict() for e in hub.recent(limit, source)]
+        if after_id is not None:  # a cursor read: oldest first
+            found = await hub.events_after(after_id, limit, source=source, service_id=service_id)
+            return [e.to_dict() for e in found]
+        return [e.to_dict() for e in hub.recent(limit, source, service_id)]
 
     @app.post("/api/ingest", status_code=202)
     async def ingest(req: IngestRequest):
@@ -131,12 +135,14 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True) -> FastAPI:
             event = telnet_to_event(req.line.encode(), host=req.host)
         if event is None:
             raise HTTPException(422, "line produced no event")
-        await hub.ingest(event)
-        return event.to_dict()
+        tagged = await hub.ingest(event)
+        return tagged.to_dict()
 
     @app.get("/api/incidents")
-    async def incidents():
-        return [i.to_dict() for i in hub.incidents()]
+    async def incidents(status: Literal["open", "resolved"] | None = None,
+                        service_id: str | None = Query(None, max_length=64),
+                        limit: int | None = Query(None, ge=1, le=500)):
+        return [i.to_dict() for i in hub.incidents(status=status, service_id=service_id, limit=limit)]
 
     @app.get("/api/incidents/{incident_id}")
     async def incident(incident_id: str):
@@ -167,8 +173,10 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True) -> FastAPI:
         return prop
 
     @app.get("/api/proposals")
-    async def proposals(status: Literal["pending", "approved", "denied", "done"] | None = None):
-        return [p.to_dict() for p in hub.list_proposals(status)]
+    async def proposals(status: Literal["pending", "approved", "denied", "done"] | None = None,
+                        service_id: str | None = Query(None, max_length=64),
+                        limit: int = Query(200, ge=1, le=500)):
+        return [p.to_dict() for p in hub.list_proposals(status, service_id=service_id, limit=limit)]
 
     @app.get("/api/proposals/{pid}")
     async def proposal(pid: str):

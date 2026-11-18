@@ -167,6 +167,8 @@ class IncidentLifecycle:
     # -- bookkeeping --
 
     def mark_dirty(self, inc: Incident) -> None:
+        if self.store is None:
+            return  # nothing is written, so nothing is kept alive
         self._dirty[inc.id] = inc
         self._gen[inc.id] = self._gen.get(inc.id, 0) + 1
 

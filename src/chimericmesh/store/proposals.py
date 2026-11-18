@@ -48,6 +48,20 @@ def check_transition(old: str, new: str, *, origin: str, decided_by: str,
     raise InvalidTransition(f"{old} -> {new} is not allowed")
 
 
+_HUB_PENDING_DENIAL = ("withdrawn:", "expired:")
+
+
+def check_hub_transition(old: str, new: str, *, decided_by: str, approved_by_rule: str | None) -> None:
+    """The only transitions the hub's own rule logic may make (O2); anything else raises."""
+    if (old, new) == ("pending", "approved") and approved_by_rule:
+        return
+    if (old, new) == ("pending", "denied") and decided_by.startswith(_HUB_PENDING_DENIAL):
+        return
+    if (old, new) == ("approved", "denied") and _RULE_DENIAL.fullmatch(decided_by or ""):
+        return
+    raise InvalidTransition(f"hub transition {old} -> {new} with this decided_by is not allowed")
+
+
 # ---- persistence ---------------------------------------------------------------------------
 
 UNASSIGNED = "unassigned"
@@ -106,6 +120,11 @@ def _extras(extra: Mapping[str, object] | None) -> dict[str, Any]:
             raise ValueError(f"unknown proposal field: {key!r}")
         out[key] = value
     return out
+
+
+def validate_extra(extra: Mapping[str, object] | None) -> dict[str, Any]:
+    """Public form of the extras check: an unknown key raises ``ValueError``."""
+    return _extras(extra)
 
 
 def _encode(prop: Proposal) -> dict[str, Any]:

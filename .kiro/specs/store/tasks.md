@@ -157,28 +157,28 @@ Review round 3 (see "Review round 3 resolutions" in the design): behavioural fin
     - **Property 14: One announcement per opening**
     - **Validates: Requirements 5.2, 5.6, 5.7, 5.8, 5.9**
 
-- [ ] 9. In-memory hub behaviour (bare `Hub()`, no store yet)
-  - [ ] 9.1 Event ids, tagged return value and incident state on the tracker
+- [x] 9. In-memory hub behaviour (bare `Hub()`, no store yet)
+  - [x] 9.1 Event ids, tagged return value and incident state on the tracker
     - Write `tests/unit/test_hub_event_ids.py` first: `Hub.ingest` returns the event with an id starting at 1 and strictly increasing; the ring and `recent()` carry the ids; `GET /api/events` returns `id`; `hub.resolved` is a read-only set of resolved ids and keeps its truthiness behaviour; `resolve` records `resolved_at` once; an event for a resolved incident inside the window adds to the count and does not announce; after the window it reopens through `IncidentLifecycle` with one `REOPENED` line, using the injected `Hub(clock=...)`; `ingest` returns right after a reopen (no second line, even when the count later reaches 3); two concurrent `ingest` calls on one resolved incident give one `opening` increment and one `REOPENED`; `POST /api/ingest` returns the event dict with the assigned `id` (not 0); `/api/demo/storm` still returns exactly `{"injected": n, "at": now}` (B21, unchanged).
     - Edit `src/chimericmesh/hub.py` (`ingest`, `resolve`, `resolved`, lifecycle construction with `store=None` and `audit_getter`, `Hub.audit` property, `reopen_after` from `CHIMERICMESH_REOPEN_AFTER_SECONDS`), `src/chimericmesh/api.py` (use the tagged event returned by `ingest` in `/api/ingest` only; the storm route needs no edit); import `Proposal` from `store/models.py` and re-export it with `PROPOSAL_STATUSES`, `MAX_PROPOSALS`, `MAX_ACTION`, `MAX_DETAILS`.
     - _Requirements: 5.9, 5.11, 6.1_
-  - [ ] 9.2 Per-run guided-workflow flags
+  - [x] 9.2 Per-run guided-workflow flags
     - Write `tests/unit/test_hub_workflow_per_run.py` first: `traffic`, `incidents`, `propose`, `decide` and `resolve` become done only after the action happens in this run (`traffic` from `_run_events`, `incidents` from `_run_opened` which counts openings and reopenings), for a bare hub the existing workflow tests give the same results; with persisted events, incident and proposal loaded from a store (added in 11.3, marked `@pytest.mark.xfail(strict=True)` until then, and task 11.3 removes the marker) all five stay not done.
     - Edit `src/chimericmesh/hub.py` (`_run_events`, `_run_opened`, `_run_proposals`, `_run_decided`, `_run_resolved`, `workflow`).
     - _Requirements: 4.8_
-  - [ ] 9.3 `StateView`, filters and stats keys
+  - [x] 9.3 `StateView`, filters and stats keys
     - Write `tests/unit/test_hub_stateview.py` first: `incidents(status=..., service_id=..., limit=...)` filters before the limit and `unassigned` selects incidents without a service; `list_proposals(status, service_id=..., limit=...)` returns the newest `limit` oldest-first and filters before the limit; `events_after(after_id)` serves from the ring in order, oldest first, with `source` and `service_id` filters applied before the limit, and `GET /api/events?after_id=` returns oldest first while the route without `after_id` still returns newest first; `GET /api/incidents` without `limit` returns every incident (no default limit), with `limit` 1 to 500 and **422** outside it (`/api/proposals` the same, `ge=1, le=500`, default 200; `/api/events` keeps its silent clamp to 1..500, so `limit=0` and `limit=9999` return 200 with 1 and up to 500 items; `after_id=-1` gives 422); `stats()` has `store_ok: true` and `dropped_events: 0`; the in-memory proposal counter is incremented in an await-free block (no `Hub._lock` exists) and the cap of 200 with `p1` restarting per process is unchanged.
     - Edit `src/chimericmesh/hub.py` and `src/chimericmesh/api.py` (filter parameters, `after_id`, `limit` validation); add the `StateView` protocol to `store/ports.py`.
     - _Requirements: 1.4, 3.1, 4.4, 4.4a, 6.6_
-  - [ ] 9.4 In-memory hub proposal rules
+  - [x] 9.4 In-memory hub proposal rules
     - Write `tests/unit/test_hub_inmemory_proposals.py` first, on a bare `Hub()`: every (from, to) status pair through `decide` and `complete` follows the transition table (`check_transition`), invalid ones return `None` and change nothing; `decision_origin` is `user` for decisions made through `Hub.decide` and `hub` only for the hub's own rule-logic method (`HubAuthority`); a REST or IRC `decided_by` that starts with a reserved prefix cannot produce `hub`; `decided_by` keeps 60 characters when written by the hub (REST `DecideRequest.by` stays at `max_length=30`); `Proposal.to_dict()` still returns the nine baseline keys; `incident_opening` and `service_id` are recorded at creation.
     - Edit `src/chimericmesh/hub.py` (`decide`, `complete`, `create_proposal` call the shared rules).
     - _Requirements: 1.4, 4.3, 4.5, 4.6, 4.7, 5.10_
-  - [ ] 9.4a Proposal write seam on the bare hub (review M5)
+  - [x] 9.4a Proposal write seam on the bare hub (review M5)
     - Write `tests/unit/test_hub_proposal_writer.py` first, on a bare `Hub()`: `create_proposal(incident_id, action, extra={"kind": "edit", "files": ["a.py"], "estimated_lines": 5, "verification": "pytest -q"})` returns a `Proposal` carrying those attributes; `to_dict()` has exactly the nine baseline keys and `to_full_dict()` contains the extras; an unknown `extra` key raises `ValueError` and creates nothing (the in-memory counter does not advance); `hub_transition(pid, "approved", decided_by="rule:r1", approved_by_rule="r1")` stores `decision_origin == "hub"` and `approved_by_rule == "r1"`; `hub_transition` on an approved proposal to `denied` with `decided_by="rule-revoked:r1"` succeeds, with `decided_by="alice"` returns `None` and changes nothing; `Hub.decide(pid, True, "rule-x")` still stores `decision_origin == "user"`; `complete(pid, "n", extra={"files_changed": ["a.py"], "lines_changed": 3, "verification_result": "pass"})` stores them; `isinstance(hub, ProposalWriter)` and `isinstance(hub, ProposalClient)` hold (`runtime_checkable`).
     - Add `ProposalWriter` and `ProposalClient` to `store/ports.py`; edit `src/chimericmesh/hub.py` (`extra` arguments, `hub_transition`, the only `HubAuthority()` construction) and `store/models.py` if a field is missing.
     - _Requirements: 4.3, 4.6, 4.7, 5.10_ (review M5)
-  - [ ] 9.5 Checkpoint: run `python -m pytest -q`; the whole existing suite must pass unchanged with the new tests.
+  - [x] 9.5 Checkpoint: run `python -m pytest -q`; the whole existing suite must pass unchanged with the new tests.
 
 - [ ] 10. Documentation and static guards
   - [ ] 10.1 Proposal-id format guard and README text

@@ -191,6 +191,10 @@ class IncidentTracker:
         gone = self._clusters.pop(min(pool, key=lambda i: i.last_seen).id)
         if self.on_evict is not None:
             self.on_evict(gone)
+
+    def resolved_ids(self) -> set[str]:
+        return {i.id for i in self._clusters.values() if i.resolved}
+
     def get(self, incident_id: str) -> Incident | None:
         inc = self._clusters.get(incident_id)
         return inc if inc is not None and self.qualifies(inc) else None
