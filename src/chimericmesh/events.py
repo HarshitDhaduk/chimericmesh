@@ -55,6 +55,10 @@ class Event:
     message: str
     raw: str = ""
     ts: float = field(default_factory=time.time)
+    # Appended after ``ts`` so positional construction keeps working.
+    id: int = field(default=0, compare=False)  # assigned by the hub at ingest; 0 = not yet assigned
+    service_id: str | None = None
+    log_source_id: str | None = None
 
     def __post_init__(self) -> None:
         if not 0 <= self.severity <= 7:

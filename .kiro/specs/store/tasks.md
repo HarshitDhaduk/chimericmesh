@@ -99,15 +99,15 @@ Review round 3 (see "Review round 3 resolutions" in the design): behavioural fin
     - **Validates: Requirements 4.2, 4.3, 4.5, 4.7**
   - [x] 5.5 Checkpoint: run `python -m pytest -q`; everything, including the 3 to 5 tests, must pass.
 
-- [ ] 6. Core model changes (stdlib only, no existing test changes)
-  - [ ] 6.1 Add event fields
+- [x] 6. Core model changes (stdlib only, no existing test changes)
+  - [x] 6.1 Add event fields
     - Write `tests/unit/test_core_event_fields.py` first: `Event` has `id` (default 0, `compare=False`), `service_id` and `log_source_id` (default `None`); two events that differ only in `id` compare equal; `dataclasses.replace(event, id=7)` works on the frozen class; `to_dict()` includes the new keys; all existing event construction still works.
     - Edit `src/chimericmesh/events.py`.
-    - [ ] (L7) Test first: `Event("syslog", "h", "a", 3, "m", "raw", 12.5)` (positional, as today) still works and `ts == 12.5`; the dataclass field order ends `ts, id, service_id, log_source_id`.
+    - [x] (L7) Test first: `Event("syslog", "h", "a", 3, "m", "raw", 12.5)` (positional, as today) still works and `ts == 12.5`; the dataclass field order ends `ts, id, service_id, log_source_id`.
     - _Requirements: 6.1_
-  - [ ] 6.2 Extend `Incident` and `IncidentTracker`
+  - [x] 6.2 Extend `Incident` and `IncidentTracker`
     - Write `tests/unit/test_tracker_lifecycle.py` first: `Incident` has `service_id`, `opening` (1), `resolved_at`, `opened`; `to_dict()` (overridden to drop `opened` from `asdict`) includes `service_id`, `opening`, and `resolved_at` (`null` while open) and not `opened`; `preview_id(event)` returns `None` for severity above 4 and for an empty signature, so an info-level event never reopens a resolved incident (test with a resolved incident past the window); `opened` is set the first time severity is at most 2 or count at least 3 and then `qualifies` and `get` return an incident with count 1 and severity 4; the incident id algorithm is unchanged (golden id); `reopen(inc, event)` resets `resolved`, `resolved_at`, `opening`, `count`, `opened`, `severity`, `first_seen`, `last_seen`, `sources` as in the design; `install(inc)` adds a cluster and `preview_id(event)` returns the id `add` would use without changing state; `on_evict` is called with the evicted incident; eviction keeps the baseline rule (never-qualified clusters first); `analyze()` results are unchanged; `service_id` rule: the first event sets it, a later non-null value fills a NULL once, a non-null value is never replaced by a different one, reopen keeps it.
-    - [ ] (M6) Test first: `IncidentTracker.add` sets `opened` itself; feeding three severity-4 events with one signature returns an incident with `opened` false for the first two and true for the third; the hub never assigns `opened` (the static check lives in 11.2b).
+    - [x] (M6) Test first: `IncidentTracker.add` sets `opened` itself; feeding three severity-4 events with one signature returns an incident with `opened` false for the first two and true for the third; the hub never assigns `opened` (the static check lives in 11.2b).
     - Edit `src/chimericmesh/diagnostics.py`; keep `add(ev)` returning `Incident | None`.
     - _Requirements: 5.4, 5.5, 5.6, 5.7_
 

@@ -6,7 +6,7 @@ import hashlib
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 from .events import Event
 
@@ -86,9 +86,15 @@ class Incident:
     hypothesis: str = ""
     remediation: list[str] = field(default_factory=list)
     resolved: bool = False
+    service_id: str | None = None
+    opening: int = 1  # 1 for the first time it opened, +1 on each reopen
+    resolved_at: float | None = None
+    opened: bool = False  # internal: set once the baseline test passed; never reaches REST
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        data = asdict(self)
+        del data["opened"]
+        return data
 
 
 def incident_id(host: str, sig: str) -> str:
@@ -104,47 +110,87 @@ class IncidentTracker:
     An incident is critical or worse (<= max_severity), or repeats at least
     ``min_count`` times at warning or worse. Counts are cumulative and independent
     of any event buffer, so a bounded log view never loses incident history.
+
+    ``opened`` records that a cluster passed that test once; an opened incident stays an
+    incident (for example after a reopen resets its count to 1). ``on_evict`` is called with
+    each cluster dropped to bound memory.
     """
 
-    def __init__(self, min_count: int = 3, max_severity: int = 2) -> None:
+    def __init__(self, min_count: int = 3, max_severity: int = 2,
+                 on_evict: Callable[[Incident], None] | None = None) -> None:
         self.min_count, self.max_severity = min_count, max_severity
+        self.on_evict = on_evict
         self._clusters: dict[str, Incident] = {}
 
-    def qualifies(self, inc: Incident) -> bool:
+    def _baseline(self, inc: Incident) -> bool:
         return inc.severity <= self.max_severity or inc.count >= self.min_count
 
-    def add(self, ev: Event) -> Incident | None:
-        """Fold one event into its cluster. Returns the cluster, or None if ignored."""
+    def qualifies(self, inc: Incident) -> bool:
+        return inc.opened or self._baseline(inc)
+
+    def preview_id(self, ev: Event) -> str | None:
+        """The id ``add`` would use for ``ev``, or None when ``add`` would ignore it."""
         if ev.severity > 4:
             return None
         sig = signature(ev.message)
         if not sig:
             return None
-        iid = incident_id(ev.host, sig)
+        return incident_id(ev.host, sig)
+
+    def add(self, ev: Event) -> Incident | None:
+        """Fold one event into its cluster. Returns the cluster, or None if ignored."""
+        iid = self.preview_id(ev)
+        if iid is None:
+            return None
         inc = self._clusters.get(iid)
         if inc is None:
             category, hypothesis, steps = classify(ev.message)
             inc = self._clusters[iid] = Incident(
-                id=iid, host=ev.host, category=category, signature=sig,
+                id=iid, host=ev.host, category=category, signature=signature(ev.message),
                 severity=ev.severity, count=0, first_seen=ev.ts, last_seen=ev.ts,
                 sample=ev.message, hypothesis=hypothesis, remediation=list(steps),
+                service_id=ev.service_id,
             )
             if len(self._clusters) > MAX_CLUSTERS:
                 self._evict(keep=iid)
+        elif inc.service_id is None and ev.service_id is not None:
+            inc.service_id = ev.service_id
         inc.count += 1
         inc.severity = min(inc.severity, ev.severity)
         inc.first_seen = min(inc.first_seen, ev.ts)
         inc.last_seen = max(inc.last_seen, ev.ts)
         if ev.source not in inc.sources:
             inc.sources.append(ev.source)
+        if not inc.opened and self._baseline(inc):
+            inc.opened = True
         return inc
+
+    def reopen(self, inc: Incident, ev: Event) -> Incident:
+        """Start a new opening of a resolved incident from ``ev``."""
+        inc.resolved, inc.resolved_at = False, None
+        inc.opening += 1
+        inc.count = 1
+        inc.opened = True
+        inc.severity = ev.severity
+        inc.first_seen = inc.last_seen = ev.ts
+        inc.sources = [ev.source]
+        if inc.service_id is None and ev.service_id is not None:
+            inc.service_id = ev.service_id
+        return inc
+
+    def install(self, inc: Incident) -> None:
+        """Add a cluster built elsewhere (a stored row). Eviction applies as for ``add``."""
+        self._clusters[inc.id] = inc
+        if len(self._clusters) > MAX_CLUSTERS:
+            self._evict(keep=inc.id)
 
     def _evict(self, keep: str) -> None:
         """Bound memory: drop the stalest cluster that is not yet an incident."""
         pool = [i for i in self._clusters.values() if i.id != keep and not self.qualifies(i)]
         pool = pool or [i for i in self._clusters.values() if i.id != keep]
-        del self._clusters[min(pool, key=lambda i: i.last_seen).id]
-
+        gone = self._clusters.pop(min(pool, key=lambda i: i.last_seen).id)
+        if self.on_evict is not None:
+            self.on_evict(gone)
     def get(self, incident_id: str) -> Incident | None:
         inc = self._clusters.get(incident_id)
         return inc if inc is not None and self.qualifies(inc) else None
