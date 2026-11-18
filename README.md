@@ -30,6 +30,29 @@ Try it:
 
 The dashboard's **Events seen** tile is a cumulative counter (`total_events` in `/api/stats`, with `total_by_source` and a 10 second `events_per_second`). The hub only keeps the latest 2000 events in memory for the log view (`events`, `buffer_capacity`), so the log header reads "latest N of TOTAL" once the buffer has wrapped.
 
+## Data and proposal ids
+
+The hub keeps events (bounded), incidents, proposals, an append-only audit log and counters in one local SQLite database, `~/.chimericmesh/chimericmesh.db` by default. The startup log prints its path. Proposal ids are unique per database; deleting the database restarts them at `p1`. Ids look like `p1`, `p2`, `p3` and nothing else.
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `CHIMERICMESH_DB` | Database file, or `:memory:` for no file | `<home>/chimericmesh.db` |
+| `CHIMERICMESH_HOME` | Directory for the database | `~/.chimericmesh` |
+| `CHIMERICMESH_MAX_EVENTS` | Most event rows kept (1 to 10,000,000) | 100000 |
+| `CHIMERICMESH_EVENT_TTL_DAYS` | Event rows older than this are removed (1 to 3650) | 7 |
+| `CHIMERICMESH_REOPEN_AFTER_SECONDS` | A resolved incident reopens when a matching event arrives after this many seconds (0 to 86400) | 300 |
+
+A bad value logs one warning and uses the default. An explicit relative `CHIMERICMESH_DB` is resolved once against the current directory at startup; the defaults never depend on the current directory, so starting the hub from two folders opens the same file.
+
+Things to know:
+
+- One database file supports one running hub process. Two processes serving one file are not supported. A start that fails before serving leaves the crash marker untouched.
+- Event ids keep rising across restarts. After a crash a restart skips ahead by a safety margin so clients holding an `after_id` cursor stay valid. After a crash that follows a long storage outage, a restart may reuse event ids a client saw; this is the one known gap.
+- A database written by a newer build is refused at startup and is not modified. Refusing a newer-schema database after a crash may still checkpoint its `-wal` file into the database file; the data is not changed.
+- The audit log can only be appended to. Log text, secrets and URL credentials never reach it.
+- On Windows the owner-only permission step uses `icacls` and is verified by hand; on other systems the directory is `0700` and the file `0600`.
+- The decider name of a proposal is display text. These prefixes are reserved for the hub's own rule logic and never make a decision count as the hub's: `rule:`, `rule-`, `withdrawn:`, `expired:`, `expired-`.
+
 ## Replaying real logs
 
 Besides the hand-written demo traffic, you can stream real public logs into the mesh over UDP syslog:
@@ -160,7 +183,7 @@ resolve_incident     ---->  "RESOLVED <id> ..."
 
 REST: `GET/POST /api/proposals`, `GET /api/proposals/{pid}`, `POST /api/proposals/{pid}/decide`, `POST /api/proposals/{pid}/complete`. MCP tools: `propose_remediation`, `get_proposal`, `list_proposals`, `complete_proposal`.
 
-Safety: ChimericMesh never executes a proposed action on any host. It only records the human decision and announces it. The agent performs the real work under its own tool permissions, and must act only when the proposal is `approved`, never while it is `pending` or `denied`. Proposals live in memory (last 200 kept).
+Safety: ChimericMesh never executes a proposed action on any host. It only records the human decision and announces it. The agent performs the real work under its own tool permissions, and must act only when the proposal is `approved`, never while it is `pending` or `denied`. Proposals are kept in the local database (see "Data and proposal ids"); an injected in-memory hub keeps the last 200.
 
 ## A real incident, a real fix
 

@@ -181,10 +181,10 @@ Review round 3 (see "Review round 3 resolutions" in the design): behavioural fin
   - [x] 9.5 Checkpoint: run `python -m pytest -q`; the whole existing suite must pass unchanged with the new tests.
 
 - [ ] 10. Documentation and static guards
-  - [ ] 10.1 Proposal-id format guard and README text
+  - [x] 10.1 Proposal-id format guard and README text
     - Write `tests/unit/test_proposal_id_format.py` first: scan `src/`, `tests/`, `powers/` and `.kiro/agents/` for a proposal id of the form `p<digits>-<tag>`, using exactly the pattern `\bp\d+-[a-z0-9]{3,}\b` (case-sensitive, tag of at least 3 characters, so a range such as `p1-p5` or `p1-3` does not match) with an `ALLOWED` tuple in the test for any legitimate future match, each entry with a comment; build the regex from string fragments at runtime and skip this test file by path so the guard does not match itself (L5); a second test checks the README states that proposal ids are unique per database and that deleting the database restarts them at `p1`, and that the startup log line (function `describe_startup(path)` in `store/config.py`) prints the path and that statement; the README also states that an explicit relative `CHIMERICMESH_DB` is resolved once against the current directory (the defaults never depend on it, R1.1) and the residual risk that after a crash following a long storage outage a restart may reuse event ids a client saw.
-    - [ ] (L14) README text test first: the README states that one database file supports one running hub process (two processes serving one file are not supported) and that a start that fails before serving leaves the crash marker untouched.
-    - [ ] (O1) README text test first: the README states that refusing a newer-schema database after a crash may still checkpoint its `-wal` into the file (the data is not changed). 
+    - [x] (L14) README text test first: the README states that one database file supports one running hub process (two processes serving one file are not supported) and that a start that fails before serving leaves the crash marker untouched.
+    - [x] (O1) README text test first: the README states that refusing a newer-schema database after a crash may still checkpoint its `-wal` into the file (the data is not changed). 
     - Edit `README.md` (a short "Data and proposal ids" section, the environment variables of this module, the reserved decider prefixes) and add `describe_startup` to `store/config.py`.
     - _Requirements: 3.8, 3.9_
   - [ ] 10.2 Static SQL and API-surface guards

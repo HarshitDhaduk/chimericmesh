@@ -54,6 +54,16 @@ class StoreConfig:
         return replace(cfg, **overrides) if overrides else cfg  # type: ignore[arg-type]
 
 
+PROPOSAL_ID_NOTE = "Proposal ids are unique per database; deleting the database restarts them at p1."
+
+
+def describe_startup(path: str) -> str:
+    """The one startup log line: where the data lives and what that means for proposal ids."""
+    if path == MEMORY:
+        return f"store: in-memory database, nothing is saved. {PROPOSAL_ID_NOTE}"
+    return f"store: database at {path}. {PROPOSAL_ID_NOTE}"
+
+
 def env_reopen_after(environ: Mapping[str, str] | None = None) -> int:
     """``CHIMERICMESH_REOPEN_AFTER_SECONDS`` (0 to 86400); a bad value warns and gives 300."""
     env = os.environ if environ is None else environ
