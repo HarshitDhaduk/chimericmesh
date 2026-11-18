@@ -1,4 +1,4 @@
-"""IRC operator commands (``!status``, ``!approve p1`` ...).
+"""IRC operator commands (``!status``, ``!approve p1-k7f`` ...).
 
 ``parse_command`` is a pure function that never raises. ``handle_command`` runs a parsed
 command against the hub and sends reply lines through ``hub.say``, which reaches IRC via
@@ -26,7 +26,7 @@ _CTRL = re.compile(r"[\r\n\x00]+")
 
 HELP_LINES = [
     "commands: !help !status !incidents !explain <id> !proposals",
-    "operators only: !resolve <id> [note] !approve <pid> !deny <pid>",
+    "operators only: !resolve <id> [note] !approve <id> !deny <id>",
 ]
 
 
@@ -133,7 +133,7 @@ async def _resolve(hub: Hub, nick: str, args: tuple[str, ...]) -> list[str]:
 async def _decide(hub: Hub, nick: str, approve: bool, args: tuple[str, ...]) -> list[str]:
     verb = "approve" if approve else "deny"
     if not args:
-        return [f"usage: !{verb} <proposal id>"]
+        return [f"usage: !{verb} <proposal id, e.g. p1-k7f>"]
     pid = args[0].lower()
     if hub.get_proposal(pid) is None:
         return [f"no proposal with id {_clean(pid, 30)}, try !proposals"]

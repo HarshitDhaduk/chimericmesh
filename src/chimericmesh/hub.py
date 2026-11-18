@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import secrets
 import time
 from collections import OrderedDict, deque
 from dataclasses import asdict, dataclass, field
@@ -24,6 +25,8 @@ MAX_PROPOSALS = 200
 MAX_ACTION = 200
 MAX_DETAILS = 500
 PROPOSAL_STATUSES = ('pending', 'approved', 'denied', 'done')
+RUN_TAG_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'  # no look-alikes (i, l, o, 0, 1)
+RUN_TAG_LEN = 3
 
 TRANSCRIPT_MAX = 300
 MAX_CHAT_TEXT = 500
@@ -36,7 +39,7 @@ WORKFLOW_STEPS = (
     ("incidents", "Spot an incident", "Three similar errors open an incident"),
     ("ask", "Ask ChimericBot", "Type !incidents or !explain <id> in the terminal"),
     ("propose", "Propose a fix", "An agent proposes a remediation; you can simulate one from an incident card"),
-    ("decide", "Approve or deny it", "Operators decide with !approve p1 or !deny p1"),
+    ("decide", "Approve or deny it", "Operators decide with !approve <id> or !deny <id>"),
     ("resolve", "Lay the incident to rest", "Use !resolve <id> or the button on the card"),
 )
 
@@ -81,6 +84,10 @@ class ChatMessage:
         return asdict(self)
 
 
+def new_run_tag() -> str:
+    return ''.join(secrets.choice(RUN_TAG_ALPHABET) for _ in range(RUN_TAG_LEN))
+
+
 def parse_operators(value: str | None) -> set[str] | None:
     """Parse CHIMERICMESH_OPERATORS into lowercase nicks. None means any nick may decide."""
     nicks = {n.strip().lower() for n in (value or "").split(",") if n.strip()}
@@ -90,7 +97,9 @@ def parse_operators(value: str | None) -> set[str] | None:
 class Hub:
     def __init__(self, capacity: int = 2000, code_root: Path | None = None,
                  webhook_url: str | None = None, irc_channel: str = "#ops",
-                 clock: Callable[[], float] = time.time) -> None:
+                 clock: Callable[[], float] = time.time, run_tag: str | None = None) -> None:
+        # Proposal ids carry this tag so an id from an earlier hub run can never match a new proposal.
+        self.run_tag = run_tag or new_run_tag()
         self.events: deque[Event] = deque(maxlen=capacity)  # bounded log view only
         self._clock = clock
         self.started_at = clock()
@@ -185,7 +194,7 @@ class Hub:
         if inc is None:
             return None
         self._proposal_seq += 1
-        prop = Proposal(id=f"p{self._proposal_seq}", incident_id=incident_id,
+        prop = Proposal(id=f"p{self._proposal_seq}-{self.run_tag}", incident_id=incident_id,
                         action=action[:MAX_ACTION], details=details[:MAX_DETAILS])
         self._proposals[prop.id] = prop
         while len(self._proposals) > MAX_PROPOSALS:
@@ -274,4 +283,6 @@ class Hub:
             "buffer_capacity": self.events.maxlen,
             "events_per_second": self.rate(),
             "uptime_seconds": int(self._clock() - self.started_at),
+            "run_id": self.run_tag,
+            "started_at": self.started_at,
         }

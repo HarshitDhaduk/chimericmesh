@@ -25,7 +25,8 @@ mcp = MCPServer(
         "propose_remediation (a human decides on IRC with !approve/!deny) -> poll get_proposal "
         "until status is approved; never act while pending or denied -> do the work yourself "
         "-> complete_proposal -> resolve_incident. The mesh never executes actions; it only "
-        "records the human decision. Use announce_to_irc for status messages."
+        "records the human decision. Proposal ids (like p1-k7f) are unique per hub run; an unknown id "
+        "after a hub restart means re-investigate and propose again. Use announce_to_irc for status messages."
     ),
 )
 
@@ -81,7 +82,7 @@ async def resolve_incident(incident_id: str, note: str = "") -> Any:
 async def propose_remediation(incident_id: str, action: str, details: str = "") -> Any:
     """Ask the human operators to approve a remediation (announced on IRC). Does NOT run it.
 
-    Only act after get_proposal reports status "approved".
+    Only act after get_proposal reports status "approved". Returns the proposal id (p<n>-<tag>).
     """
     return await _call("POST", "/api/proposals",
                        json={"incident_id": incident_id, "action": action, "details": details})
@@ -89,7 +90,11 @@ async def propose_remediation(incident_id: str, action: str, details: str = "") 
 
 @mcp.tool()
 async def get_proposal(proposal_id: str) -> Any:
-    """Get a proposal's status: pending, approved, denied or done. Act only when approved."""
+    """Get a proposal's status: pending, approved, denied or done. Act only when approved.
+    Ids look like p1-k7f and are unique per hub run; an unknown id (error 404) means the
+    proposal does not exist on this hub, for example after a hub restart. Call this again
+    right before acting and confirm status, action and incident_id.
+    """
     return await _call("GET", f"/api/proposals/{proposal_id}")
 
 

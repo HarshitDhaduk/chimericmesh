@@ -31,7 +31,7 @@ def test_bang_text_parses_or_returns_none(text):
 
 
 def _hub():
-    hub = Hub()
+    hub = Hub(run_tag="t")
     hub.operators = None
     hub.sent = []
 
@@ -42,7 +42,7 @@ def _hub():
     return hub
 
 
-arg = st.one_of(st.text(max_size=40), st.sampled_from(["p1", "p2", "P3", "nope"]))
+arg = st.one_of(st.text(max_size=40), st.sampled_from(["p1-t", "p2-t", "P3-T", "p1", "nope"]))
 
 
 @settings(max_examples=60, deadline=None)
@@ -76,7 +76,7 @@ def test_proposal_state_machine_stays_valid(ops):
             await hub.ingest(parse_syslog(DISK % i))
         iid = hub.incidents()[0].id
         for kind, n in ops:
-            pid = f"p{n}"
+            pid = f"p{n}-t"
             before = hub.get_proposal(pid).status if hub.get_proposal(pid) else None
             if kind == "create":
                 await hub.create_proposal(iid, "x")

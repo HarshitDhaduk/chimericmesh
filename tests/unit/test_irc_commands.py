@@ -15,7 +15,7 @@ DISK = "<27>Nov 13 11:10:08 db01 pg[1]: FATAL: could not write block %d: No spac
 
 
 def fake_hub(operators=None):
-    hub = Hub()
+    hub = Hub(run_tag="t")
     hub.operators = operators
     hub.sent = []
 
@@ -110,16 +110,16 @@ def test_proposals_approve_deny_commands():
         p2 = await hub.create_proposal(inc.id, "drop tables")
         listing = await handle_command(hub, "a", "#ops", Command("proposals"))
         assert len(listing) == 2 and "rotate logs" in listing[0]
-        assert (await handle_command(hub, "alice", "#ops", Command("approve", ("P1",))))[0].endswith("p1 approved")
-        assert (await handle_command(hub, "alice", "#ops", Command("deny", ("p2",))))[0].endswith("p2 denied")
+        assert (await handle_command(hub, "alice", "#ops", Command("approve", ("p1-t",))))[0].endswith("p1-t approved")
+        assert (await handle_command(hub, "alice", "#ops", Command("deny", ("p2-t",))))[0].endswith("p2-t denied")
         assert (p1.status, p1.decided_by, p2.status) == ("approved", "alice", "denied")
-        again = await handle_command(hub, "alice", "#ops", Command("approve", ("p1",)))
+        again = await handle_command(hub, "alice", "#ops", Command("approve", ("p1-t",)))
         assert "not pending" in again[0]
         assert "no proposal" in (await handle_command(hub, "alice", "#ops", Command("deny", ("p99",))))[0]
         assert "usage" in (await handle_command(hub, "alice", "#ops", Command("approve")))[0]
         texts = [t for _, t in hub.sent]
-        assert any(t.startswith("PROPOSAL p1 for ") for t in texts)
-        assert "p1 APPROVED by alice" in texts and "p2 DENIED by alice" in texts
+        assert any(t.startswith("PROPOSAL p1-t for ") for t in texts)
+        assert "p1-t APPROVED by alice" in texts and "p2-t DENIED by alice" in texts
     asyncio.run(go())
 
 
@@ -133,9 +133,9 @@ def test_parse_operators():
 
 def test_operator_env_var(monkeypatch):
     monkeypatch.setenv("CHIMERICMESH_OPERATORS", "Alice,bob")
-    assert Hub().operators == {"alice", "bob"}
+    assert Hub(run_tag="t").operators == {"alice", "bob"}
     monkeypatch.delenv("CHIMERICMESH_OPERATORS")
-    assert Hub().operators is None
+    assert Hub(run_tag="t").operators is None
 
 
 def test_operator_allow_deny_and_case_insensitive():
@@ -150,7 +150,7 @@ def test_operator_allow_deny_and_case_insensitive():
         # read-only commands stay open to everyone
         assert "events seen" in (await handle_command(hub, "mallory", "#ops", Command("status")))[0]
         out = await handle_command(hub, "ALICE", "#ops", Command("approve", (p.id,)))
-        assert out[0].endswith("p1 approved") and p.decided_by == "ALICE"
+        assert out[0].endswith("p1-t approved") and p.decided_by == "ALICE"
     asyncio.run(go())
 
 
@@ -162,7 +162,7 @@ def test_proposal_lifecycle_and_invalid_transitions():
         inc = await seed(hub)
         assert await hub.create_proposal("nope", "x") is None
         p = await hub.create_proposal(inc.id, "a" * 300, "d" * 900)
-        assert p.id == "p1" and len(p.action) == 200 and len(p.details) == 500
+        assert p.id == "p1-t" and len(p.action) == 200 and len(p.details) == 500
         assert await hub.complete(p.id, "early") is None  # not approved yet
         assert await hub.decide("zz", True, "x") is None
         assert (await hub.decide(p.id, True, "bob")).status == "approved"
@@ -170,9 +170,9 @@ def test_proposal_lifecycle_and_invalid_transitions():
         assert await hub.decide(p.id, False, "bob") is None
         assert (await hub.complete(p.id, "done it")).status == "done"
         assert await hub.complete(p.id, "again") is None
-        assert [x.id for x in hub.list_proposals("done")] == ["p1"] and hub.list_proposals("pending") == []
-        assert "p1 DONE: done it" in [t for _, t in hub.sent]
-        assert (await hub.create_proposal(inc.id, "x")).id == "p2"
+        assert [x.id for x in hub.list_proposals("done")] == ["p1-t"] and hub.list_proposals("pending") == []
+        assert "p1-t DONE: done it" in [t for _, t in hub.sent]
+        assert (await hub.create_proposal(inc.id, "x")).id == "p2-t"
     asyncio.run(go())
 
 
@@ -183,14 +183,14 @@ def test_proposals_bounded_oldest_first():
         for _ in range(MAX_PROPOSALS + 5):
             await hub.create_proposal(inc.id, "x")
         ids = [p.id for p in hub.list_proposals()]
-        assert len(ids) == MAX_PROPOSALS and ids[0] == "p6" and hub.get_proposal("p1") is None
+        assert len(ids) == MAX_PROPOSALS and ids[0] == "p6-t" and hub.get_proposal("p1-t") is None
     asyncio.run(go())
 
 
 # --- end to end over a real in-process IRC server ---
 
 def _serve():
-    hub = Hub()
+    hub = Hub(run_tag="t")
     hub.operators = None
     return hub, IrcServer(hub)
 
@@ -265,7 +265,7 @@ def make_client(hub):
 
 def test_rest_proposal_endpoints():
     async def run():
-        hub = Hub()
+        hub = Hub(run_tag="t")
         sent = []
 
         async def fake(channel, text):
@@ -280,22 +280,22 @@ def test_rest_proposal_endpoints():
             assert (await c.post("/api/proposals", json={"incident_id": iid, "action": ""})).status_code == 422
             assert (await c.post("/api/proposals", json={"incident_id": iid, "action": "x" * 201})).status_code == 422
             r = await c.post("/api/proposals", json={"incident_id": iid, "action": "rotate logs"})
-            assert r.status_code == 201 and r.json()["id"] == "p1" and r.json()["status"] == "pending"
-            assert sent[-1].startswith("PROPOSAL p1 for " + iid) and "!approve p1" in sent[-1]
-            assert (await c.get("/api/proposals/p1")).json()["action"] == "rotate logs"
-            assert (await c.get("/api/proposals/p9")).status_code == 404
+            assert r.status_code == 201 and r.json()["id"] == "p1-t" and r.json()["status"] == "pending"
+            assert sent[-1].startswith("PROPOSAL p1-t for " + iid) and "!approve p1-t" in sent[-1]
+            assert (await c.get("/api/proposals/p1-t")).json()["action"] == "rotate logs"
+            assert (await c.get("/api/proposals/p9-t")).status_code == 404
             assert len((await c.get("/api/proposals", params={"status": "pending"})).json()) == 1
             assert (await c.get("/api/proposals", params={"status": "bogus"})).status_code == 422
-            assert (await c.post("/api/proposals/p1/complete", json={"note": "x"})).status_code == 409
-            assert (await c.post("/api/proposals/p9/decide", json={"approve": True})).status_code == 404
-            d = await c.post("/api/proposals/p1/decide", json={"approve": True})
+            assert (await c.post("/api/proposals/p1-t/complete", json={"note": "x"})).status_code == 409
+            assert (await c.post("/api/proposals/p9-t/decide", json={"approve": True})).status_code == 404
+            d = await c.post("/api/proposals/p1-t/decide", json={"approve": True})
             assert d.status_code == 200 and d.json()["status"] == "approved" and d.json()["decided_by"] == "api"
-            assert (await c.post("/api/proposals/p1/decide", json={"approve": False})).status_code == 409
-            assert (await c.post("/api/proposals/p1/complete", json={"note": "n" * 301})).status_code == 422
-            done = await c.post("/api/proposals/p1/complete", json={"note": "rotated"})
+            assert (await c.post("/api/proposals/p1-t/decide", json={"approve": False})).status_code == 409
+            assert (await c.post("/api/proposals/p1-t/complete", json={"note": "n" * 301})).status_code == 422
+            done = await c.post("/api/proposals/p1-t/complete", json={"note": "rotated"})
             assert done.json()["status"] == "done" and done.json()["result_note"] == "rotated"
-            assert (await c.post("/api/proposals/p1/complete", json={"note": "x"})).status_code == 409
-            assert "p1 APPROVED by api" in sent and "p1 DONE: rotated" in sent
+            assert (await c.post("/api/proposals/p1-t/complete", json={"note": "x"})).status_code == 409
+            assert "p1-t APPROVED by api" in sent and "p1-t DONE: rotated" in sent
     asyncio.run(run())
 
 
@@ -314,7 +314,7 @@ class _Borrowed:
 
 def test_mcp_proposal_tools_round_trip(monkeypatch):
     async def run():
-        hub = Hub()
+        hub = Hub(run_tag="t")
         async with make_client(hub) as c:
             hub.irc_broadcast = None
             monkeypatch.setattr(mcp_server, "_client_factory", lambda: _Borrowed(c))
@@ -323,16 +323,16 @@ def test_mcp_proposal_tools_round_trip(monkeypatch):
             iid = hub.incidents()[0].id
             assert (await mcp_server.propose_remediation("zz", "x"))["error"] == 404
             p = await mcp_server.propose_remediation(iid, "rotate logs", "details")
-            assert p["id"] == "p1" and p["status"] == "pending"
-            assert (await mcp_server.get_proposal("p1"))["status"] == "pending"
-            assert (await mcp_server.get_proposal("p7"))["error"] == 404
-            assert (await mcp_server.complete_proposal("p1"))["error"] == 409
-            await hub.decide("p1", True, "alice")
-            assert (await mcp_server.get_proposal("p1"))["status"] == "approved"
+            assert p["id"] == "p1-t" and p["status"] == "pending"
+            assert (await mcp_server.get_proposal("p1-t"))["status"] == "pending"
+            assert (await mcp_server.get_proposal("p7-t"))["error"] == 404
+            assert (await mcp_server.complete_proposal("p1-t"))["error"] == 409
+            await hub.decide("p1-t", True, "alice")
+            assert (await mcp_server.get_proposal("p1-t"))["status"] == "approved"
             assert len(await mcp_server.list_proposals("approved")) == 1
             assert await mcp_server.list_proposals("pending") == []
             assert len(await mcp_server.list_proposals()) == 1
-            assert (await mcp_server.complete_proposal("p1", "ok"))["status"] == "done"
+            assert (await mcp_server.complete_proposal("p1-t", "ok"))["status"] == "done"
     asyncio.run(run())
 
 
