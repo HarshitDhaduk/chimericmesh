@@ -83,6 +83,11 @@ def test_agent_prompt_states_approval_protocol():
         assert phrase in prompt
 
 
+def test_agent_prompt_requires_concrete_proposals_and_evidence():
+    prompt = _load(AGENT)["prompt"]
+    for phrase in ("reversible", "exact files", "run the relevant tests", "get_incident", "recent_events",
+                   "event rate", "Do not extend the change"):
+        assert phrase in prompt
 def test_agent_never_auto_allows_mutating_tools():
     agent = _load(AGENT)
     assert _allowed_mcp_tools(agent).isdisjoint(MUTATING)

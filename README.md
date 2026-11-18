@@ -162,6 +162,18 @@ REST: `GET/POST /api/proposals`, `GET /api/proposals/{pid}`, `POST /api/proposal
 
 Safety: ChimericMesh never executes a proposed action on any host. It only records the human decision and announces it. The agent performs the real work under its own tool permissions, and must act only when the proposal is `approved`, never while it is `pending` or `denied`. Proposals live in memory (last 200 kept).
 
+## A real incident, a real fix
+
+`examples/legacy_app` is a runnable service with a real bug (see its README). To fix it through the approval loop:
+
+1. Run the hub: `python -m chimericmesh`.
+2. Run the service: `python examples/legacy_app/run.py`. It sends syslog to the hub.
+3. Open the dashboard and wait for the `network` incident about the upstream timeout.
+4. In Kiro, pick the `mesh-responder` agent and ask it to investigate and propose a fix.
+5. Approve with `!approve p1` in the dashboard terminal or on IRC.
+6. The agent edits the code, runs `python -m pytest examples/legacy_app/tests -q`, restarts nothing on its own, and reports the event rate. Restart `run.py` to load the fix and watch the rate fall.
+7. Reset the buggy state: `git checkout -- examples/legacy_app` and `git clean -fd examples/legacy_app`.
+
 ## The dashboard terminal and guided workflow
 
 The dashboard has a ChimericBot terminal: a transcript of everything the bot says plus an input line that accepts the same `!` commands as IRC (`!help`, `!status`, `!incidents`, `!explain <id>`, `!proposals`, `!approve`, `!deny`, `!resolve`). Dashboard buttons just send these commands, so every action appears in the transcript and one authorization check applies everywhere. Replies are also broadcast to IRC.
