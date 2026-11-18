@@ -9,12 +9,15 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from urllib.parse import urlsplit
 
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, Field, field_validator
+
+from .commands import handle_command, parse_command
 from .events import Event
-from .hub import Hub
+from .hub import WEB_NICK, Hub
 from .listeners import IrcServer, start_syslog, start_telnet
 from .parsers import irc_to_event, parse_syslog, telnet_to_event
 
@@ -51,6 +54,21 @@ class CompleteRequest(BaseModel):
     note: str = Field(default="", max_length=300)
 
 
+class TerminalRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=200)
+
+    @field_validator("text")
+    @classmethod
+    def _strip_nonempty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("text must not be blank")
+        return v
+
+
+MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
+
+
 def create_app(hub: Hub | None = None, start_listeners: bool = True) -> FastAPI:
     hub = hub or Hub()
     irc = IrcServer(hub)
@@ -75,6 +93,18 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True) -> FastAPI:
 
     app = FastAPI(title="ChimericMesh", version="0.1.0", lifespan=lifespan)
     app.state.hub = hub
+
+    @app.middleware("http")
+    async def same_origin_only(request: Request, call_next):
+        # Browser CSRF defence for a localhost service: a page on another site can fire
+        # POSTs at 127.0.0.1, but the browser labels them with its own Origin. Reject
+        # state-changing requests whose Origin differs from Host. Non-browser clients
+        # (curl, httpx, MCP server) send no Origin and pass.
+        origin = request.headers.get("origin")
+        if origin is not None and request.method in MUTATING:
+            if urlsplit(origin).netloc != request.headers.get("host", ""):
+                return JSONResponse({"detail": "cross-origin request blocked"}, status_code=403)
+        return await call_next(request)
 
     @app.get("/", include_in_schema=False)
     async def index():
@@ -197,5 +227,26 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True) -> FastAPI:
             if ev:
                 await hub.ingest(ev)
         return {"injected": len(lines), "at": now}
+
+    @app.get("/api/chat")
+    async def chat(after: int = 0, limit: int = 100):
+        return hub.chat(after, limit)
+
+    @app.post("/api/terminal")
+    async def terminal(req: TerminalRequest):
+        # Identity is fixed server-side; the client can never choose a nick.
+        text = req.text
+        hub.record(WEB_NICK, text, "user")
+        cmd = parse_command(text)
+        if cmd is None:
+            reply = "commands start with ! - try !help"
+            hub.record("ChimericBot", reply, "system")
+            return {"ok": True, "handled": False, "replies": [reply]}
+        replies = await handle_command(hub, WEB_NICK, hub.irc_channel, cmd)
+        return {"ok": True, "handled": True, "replies": replies}
+
+    @app.get("/api/workflow")
+    async def workflow():
+        return hub.workflow()
 
     return app

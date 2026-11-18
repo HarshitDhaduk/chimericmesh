@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 from collections import OrderedDict, deque
 from dataclasses import asdict, dataclass, field
@@ -23,6 +24,21 @@ MAX_PROPOSALS = 200
 MAX_ACTION = 200
 MAX_DETAILS = 500
 PROPOSAL_STATUSES = ('pending', 'approved', 'denied', 'done')
+
+TRANSCRIPT_MAX = 300
+MAX_CHAT_TEXT = 500
+BOT_NICK = "ChimericBot"
+WEB_NICK = "dashboard"
+_CHAT_CTRL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+WORKFLOW_STEPS = (
+    ("traffic", "Send some traffic", "Summon a failure storm, or run scripts/demo.ps1 or the replay tools"),
+    ("incidents", "Spot an incident", "Three similar errors open an incident"),
+    ("ask", "Ask ChimericBot", "Type !incidents or !explain <id> in the terminal"),
+    ("propose", "Propose a fix", "An agent proposes a remediation; you can simulate one from an incident card"),
+    ("decide", "Approve or deny it", "Operators decide with !approve p1 or !deny p1"),
+    ("resolve", "Lay the incident to rest", "Use !resolve <id> or the button on the card"),
+)
 
 # Bundled sample app whose log statements the demo incidents match.
 DEFAULT_CODE_ROOT = Path(__file__).resolve().parents[2] / "examples" / "legacy_app"
@@ -46,6 +62,20 @@ class Proposal:
     decided_by: str = ""
     decided_at: float | None = None
     result_note: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class ChatMessage:
+    """One transcript line. Text may originate from IRC users: treat as untrusted."""
+
+    id: int
+    ts: float
+    sender: str
+    kind: str  # 'bot' | 'user' | 'system'
+    text: str
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -80,6 +110,9 @@ class Hub:
         self.operators: set[str] | None = parse_operators(os.environ.get('CHIMERICMESH_OPERATORS'))
         self._proposals: OrderedDict[str, Proposal] = OrderedDict()
         self._proposal_seq = 0
+        self.transcript: deque[ChatMessage] = deque(maxlen=TRANSCRIPT_MAX)
+        self._chat_seq = 0
+        self.commands_run = 0  # parsed commands handled (IRC or web)
 
     async def ingest(self, event: Event) -> None:
         self.events.append(event)
@@ -139,8 +172,7 @@ class Hub:
             return None
         self.resolved.add(incident_id)
         inc.resolved = True
-        if self.irc_broadcast:
-            await self.irc_broadcast(self.irc_channel, f"RESOLVED {inc.id} ({inc.category} on {inc.host}) {note}".strip())
+        await self.say(self.irc_channel, f"RESOLVED {inc.id} ({inc.category} on {inc.host}) {note}".strip())
         return inc
 
     # --- human-approved remediation (record + announce only; nothing is executed here) ---
@@ -186,7 +218,36 @@ class Hub:
     def list_proposals(self, status: str | None = None) -> list[Proposal]:
         return [p for p in self._proposals.values() if status in (None, p.status)]
 
+    def record(self, sender: str, text: str, kind: str = "user") -> ChatMessage:
+        """Append a sanitized line to the bounded transcript and return it."""
+        self._chat_seq += 1
+        msg = ChatMessage(self._chat_seq, self._clock(), _CHAT_CTRL.sub("", str(sender))[:30],
+                          kind, _CHAT_CTRL.sub("", str(text))[:MAX_CHAT_TEXT])
+        self.transcript.append(msg)
+        return msg
+
+    def chat(self, after: int = 0, limit: int = 100) -> dict:
+        after, limit = max(0, after), max(1, min(limit, 200))
+        msgs = [m.to_dict() for m in self.transcript if m.id > after][:limit]
+        return {"messages": msgs, "last_id": self._chat_seq if self.transcript else 0}
+
+    def workflow(self) -> dict:
+        incs = self.incidents()
+        done = {
+            "traffic": self.total_events > 0,
+            "incidents": bool(incs),
+            "ask": self.commands_run > 0,
+            "propose": self._proposal_seq > 0,
+            "decide": any(p.status != "pending" for p in self._proposals.values()),
+            "resolve": len(self.resolved) > 0,
+        }
+        steps = [{"key": k, "title": t, "hint": h, "done": done[k]} for k, t, h in WORKFLOW_STEPS]
+        nxt = next((s["key"] for s in steps if not s["done"]), None)
+        return {"steps": steps, "next": nxt, "complete": nxt is None,
+                "you": {"nick": WEB_NICK, "operator": self.is_operator(WEB_NICK)}}
+
     async def say(self, channel: str, text: str) -> None:
+        self.record(BOT_NICK, text, "bot")
         if self.irc_broadcast:
             await self.irc_broadcast(channel, text)
 

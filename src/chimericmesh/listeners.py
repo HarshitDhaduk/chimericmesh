@@ -120,6 +120,7 @@ class IrcServer:
                     # Commands are operator input, not log data: run, never ingest.
                     command = parse_command(params[-1])
                     if command is not None:
+                        self.hub.record(info["nick"], params[-1], "user")
                         await handle_command(self.hub, info["nick"], params[0], command)
                     return
                 tagged = f":{info['nick']}!u@h {cmd} {params[0]} :{params[-1]}"

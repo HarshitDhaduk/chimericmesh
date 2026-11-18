@@ -59,6 +59,7 @@ def _line(text: str) -> str:
 
 async def handle_command(hub: Hub, nick: str, channel: str, cmd: Command) -> list[str]:
     """Execute a command and post its replies to the channel. Returns the reply lines."""
+    hub.commands_run += 1
     replies = [_line(t) for t in await _run(hub, nick, cmd)]
     target = channel if channel.startswith("#") else hub.irc_channel
     for reply in replies:
