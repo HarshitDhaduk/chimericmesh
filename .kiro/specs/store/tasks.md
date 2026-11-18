@@ -137,20 +137,20 @@ Review round 3 (see "Review round 3 resolutions" in the design): behavioural fin
     - **Property 19: Write accounting**
     - **Validates: Requirements 7.3, 7.4**
 
-- [ ] 8. Incident rows and lifecycle (reopen)
-  - [ ] 8.1 Implement incident row mapping, upsert and load
+- [x] 8. Incident rows and lifecycle (reopen)
+  - [x] 8.1 Implement incident row mapping, upsert and load
     - Write `tests/unit/test_store_incidents.py` first: an `Incident` round-trips through `upsert_incident` and `load_incidents` with every field including `opened`, `opening`, `resolved_at` and `announced_count`; `hypothesis` and `remediation` come back through `classify(sample)`; rows of incidents evicted from memory stay in the table; a row with `resolved = 1` and no `resolved_at` is rejected by the CHECK; `IncidentRow.from_incident` is immutable (frozen, `sources` a tuple) and cuts `sample` to 4096 and `host` to 255; the upsert is a plain `INSERT ... ON CONFLICT(id) DO UPDATE SET <all columns>` with no `CASE` and always writes the snapshot's `announced_count` (NULL, 3, then 1 after a reopen are stored as given); `IncidentRow` carries `announced_count`.
     - Create `store/incidents.py` (`IncidentRow`, row mapping, `upsert_incident`, `load_incidents`, `get_incident_row`).
     - _Requirements: 5.1, 5.2, 5.5, 5.6_
-  - [ ] 8.2 Implement `IncidentLifecycle` persistence
+  - [x] 8.2 Implement `IncidentLifecycle` persistence
     - Write `tests/unit/test_store_lifecycle.py` first, with `store=None` and with a temporary store: `persist` writes the row and is a no-op without a store; `mark_dirty` plus `maybe_flush` writes at most once per 30 seconds of fake time; `flush_all(deadline)` writes every dirty incident and stops submitting at the deadline; `flush_dirty` writes every dirty incident whose last write is at least `flush_interval` old even when no event arrives (one incident, 5 events, fake clock +31 s, one call, the row has count 5); a failing store leaves the incident dirty and does not raise; persist happens before the injected `announce` is called; the closure given to `transact` uses the snapshot: mutate the incident after `persist` is submitted and the stored row equals the snapshot; with a store whose `transact` never returns, 5000 `persist` calls leave at most `persist_slots` (256) pending tasks, the rest return at once and stay dirty; with `announced_getter` returning 1 for the incident, skip a `persist` under a full semaphore, run `flush_dirty` later, reload the row, and its stored `announced_count` is 1 (the marker survives a skipped persist).
     - Add `IncidentLifecycle` (persistence part: semaphore, snapshots, `flush_due`, `flush_dirty`, `flush_all`) and the `Announce` and `AuditSink` protocols in `store/ports.py`.
     - _Requirements: 5.1_
-  - [ ] 8.3 Implement the reopen rule
+  - [x] 8.3 Implement the reopen rule
     - Extend `tests/unit/test_store_lifecycle.py` first, one test per sub-criterion 5.7a to 5.7i: a resolved incident and an event after `reopen_after` reopens; before it the count grows, nothing is announced and `opening` stays; exactly the `reopen_after` boundary reopens; `reopen_after=0` reopens at once; a reopened severity 3 incident with count 1 is returned by the tracker; severity is reset to the event's severity; the audit row `incident_reopened` (incident id, new opening, service id) is in the same transaction as the incident row and is rolled back with it; the announced text is `REOPENED <id>: <category> on <host>`, sent once, after the commit; the test "reopen, two more events, exactly one announcement for that opening" (M4); resolve again and reopen again gives opening 3 and a second `REOPENED`; works with `store=None` (audit through `audit_getter()` when a sink is attached, none otherwise; the getter is read at call time, so a sink attached after construction is used); `resolved_at` is reloaded after a restart so the window continues; the audit `detail` of `incident_reopened` contains neither the incident sample nor the signature (canary text in the event, R8.4); the announcement is not a webhook (no `incident.reopened` call).
     - Add `reopen_due` and `reopen` to `store/incidents.py`.
     - _Requirements: 5.7, 5.8, 5.9, 5.10_
-  - [ ] 8.4 Write property tests for reopen
+  - [x] 8.4 Write property tests for reopen
     - Create `tests/pbt/test_store_reopen_properties.py` (fake clock, random event, resolve and advance sequences, with `store=None` and with a store).
     - **Property 12: Reopen only after the window**
     - **Property 13: Reopen resets state**
