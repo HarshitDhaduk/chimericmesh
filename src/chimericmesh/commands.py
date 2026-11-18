@@ -10,11 +10,15 @@ here (or anywhere in ChimericMesh) executes a proposed action on any host.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 
 from .events import SEVERITY_NAMES
 from .hub import Hub
+from .store.errors import StoreError
+
+log = logging.getLogger("chimericmesh.commands")
 
 MAX_COMMAND_CHARS = 200
 MAX_ARGS = 5
@@ -60,7 +64,12 @@ def _line(text: str) -> str:
 async def handle_command(hub: Hub, nick: str, channel: str, cmd: Command) -> list[str]:
     """Execute a command and post its replies to the channel. Returns the reply lines."""
     hub.commands_run += 1
-    replies = [_line(t) for t in await _run(hub, nick, cmd)]
+    try:
+        lines = await _run(hub, nick, cmd)
+    except StoreError:
+        log.error("store unavailable while running !%s", cmd.name)
+        lines = ["store unavailable, try again"]
+    replies = [_line(t) for t in lines]
     target = channel if channel.startswith("#") else hub.irc_channel
     for reply in replies:
         await hub.say(target, reply)
