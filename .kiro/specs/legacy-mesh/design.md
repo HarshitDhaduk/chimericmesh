@@ -37,3 +37,8 @@ Authentication on the REST API and persistence. Bind to localhost by default.
 - P7: parse_command never raises; names are lowercase and whitespace-free.
 - P8: command replies contain no CR/LF/NUL.
 - P9: under any operation sequence, proposal statuses stay in {pending, approved, denied, done} and transitions occur only from the allowed source status.
+
+## Web terminal and workflow (R8, R9)
+- **Hub**: `ChatMessage`, `transcript` deque(300), `record()` sanitizes; `say()` records every bot message before forwarding to IRC. `commands_run` counts handled commands. `workflow()` derives step state from existing hub data.
+- **API**: `/api/chat`, `/api/terminal` (identity `WEB_NICK = "dashboard"`, never client-supplied), `/api/workflow`, plus an HTTP middleware rejecting cross-origin mutating requests.
+- **Single action path**: dashboard buttons send the same `!` commands, so one `is_operator` check covers IRC and web. Transcript text is returned only as JSON and rendered with textContent.

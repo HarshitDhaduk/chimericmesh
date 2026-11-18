@@ -15,3 +15,6 @@
 - [x] 13. IRC command parser and handler, operator allowlist (R6)
 - [x] 14. Proposal state machine, REST endpoints and MCP tools (R7)
 - [x] 15. Tests for commands, proposals and P7-P9
+- [x] 16. Hub transcript, /api/chat, /api/terminal, same-origin middleware (R8)
+- [x] 17. Hub.workflow and /api/workflow (R9)
+- [x] 18. Tests: tests/unit/test_web_terminal.py, tests/pbt/test_chat_properties.py

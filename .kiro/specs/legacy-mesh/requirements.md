@@ -45,3 +45,12 @@ Operators of older infrastructure emit logs over Syslog, IRC and Telnet. They ca
 4. The system SHALL NOT execute any proposed action; it only records the decision.
 5. Proposals SHALL be held in memory, bounded to 200, evicting the oldest first. Action max 200 chars, details max 500.
 6. The MCP server SHALL expose propose_remediation, get_proposal, list_proposals, complete_proposal.
+
+### R8: Web terminal and transcript
+1. The hub SHALL keep a bounded transcript (300 messages, ids strictly increasing from 1) of every bot message, IRC user command and web terminal line; text SHALL have control characters stripped and be capped at 500 chars.
+2. GET /api/chat?after&limit SHALL return the oldest messages after the cursor (limit clamped 1..200) and the newest overall id.
+3. POST /api/terminal SHALL accept 1..200 chars, run `!` commands as the fixed identity `dashboard` through the same handler and operator check as IRC, and return the replies. Non-commands SHALL get a system hint and SHALL NOT be ingested.
+4. State-changing requests whose Origin header differs from Host SHALL be rejected with 403; requests without Origin SHALL pass.
+
+### R9: Guided workflow
+1. GET /api/workflow SHALL report six ordered steps (traffic, incidents, ask, propose, decide, resolve) with done flags, the next step, completion, and whether `dashboard` is an operator.

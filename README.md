@@ -86,6 +86,14 @@ Optional: set `CHIMERICMESH_WEBHOOK_URL` for webhooks and `CHIMERICMESH_CODE_ROO
 - **Updates:** follow-up `UPDATE` lines go out when the count passes 10, 50, 100 and 500, so channels do not get flooded.
 - **Code lookup:** searches `examples/legacy_app/` by default, a small sample app whose log lines match the demo storm. Point `CHIMERICMESH_CODE_ROOT` at your own source tree to use it for real.
 
+## Screenshots
+
+Captured from the running app in headless Edge.
+
+![Empty dashboard with the guided workflow at 0/6](docs/screenshots/dashboard-empty.png)
+![Incident cards after a failure storm](docs/screenshots/dashboard-incidents.png)
+![ChimericBot terminal with an approved proposal](docs/screenshots/dashboard-terminal.png)
+
 ## Tests
 
 ```powershell
@@ -143,3 +151,23 @@ resolve_incident     ---->  "RESOLVED <id> ..."
 REST: `GET/POST /api/proposals`, `GET /api/proposals/{pid}`, `POST /api/proposals/{pid}/decide`, `POST /api/proposals/{pid}/complete`. MCP tools: `propose_remediation`, `get_proposal`, `list_proposals`, `complete_proposal`.
 
 Safety: ChimericMesh never executes a proposed action on any host. It only records the human decision and announces it. The agent performs the real work under its own tool permissions, and must act only when the proposal is `approved`, never while it is `pending` or `denied`. Proposals live in memory (last 200 kept).
+
+## The dashboard terminal and guided workflow
+
+The dashboard has a ChimericBot terminal: a transcript of everything the bot says plus an input line that accepts the same `!` commands as IRC (`!help`, `!status`, `!incidents`, `!explain <id>`, `!proposals`, `!approve`, `!deny`, `!resolve`). Dashboard buttons just send these commands, so every action appears in the transcript and one authorization check applies everywhere. Replies are also broadcast to IRC.
+
+Web commands run as the fixed nick `dashboard`; the browser cannot choose a nick. To restrict approvals, set `CHIMERICMESH_OPERATORS` (comma-separated). If you restrict it and want the dashboard user to decide, include `dashboard`, for example `CHIMERICMESH_OPERATORS=alice,dashboard`.
+
+The guided workflow (`GET /api/workflow`) has six steps:
+1. Send some traffic (any event ingested)
+2. Spot an incident
+3. Ask ChimericBot (run any command)
+4. Propose a fix
+5. Approve or deny it
+6. Lay the incident to rest (resolve)
+
+Endpoints: `GET /api/chat?after=&limit=`, `POST /api/terminal {"text": "!status"}`, `GET /api/workflow`.
+
+Origin check: POST/PUT/PATCH/DELETE requests carrying an `Origin` header that differs from `Host` get 403, which blocks other websites from driving a local instance. Clients that send no Origin (curl, scripts, the MCP server) are unaffected.
+
+Security note: IRC nicks are unauthenticated, so `CHIMERICMESH_OPERATORS` is only a guard on trusted networks, not real authentication.
