@@ -3,11 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
 <title>ChimericMesh · The Crypt of Legacy Protocols</title>
 <style>
   :root {
-    --bg: #0b0a10; --panel: #13111c; --line: #2a2640; --ink: #d9d4ee; --dim: #8a84a8;
-    --ghost: #7CFFB2; --ember: #ff8a3d; --blood: #ff4d6d; --amber: #ffd166; --violet: #9b7bff;
+    --bg: #0b0a10; --panel: #13111c; --line: #2a2640; --ink: #d9d4ee; --dim: #9791b5;
+    --ghost: #7CFFB2; --ember: #ff8a3d; --blood: #ff4d6d; --amber: #ffd166; --violet: #a98cff;
     --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
   }
   * { box-sizing: border-box; }
@@ -27,19 +28,33 @@
   button { font: inherit; color: var(--bg); background: var(--ember); border: 0; padding: 10px 16px;
     border-radius: 4px; cursor: pointer; font-weight: 700; }
   button:hover { background: #ffa05f; }
-  button:focus-visible { outline: 3px solid var(--ghost); outline-offset: 2px; }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+    outline: 3px solid var(--ghost); outline-offset: 2px; }
   button.ghost { background: transparent; color: var(--ghost); border: 1px solid var(--ghost); padding: 6px 10px; }
-  main { display: grid; gap: 24px; padding: 24px clamp(16px, 4vw, 48px) 64px;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
-  @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+  button.ghost:hover { background: rgba(124,255,178,.12); }
+  button.warn { color: var(--blood); border-color: var(--blood); }
+  button.warn:hover { background: rgba(255,77,109,.12); }
+  button.small { padding: 3px 8px; font-size: .8rem; }
+  main { display: flex; flex-direction: column; gap: 24px; padding: 24px clamp(16px, 4vw, 48px) 64px; }
+  .grid { display: grid; gap: 24px; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
+  .col { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+  .col.right { align-self: stretch; }
+  #termPanel { position: sticky; top: 16px; z-index: 2; max-height: calc(100vh - 32px); display: flex; flex-direction: column; }
+  @media (max-width: 960px) {
+    .grid { display: flex; flex-direction: column; }
+    .col { display: contents; }
+    #termPanel { order: 1; position: static; max-height: none; }
+    #incPanel { order: 2; } #propPanel { order: 3; } #evPanel { order: 4; }
+  }
   section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px; min-width: 0; }
   h2 { margin: 0 0 14px; font-size: .9rem; letter-spacing: .14em; text-transform: uppercase; color: var(--violet); }
-  .stats { grid-column: 1 / -1; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .stats { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
   .stat b { display: block; font-size: 2rem; color: var(--ghost); }
   .stat span { color: var(--dim); font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; }
   .incident { border-left: 3px solid var(--amber); padding: 12px 14px; margin-bottom: 12px; background: #0f0d17; border-radius: 0 6px 6px 0; }
   .incident.sev-0, .incident.sev-1, .incident.sev-2, .incident.sev-3 { border-color: var(--blood); }
-  .incident.resolved { border-color: var(--ghost); opacity: .6; }
+  .incident.resolved { border-color: var(--ghost); opacity: .7; }
   .incident h3 { margin: 0 0 4px; font-size: 1rem; }
   .meta { color: var(--dim); font-size: .8rem; }
   .sample { margin: 8px 0; padding: 8px; background: #08070d; color: var(--amber); overflow-wrap: anywhere; border-radius: 4px; }
@@ -52,10 +67,58 @@
   .sev-warning { color: var(--amber); }
   .empty { color: var(--dim); font-style: italic; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-  form.send { display: flex; gap: 8px; margin-top: 14px; }
+  form.send, form.propose { display: flex; gap: 8px; margin-top: 14px; }
+  form.propose { margin-top: 10px; }
   input, select { font: inherit; background: #08070d; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 8px; }
   input[type=text] { flex: 1; min-width: 0; }
   .sr { position: absolute; left: -9999px; }
+  .hidden { display: none !important; }
+
+  /* guide */
+  .guide-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+  .guide-head h2 { margin: 0; }
+  .bar { height: 6px; background: #08070d; border: 1px solid var(--line); border-radius: 3px; margin: 10px 0 14px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--ghost); }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .step { display: flex; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: #0f0d17; }
+  .step .n { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--dim); display: grid; place-items: center; font-size: .8rem; color: var(--dim); }
+  .step .t { font-weight: 700; }
+  .step.done { opacity: .7; }
+  .step.done .n { border-color: var(--ghost); color: var(--ghost); }
+  .step.next { border-color: var(--ember); box-shadow: 0 0 0 1px var(--ember); }
+  .step.next .n { border-color: var(--ember); color: var(--ember); }
+  .step button { margin-top: 8px; }
+  #guideStatus { min-height: 1.2em; margin-top: 10px; }
+
+  /* terminal */
+  .term-log { flex: 1; min-height: 220px; max-height: 360px; overflow: auto; background: #08070d; border: 1px solid var(--line); border-radius: 4px; padding: 8px; font-size: .85rem; }
+  .tline { overflow-wrap: anywhere; white-space: pre-wrap; padding: 1px 0; }
+  .tline .ts { color: var(--dim); margin-right: 8px; }
+  .tline.bot { color: var(--ghost); }
+  .tline.bot .who { font-weight: 700; margin-right: 6px; }
+  .tline.user { color: var(--amber); }
+  .tline.user .who { margin-right: 6px; }
+  .tline.system { color: var(--dim); font-style: italic; }
+  .term-wrap { position: relative; display: flex; flex-direction: column; min-height: 0; }
+  #newMsgs { position: absolute; right: 12px; bottom: 10px; padding: 4px 10px; font-size: .8rem; }
+  .prompt { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+  .prompt .glyph { color: var(--ghost); font-weight: 700; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+  .chips .spacer { flex: 1; }
+
+  /* proposals */
+  .prop { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; background: #0f0d17; }
+  .prop .top { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .prop .act { margin: 6px 0; overflow-wrap: anywhere; }
+  .pill { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: .75rem; border: 1px solid currentColor; }
+  .pill.pending { color: var(--amber); }
+  .pill.approved { color: var(--ghost); }
+  .pill.denied { color: var(--blood); }
+  .pill.done { color: var(--violet); }
+
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 10; background: #2a0f18; color: #ffd6de;
+    border: 1px solid var(--blood); border-radius: 6px; padding: 8px 14px; max-width: 90vw; }
+  #toast:empty { display: none; }
   @media (prefers-reduced-motion: no-preference) { .pulse { animation: pulse 2.4s ease-in-out infinite; } }
   @keyframes pulse { 50% { text-shadow: 0 0 22px rgba(255,138,61,.9); } }
 </style>
@@ -70,29 +133,87 @@
 </header>
 <main>
   <section class="stats" aria-label="Statistics" id="stats"></section>
-  <section aria-labelledby="inc-h">
-    <h2 id="inc-h">Haunted incidents</h2>
-    <div id="incidents" aria-live="polite"></div>
+
+  <section id="guide" aria-labelledby="guide-h" class="hidden">
+    <div class="guide-head">
+      <h2 id="guide-h">Getting started</h2>
+      <span class="meta" id="guideProgress"></span>
+      <button class="ghost small" id="guideToggle" type="button">Hide guide</button>
+    </div>
+    <div class="bar" id="guideBar" role="progressbar" aria-label="Workflow progress" aria-valuemin="0" aria-valuemax="6" aria-valuenow="0"><i id="guideFill" style="width:0%"></i></div>
+    <ol class="steps" id="guideSteps"></ol>
+    <div class="meta" id="guideStatus" role="status" aria-live="polite"></div>
   </section>
-  <section aria-labelledby="ev-h">
-    <h2 id="ev-h">Séance log</h2>
-    <div class="log" id="events"></div>
-    <form class="send" id="sendForm">
-      <label class="sr" for="source">Protocol</label>
-      <select id="source"><option>syslog</option><option>irc</option><option>telnet</option></select>
-      <label class="sr" for="line">Log line</label>
-      <input type="text" id="line" placeholder="e.g. kernel: Out of memory: Kill process 4412" maxlength="500" required>
-      <button type="submit">Send</button>
-    </form>
-  </section>
+
+  <div class="grid">
+    <div class="col left">
+      <section id="incPanel" aria-labelledby="inc-h" tabindex="-1">
+        <h2 id="inc-h">Haunted incidents</h2>
+        <div id="incidents" aria-live="polite"></div>
+      </section>
+      <section id="propPanel" aria-labelledby="prop-h" tabindex="-1">
+        <h2 id="prop-h">Proposals</h2>
+        <div class="meta" id="propNote"></div>
+        <div id="proposals"></div>
+      </section>
+    </div>
+    <div class="col right">
+      <section id="termPanel" aria-labelledby="term-h">
+        <h2 id="term-h">ChimericBot terminal</h2>
+        <div class="term-wrap">
+          <div class="term-log" id="transcript" role="log" aria-live="polite" aria-label="ChimericBot transcript"></div>
+          <button class="ghost small hidden" id="newMsgs" type="button">New messages ↓</button>
+        </div>
+        <form class="prompt" id="termForm" autocomplete="off">
+          <span class="glyph" aria-hidden="true">›</span>
+          <label class="sr" for="termInput">Terminal command</label>
+          <input type="text" id="termInput" maxlength="200" autocomplete="off" spellcheck="false" aria-label="Terminal command" placeholder="type !help">
+          <button type="submit">Send</button>
+        </form>
+        <div class="chips" id="chips">
+          <button class="ghost small" type="button" data-cmd="!help">!help</button>
+          <button class="ghost small" type="button" data-cmd="!status">!status</button>
+          <button class="ghost small" type="button" data-cmd="!incidents">!incidents</button>
+          <button class="ghost small" type="button" data-cmd="!proposals">!proposals</button>
+          <span class="spacer"></span>
+          <button class="ghost small" type="button" id="termClear">Clear</button>
+        </div>
+        <div class="meta" id="identity" style="margin-top:8px"></div>
+        <div class="meta">Press / to focus, Tab to complete, ↑↓ for history.</div>
+      </section>
+      <section id="evPanel" aria-labelledby="ev-h">
+        <h2 id="ev-h">Séance log</h2>
+        <div class="log" id="events"></div>
+        <form class="send" id="sendForm">
+          <label class="sr" for="source">Protocol</label>
+          <select id="source"><option>syslog</option><option>irc</option><option>telnet</option></select>
+          <label class="sr" for="line">Log line</label>
+          <input type="text" id="line" placeholder="e.g. kernel: Out of memory: Kill process 4412" maxlength="500" required>
+          <button type="submit">Send</button>
+        </form>
+      </section>
+    </div>
+  </div>
 </main>
+<div id="toast" role="status" aria-live="polite"></div>
 <script>
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
 const api = async (path, opts) => { const r = await fetch(path, opts); if (!r.ok) throw new Error(r.status); return r.json(); };
 const post = (path, body) => api(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
 const SEV = ['emerg','alert','crit','err','warning','notice','info','debug'];
+const COMMANDS = ['!help', '!status', '!incidents', '!explain', '!proposals', '!resolve', '!approve', '!deny'];
 
+const state = { incidents: [], proposals: [], workflow: null, chatCursor: 0, history: [], histIdx: 0 };
+let toastTimer = null;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.textContent = ''; }, 5000);
+}
+const unreachable = () => toast('Could not reach the mesh');
+const firstOpen = () => state.incidents.find((i) => !i.resolved);
+
+/* ---------- stats ---------- */
 function renderStats(s) {
   const box = $('stats'); box.replaceChildren();
   const n = (v) => Number(v || 0).toLocaleString();
@@ -103,11 +224,47 @@ function renderStats(s) {
   for (const [label, val] of items) { const d = el('div', 'stat'); d.append(el('b', '', val), el('span', '', label)); box.append(d); }
 }
 
-function renderIncidents(list) {
+/* ---------- incidents ---------- */
+let lastIncKey = null;
+function openPropose(i, card, actions, btn) {
+  if (card.querySelector('form.propose')) { card.querySelector('form.propose input').focus(); return; }
+  const f = el('form', 'propose');
+  const lab = el('label', 'sr', 'Proposed action'); lab.htmlFor = `pa-${i.id}`;
+  const inp = el('input'); inp.type = 'text'; inp.id = `pa-${i.id}`; inp.maxLength = 200; inp.autocomplete = 'off';
+  inp.value = String((i.remediation && i.remediation[0]) || '').slice(0, 200);
+  const ok = el('button', '', 'Submit'); ok.type = 'submit';
+  const cancel = el('button', 'ghost', 'Cancel'); cancel.type = 'button';
+  const msg = el('div', 'meta');
+  cancel.onclick = () => { f.remove(); msg.remove(); btn.focus(); };
+  f.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const action = inp.value.trim();
+    if (!action) { msg.textContent = 'Describe the action first.'; return; }
+    ok.disabled = true;
+    try {
+      await post('/api/proposals', { incident_id: i.id, action: action.slice(0, 200) });
+      f.remove(); msg.remove(); btn.focus();
+      await Promise.allSettled([loadProposals(), fetchChat(), loadWorkflow()]);
+    } catch (err) {
+      msg.textContent = err.message === '404' ? 'Incident no longer exists (404).' : (/^\d+$/.test(err.message) ? `Rejected by the mesh (status ${err.message}).` : 'Could not reach the mesh.');
+      ok.disabled = false;
+    }
+  };
+  f.append(lab, inp, ok, cancel);
+  actions.after(f); f.after(msg);
+  inp.focus(); inp.select();
+}
+
+function renderIncidents(list, force) {
+  if (document.querySelector('form.propose')) return; // never wipe a form being typed in
+  const key = JSON.stringify(list);
+  if (!force && key === lastIncKey) return;
+  lastIncKey = key;
   const box = $('incidents'); box.replaceChildren();
   if (!list.length) { box.append(el('p', 'empty', 'The crypt is quiet. Summon a failure storm or send a log line.')); return; }
   for (const i of list) {
     const d = el('article', `incident sev-${i.severity}${i.resolved ? ' resolved' : ''}`);
+    d.dataset.id = String(i.id);
     d.append(el('h3', '', `${i.category.toUpperCase()} on ${i.host} ×${i.count}`));
     const meta = el('div', 'meta'); for (const s of i.sources) meta.append(el('span', 'src', s));
     meta.append(`${SEV[i.severity]} · id ${i.id}${i.resolved ? ' · resolved' : ''}`); d.append(meta);
@@ -115,14 +272,21 @@ function renderIncidents(list) {
     const ol = el('ol'); i.remediation.forEach((s) => ol.append(el('li', '', s))); d.append(ol);
     const hint = el('div', 'meta'); d.append(hint);
     const actions = el('div', 'actions');
-    const code = el('button', 'ghost', 'Find in code'); code.type = 'button';
-    code.onclick = async () => { const h = await api(`/api/incidents/${i.id}/code`); hint.textContent = h.length ? h.map((x) => `${x.file}:${x.line}`).join('  ') : 'No matching source found.'; };
-    actions.append(code);
-    if (!i.resolved) { const r = el('button', 'ghost', 'Lay to rest'); r.type = 'button'; r.onclick = async () => { await post(`/api/incidents/${i.id}/resolve`, { note: 'via dashboard' }); refresh(); }; actions.append(r); }
+    const mk = (label, act, fn) => { const b = el('button', 'ghost', label); b.type = 'button'; b.dataset.act = act; b.onclick = fn; actions.append(b); return b; };
+    mk('Explain', 'explain', () => { runCommand(`!explain ${i.id}`); $('termInput').focus(); });
+    mk('Find in code', 'code', async () => {
+      try { const h = await api(`/api/incidents/${i.id}/code`); hint.textContent = h.length ? h.map((x) => `${x.file}:${x.line}`).join('  ') : 'No matching source found.'; }
+      catch (e) { hint.textContent = 'Could not look up code.'; }
+    });
+    if (!i.resolved) {
+      const pb = mk('Propose a fix', 'propose', () => openPropose(i, d, actions, pb));
+      mk('Lay to rest', 'resolve', () => runCommand(`!resolve ${i.id} via dashboard`));
+    }
     d.append(actions); box.append(d);
   }
 }
 
+/* ---------- events ---------- */
 function renderEvents(list) {
   const box = $('events'); box.replaceChildren();
   if (!list.length) { box.append(el('p', 'empty', 'No whispers yet.')); return; }
@@ -133,19 +297,261 @@ function renderEvents(list) {
   }
 }
 
-async function refresh() {
-  try {
-    const [s, i, e] = await Promise.all([api('/api/stats'), api('/api/incidents'), api('/api/events?limit=60')]);
-    renderStats(s); renderIncidents(i); renderEvents(e);
-    const head = $('ev-h');
-    head.textContent = s.total_events > s.buffer_capacity
-      ? `Séance log (latest ${e.length.toLocaleString()} of ${s.total_events.toLocaleString()})`
-      : 'Séance log';
-  } catch (err) { /* hub restarting; try again next tick */ }
+/* ---------- proposals ---------- */
+let lastPropKey = null;
+function renderProposals(force) {
+  const operator = !(state.workflow && state.workflow.you && state.workflow.you.operator === false);
+  const list = state.proposals.slice().sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 20);
+  const key = JSON.stringify([list, operator, state.incidents.map((i) => [i.id, i.category, i.host])]);
+  if (!force && key === lastPropKey) return;
+  lastPropKey = key;
+  $('propNote').textContent = operator ? '' : 'Approve and Deny are disabled: you are read-only. Set CHIMERICMESH_OPERATORS to allow approvals.';
+  const box = $('proposals'); box.replaceChildren();
+  if (!list.length) { box.append(el('p', 'empty', 'No proposals yet. An agent proposes fixes through MCP; you can simulate one from an incident card.')); return; }
+  for (const p of list) {
+    const inc = state.incidents.find((i) => String(i.id) === String(p.incident_id));
+    const d = el('div', 'prop');
+    const top = el('div', 'top');
+    const label = p.status === 'approved' ? 'approved - waiting for agent' : String(p.status);
+    top.append(el('span', `pill ${p.status}`, label), el('span', 'meta', `#${p.id} · ${inc ? `${inc.category} on ${inc.host}` : `incident ${p.incident_id}`}`));
+    d.append(top, el('div', 'act', p.action));
+    const extra = [];
+    if (p.decided_by) extra.push(`decided by ${p.decided_by}`);
+    if (p.result_note) extra.push(p.result_note);
+    if (extra.length) d.append(el('div', 'meta', extra.join(' · ')));
+    if (p.status === 'pending') {
+      const a = el('div', 'actions');
+      const ap = el('button', 'ghost small', 'Approve'); ap.type = 'button';
+      const dn = el('button', 'ghost small warn', 'Deny'); dn.type = 'button';
+      ap.onclick = () => runCommand(`!approve ${p.id}`);
+      dn.onclick = () => runCommand(`!deny ${p.id}`);
+      if (!operator) { ap.disabled = true; dn.disabled = true; ap.title = dn.title = 'Read-only: operators only'; }
+      a.append(ap, dn); d.append(a);
+    }
+    box.append(d);
+  }
 }
-$('storm').onclick = async () => { await post('/api/demo/storm'); refresh(); };
-$('sendForm').onsubmit = async (ev) => { ev.preventDefault(); await post('/api/ingest', { source: $('source').value, line: $('line').value, host: 'dashboard' }).catch(() => {}); $('line').value = ''; refresh(); };
-refresh(); setInterval(refresh, 2500);
+
+/* ---------- workflow guide ---------- */
+const PREF_KEY = 'cm.guide.pref';
+const getPref = () => { try { return localStorage.getItem(PREF_KEY); } catch (e) { return null; } };
+const setPref = (v) => { try { localStorage.setItem(PREF_KEY, v); } catch (e) { /* ignore */ } };
+let lastGuideKey = null;
+function guideCollapsed(w) { const p = getPref(); return p === 'hide' || (w.complete && p !== 'show'); }
+function guideStatus(msg) { $('guideStatus').textContent = msg || ''; }
+
+function renderGuide() {
+  const w = state.workflow, sec = $('guide');
+  if (!w || !Array.isArray(w.steps)) { sec.classList.add('hidden'); return; }
+  sec.classList.remove('hidden');
+  const collapsed = guideCollapsed(w);
+  const key = JSON.stringify([w, collapsed]);
+  if (key === lastGuideKey) return;
+  lastGuideKey = key;
+  const done = w.steps.filter((s) => s.done).length, total = w.steps.length;
+  $('guideProgress').textContent = `${done} / ${total} done`;
+  const bar = $('guideBar'); bar.setAttribute('aria-valuenow', String(done)); bar.setAttribute('aria-valuemax', String(total));
+  $('guideFill').style.width = `${total ? Math.round(done * 100 / total) : 0}%`;
+  $('guideToggle').textContent = collapsed ? 'Show guide' : 'Hide guide';
+  $('guideToggle').setAttribute('aria-expanded', String(!collapsed));
+  const ol = $('guideSteps'); ol.replaceChildren();
+  $('guideBar').classList.toggle('hidden', collapsed);
+  $('guideStatus').classList.toggle('hidden', collapsed);
+  if (collapsed) {
+    ol.classList.add('hidden');
+    if (w.complete) $('guideProgress').textContent = 'Workflow complete - the crypt is yours';
+    return;
+  }
+  ol.classList.remove('hidden');
+  w.steps.forEach((s, idx) => {
+    const li = el('li', `step${s.done ? ' done' : ''}${w.next === s.key ? ' next' : ''}`);
+    li.append(el('span', 'n', s.done ? '✓' : String(idx + 1)));
+    const body = el('div');
+    body.append(el('div', 't', s.title), el('div', 'meta', s.hint));
+    if (!s.done && w.next === s.key) {
+      const b = el('button', '', 'Do it'); b.type = 'button'; b.onclick = () => doIt(s.key); body.append(b);
+    }
+    li.append(body); ol.append(li);
+  });
+}
+$('guideToggle').onclick = () => { const w = state.workflow; if (!w) return; setPref(guideCollapsed(w) ? 'show' : 'hide'); renderGuide(); };
+
+function scrollFocus(node) { node.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' }); try { node.focus({ preventScroll: true }); } catch (e) { node.focus(); } }
+async function storm() {
+  try { await post('/api/demo/storm'); } catch (e) { unreachable(); }
+  refresh();
+}
+async function doIt(key) {
+  guideStatus('');
+  if (key === 'traffic') { await storm(); }
+  else if (key === 'incidents') {
+    if (!state.incidents.length) { guideStatus('Waiting for 3 similar errors...'); await storm(); }
+    else scrollFocus($('incPanel'));
+  } else if (key === 'ask') {
+    $('termInput').focus();
+    await runCommand('!incidents');
+    const o = firstOpen(); if (o) await runCommand(`!explain ${o.id}`);
+  } else if (key === 'propose') {
+    const o = firstOpen();
+    if (!o) { guideStatus('No open incident to propose a fix for yet.'); return; }
+    renderIncidents(state.incidents, true);
+    const card = document.querySelector(`.incident[data-id="${CSS.escape(String(o.id))}"]`);
+    const btn = card && card.querySelector('button[data-act="propose"]');
+    if (btn) { scrollFocus(card); btn.click(); }
+  } else if (key === 'decide') {
+    await runCommand('!proposals'); scrollFocus($('propPanel'));
+  } else if (key === 'resolve') {
+    const o = firstOpen();
+    if (!o) { guideStatus('No open incident left to lay to rest.'); return; }
+    const card = document.querySelector(`.incident[data-id="${CSS.escape(String(o.id))}"]`);
+    const btn = card && card.querySelector('button[data-act="resolve"]');
+    if (btn) { card.scrollIntoView({ block: 'center' }); btn.focus(); }
+  }
+}
+
+/* ---------- terminal ---------- */
+const tlog = $('transcript');
+const nearBottom = () => tlog.scrollHeight - tlog.scrollTop - tlog.clientHeight <= 40;
+function fmtTime(ts) { return new Date(ts * 1000).toLocaleTimeString([], { hour12: false }); }
+function appendMessages(msgs) {
+  if (!msgs.length) return;
+  const stick = nearBottom();
+  for (const m of msgs) {
+    const kind = ['bot', 'user', 'system'].includes(m.kind) ? m.kind : 'system';
+    const line = el('div', `tline ${kind}`);
+    line.append(el('span', 'ts', fmtTime(m.ts)));
+    if (kind === 'bot') line.append(el('span', 'who', 'ChimericBot'));
+    if (kind === 'user') line.append(el('span', 'who', `${m.sender} >`));
+    line.append(document.createTextNode(String(m.text)));
+    tlog.append(line);
+  }
+  while (tlog.childElementCount > 300) tlog.firstElementChild.remove();
+  if (stick) { tlog.scrollTop = tlog.scrollHeight; $('newMsgs').classList.add('hidden'); }
+  else $('newMsgs').classList.remove('hidden');
+}
+$('newMsgs').onclick = () => { tlog.scrollTop = tlog.scrollHeight; $('newMsgs').classList.add('hidden'); $('termInput').focus(); };
+tlog.addEventListener('scroll', () => { if (nearBottom()) $('newMsgs').classList.add('hidden'); });
+
+let chatBusy = false;
+async function fetchChat() {
+  if (chatBusy) return;
+  chatBusy = true;
+  try {
+    for (let round = 0; round < 5; round++) {
+      const d = await api(`/api/chat?after=${state.chatCursor}&limit=200`);
+      const msgs = Array.isArray(d.messages) ? d.messages : [];
+      if (typeof d.last_id === 'number' && d.last_id < state.chatCursor) {
+        state.chatCursor = 0; tlog.replaceChildren(); continue; // server restarted
+      }
+      appendMessages(msgs);
+      for (const m of msgs) if (m.id > state.chatCursor) state.chatCursor = m.id;
+      if (msgs.length < 200) break;
+    }
+  } catch (e) { /* tolerate; next poll retries */ }
+  finally { chatBusy = false; }
+}
+
+async function runCommand(text) {
+  text = String(text).trim().slice(0, 200);
+  if (!text) return;
+  if (state.history[state.history.length - 1] !== text) state.history.push(text);
+  if (state.history.length > 50) state.history.shift();
+  state.histIdx = state.history.length;
+  try { await post('/api/terminal', { text }); }
+  catch (e) { unreachable(); return; }
+  await Promise.allSettled([fetchChat(), loadProposals(), loadIncidents(), loadWorkflow()]);
+}
+
+const termInput = $('termInput');
+$('termForm').onsubmit = (ev) => { ev.preventDefault(); const t = termInput.value; termInput.value = ''; runCommand(t); };
+document.querySelectorAll('#chips [data-cmd]').forEach((b) => { b.onclick = () => runCommand(b.dataset.cmd); });
+$('termClear').onclick = () => { tlog.replaceChildren(); $('newMsgs').classList.add('hidden'); };
+
+function commonPrefix(arr) { let p = arr[0]; for (const s of arr) while (!s.startsWith(p)) p = p.slice(0, -1); return p; }
+function complete() {
+  const v = termInput.value;
+  const sp = v.indexOf(' ');
+  let head = '', pool, prefix;
+  if (sp < 0) { pool = COMMANDS; prefix = v; }
+  else {
+    const cmd = v.slice(0, sp); head = v.slice(0, sp + 1); prefix = v.slice(sp + 1);
+    if (cmd === '!explain' || cmd === '!resolve') pool = state.incidents.map((i) => String(i.id));
+    else if (cmd === '!approve' || cmd === '!deny') pool = state.proposals.filter((p) => p.status === 'pending').map((p) => String(p.id));
+    else return;
+  }
+  const hits = pool.filter((c) => c.startsWith(prefix));
+  if (!hits.length) return;
+  if (hits.length === 1) termInput.value = head + hits[0] + (sp < 0 ? ' ' : '');
+  else { termInput.value = head + commonPrefix(hits); toast(hits.join('   ')); }
+}
+termInput.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Tab' && !ev.shiftKey) { ev.preventDefault(); complete(); }
+  else if (ev.key === 'ArrowUp') {
+    ev.preventDefault();
+    if (state.histIdx > 0) { state.histIdx--; termInput.value = state.history[state.histIdx]; }
+  } else if (ev.key === 'ArrowDown') {
+    ev.preventDefault();
+    if (state.histIdx < state.history.length - 1) { state.histIdx++; termInput.value = state.history[state.histIdx]; }
+    else { state.histIdx = state.history.length; termInput.value = ''; }
+  }
+});
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  const t = ev.target, tag = t && t.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+  ev.preventDefault(); termInput.focus();
+});
+
+function renderIdentity() {
+  const you = state.workflow && state.workflow.you;
+  $('identity').textContent = you
+    ? (you.operator ? `You are ${you.nick} (operator)` : `You are ${you.nick} (read-only: set CHIMERICMESH_OPERATORS to allow approvals)`)
+    : '';
+}
+
+/* ---------- data loading ---------- */
+async function loadIncidents() { const i = await api('/api/incidents'); state.incidents = i; renderIncidents(i); renderProposals(); return i; }
+async function loadProposals() { state.proposals = await api('/api/proposals'); renderProposals(); }
+async function loadWorkflow() {
+  try { state.workflow = await api('/api/workflow'); }
+  catch (e) { state.workflow = null; }
+  renderGuide(); renderIdentity(); renderProposals();
+}
+
+let refreshing = false;
+async function refresh() {
+  if (refreshing) return;
+  refreshing = true;
+  try {
+    const [s, i, e, p] = await Promise.allSettled([api('/api/stats'), api('/api/incidents'), api('/api/events?limit=60'), api('/api/proposals'), loadWorkflow()]);
+    if (i.status === 'fulfilled') { state.incidents = i.value; renderIncidents(i.value); }
+    if (p.status === 'fulfilled') state.proposals = p.value;
+    renderProposals();
+    if (e.status === 'fulfilled') renderEvents(e.value);
+    if (s.status === 'fulfilled') {
+      renderStats(s.value);
+      if (e.status === 'fulfilled') {
+        $('ev-h').textContent = s.value.total_events > s.value.buffer_capacity
+          ? `Séance log (latest ${e.value.length.toLocaleString()} of ${s.value.total_events.toLocaleString()})`
+          : 'Séance log';
+      }
+    }
+  } catch (err) { /* try again next tick */ }
+  finally { refreshing = false; }
+}
+
+$('storm').onclick = storm;
+$('sendForm').onsubmit = async (ev) => {
+  ev.preventDefault();
+  try { await post('/api/ingest', { source: $('source').value, line: $('line').value, host: 'dashboard' }); $('line').value = ''; }
+  catch (e) { unreachable(); }
+  refresh();
+};
+
+refresh(); fetchChat();
+setInterval(refresh, 2500);
+setInterval(() => { if (document.visibilityState === 'visible') fetchChat(); }, 1000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { fetchChat(); refresh(); } });
 </script>
 </body>
 </html>
