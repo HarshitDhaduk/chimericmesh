@@ -15,9 +15,17 @@ from .errors import (
     StoreReentryError,
     StoreWriteError,
 )
+from .config import StoreConfig
 from .migrations import Migration, MigrationRegistry
+from .store import Store, StoreHealth
+from .tx import SubscriberError, Tx
 
 __all__ = [
+    "Store",
+    "StoreConfig",
+    "StoreHealth",
+    "SubscriberError",
+    "Tx",
     "InvalidTransition",
     "Migration",
     "MigrationError",

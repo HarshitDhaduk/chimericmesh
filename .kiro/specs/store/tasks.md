@@ -46,21 +46,21 @@ Review round 3 (see "Review round 3 resolutions" in the design): behavioural fin
     - **Property 17: Migration atomicity**
     - **Validates: Requirements 2.1, 2.2, 2.3, 2.4**
 
-- [ ] 3. Transactions, counters, writer thread and the `Store` facade
-  - [ ] 3.1 Implement `Tx`, counters and `run_callbacks`
+- [x] 3. Transactions, counters, writer thread and the `Store` facade
+  - [x] 3.1 Implement `Tx`, counters and `run_callbacks`
     - Write `tests/unit/test_store_tx.py` first, against a raw connection: `counter_next` returns `max(stored, floor) + 1` and stores it (counter 5, floor 9 gives 10; counter 9, floor 5 gives 10; empty gives 1); `counter_raise` never lowers; counter names are validated and passed as parameters; `counter_add` adds a delta; `counter_name_part("Weird Source!")` gives a valid name part; `run_callbacks` runs callbacks in order with the same `tx`, and a raising callback raises `SubscriberError` naming it (the test wraps it in a transaction and asserts that every earlier callback's writes are rolled back).
     - Create `store/tx.py` (`Tx`, `format_id`, `counter_name_part`, `SubscriberError`, `run_callbacks`).
     - _Requirements: 3.5, 3.7_
-  - [ ] 3.2 Implement the writer thread and the `Store` facade
+  - [x] 3.2 Implement the writer thread and the `Store` facade
     - Write `tests/unit/test_store_facade.py` first: `transact` returns after commit (a second `Store` on the same file sees the row); an exception in `fn` rolls back and propagates; a retryable `sqlite3.OperationalError` injected twice is retried and then succeeds, injected four times raises `StoreBusyError` or `StoreFullError`; `store_ok` flips to false on exhaustion and back to true on the next commit; `transact_sync` from a running loop raises `RuntimeError` unless `allow_blocking=True`; a job submitted from the writer thread raises `StoreReentryError`; `close(timeout=5)` returns within 5 seconds, a second `close` is harmless, and calls after close raise `StoreClosedError`; `Store.open(":memory:")` creates no file and behaves the same; a raising callback inside `transact` rolls the whole transaction back (Property 21 example); the writer thread is a daemon, starts on the first job (no thread exists right after `open`), and creating and dropping 50 unclosed `:memory:` stores returns `threading.active_count()` to its starting value after `gc.collect()`; a subprocess that creates an unclosed store exits within 5 seconds; a result delivered to a closed loop does not crash the writer (run `asyncio.run` twice on one store), and a result delivered to a cancelled awaiter does not raise `InvalidStateError` (block the writer, cancel the awaiting task, release the writer, check the write is committed and nothing is logged as an error); `previous_shutdown_clean` is true for a new database and after `close`, false after `Store._abandon()` (the test hook that stops the writer without draining and leaves `clean_shutdown = 0`); `note_last_event_id(n)` raises the `event_id` counter and never lowers it; `StoreConfig` timing knobs (`batch_rows`, `batch_ms`, `queue_limit`, `trim_interval`, `flush_interval`, `flush_tick`, `persist_slots`) can be overridden by tests.
-    - [ ] (L1) Test first: exactly three injected retryable failures still succeed on the fourth call (`fn` is called four times); four failures raise.
-    - [ ] (L3) Test first: after dropping an unclosed store, `threading.active_count()` is back to its starting value right after `gc.collect()` (no sleep), because `_stop_writer` sets the flag, enqueues a sentinel and joins for up to 1 s.
-    - [ ] (L4) Test first: with the writer blocked inside a job, `close(timeout=0.2)` returns within 1 s, logs one error and does not close the connection from the calling thread; after the job is released the writer closes it.
-    - [ ] (L14) Test first: `close(clean=False)` leaves `clean_shutdown` at 0 and the next `previous_shutdown_clean` is false; plain `close()` still sets it to 1.
-    - [ ] (M4) Test first: `Store.open` leaves no `store-writer` thread; the first `read_sync` or `max_id_sync` starts it and runs on a thread named `store-writer`, not on the caller's thread (record `threading.current_thread().name` inside `fn`).
+    - [x] (L1) Test first: exactly three injected retryable failures still succeed on the fourth call (`fn` is called four times); four failures raise.
+    - [x] (L3) Test first: after dropping an unclosed store, `threading.active_count()` is back to its starting value right after `gc.collect()` (no sleep), because `_stop_writer` sets the flag, enqueues a sentinel and joins for up to 1 s.
+    - [x] (L4) Test first: with the writer blocked inside a job, `close(timeout=0.2)` returns within 1 s, logs one error and does not close the connection from the calling thread; after the job is released the writer closes it.
+    - [x] (L14) Test first: `close(clean=False)` leaves `clean_shutdown` at 0 and the next `previous_shutdown_clean` is false; plain `close()` still sets it to 1.
+    - [x] (M4) Test first: `Store.open` leaves no `store-writer` thread; the first `read_sync` or `max_id_sync` starts it and runs on a thread named `store-writer`, not on the caller's thread (record `threading.current_thread().name` inside `fn`).
     - Create `store/writer.py` (job queue, daemon thread started lazily, `weakref.finalize` cleanup, retry with 50 ms, 200 ms, 800 ms pauses, health flags, `_deliver` helper that checks `future.cancelled()` and catches `InvalidStateError` and `RuntimeError`), `store/store.py` (`Store`, `StoreHealth`, `previous_shutdown_clean`, `note_last_event_id`, `_abandon`), extend `store/config.py` with the timing fields, and update `store/__init__.py` exports.
     - _Requirements: 1.3, 1.7, 7.1, 7.4, 7.5_
-  - [ ]* 3.3 Write the property test for the counter floor
+  - [x]* 3.3 Write the property test for the counter floor
     - Create `tests/pbt/test_store_counters_properties.py`.
     - **Property 2: Next id formula**
     - **Property 21: Transaction atomicity under callback failure** (same file, `transact` with random callback lists)
