@@ -112,40 +112,40 @@ Round 1 changes (see "Round 1 review resolutions" in the design): the plan has 4
     - **Property 12: Open incidents match the view**
     - **Validates: Requirements 5.4, 5.5**
 
-- [ ] 5. Access control
-  - [ ] 5.1 Token store
+- [x] 5. Access control
+  - [x] 5.1 Token store
     - Write `tests/unit/test_services_token.py` first, on `tmp_path`: a new file holds a URL-safe token of at least 43 characters, mode 0600 on POSIX (Windows ACL is manual, with a fake-runner assertion that `fsperms.secure_file` was called); the default path is `<CHIMERICMESH_HOME>/admin.token` and `CHIMERICMESH_TOKEN_FILE` overrides it; two different working directories (`monkeypatch.chdir`) give the same file (Success Criterion 8); a path under the working directory logs one warning; a zero-byte file is regenerated; a non-empty invalid file raises `AccessConfigError` naming the path and `token --rotate`; `O_EXCL` loss (another process created it first) reads the winner's token; `in_memory=True` writes no file and `path` is `None`; `current()` returns the token read at open and never re-reads the file (trim T2); `rotate()` replaces the file atomically (old file intact when the temp write fails), the new token differs, and a `TokenStore` opened before the rotation keeps its old token; `repr(TokenStore)` and `repr(AccessControl)` contain no token; `Store.add_redaction` is called with the token at open.
     - Create `services/token.py`.
     - _Requirements: 6.1, 6.2, 6.8_
-  - [ ] 5.2 Host allow-list and bind check
+  - [x] 5.2 Host allow-list and bind check
     - Write `tests/unit/test_services_access_host.py` first: `host_allowed` is true for `127.0.0.1`, `127.0.0.1:8000`, `localhost`, `LOCALHOST:1`, `[::1]`, `[::1]:8000`; false for `evil.example`, `127.0.0.1.evil.example`, `evil.example@127.0.0.1`, `127.0.0.1@evil.example`, `127.0.0.1 evil`, `127.0.0.1:80:80`, `localhost.` , an empty header, `None`, a 301-character header, a header with a control character or a backslash; `parse_allowed_hosts(None)` is the default set, `"A.example, [::1]:80"` normalizes to `{"a.example", "::1"}`, an invalid entry is skipped with one warning, an all-invalid value falls back to the default; `is_loopback` is true for `127.0.0.1`, `127.5.5.5`, `::1`, `localhost` and false for `0.0.0.0`, `::`, `""`, `192.168.1.5`, `myhost`.
     - Create the first part of `services/access.py` (`host_allowed`, `parse_allowed_hosts`, `is_loopback`).
     - _Requirements: 7.2, 7.3, 7.4, 7.6_
-  - [ ] 5.3 Admin check and the wrong-token limiter
+  - [x] 5.3 Admin check and the wrong-token limiter
     - Write `tests/unit/test_services_access_admin.py` first, with a fake clock and a real `AuditLog`: `AccessControl.disabled()` answers `OK` for any input and writes nothing; with enforcement on, the right token gives `OK` and writes nothing; a missing, wrong, empty and 5000-character token give `UNAUTHORIZED` and exactly one `auth_failed` row each (actor `client:<addr>`, subject the operation, empty detail, no token text); the 11th wrong token from one address inside a minute gives `RATE_LIMITED` with `retry_after` and writes no row (no `auth_blocked` row, trim T2), later wrong tokens in the block write no row either, and exactly 10 `auth_failed` rows exist per address per minute (O3); a correct token from the blocked address still gives `OK`; another address is unaffected; the block ends after 60 seconds; the tracked-address table never exceeds 512 (a 600-address flood evicts the least recently used unblocked entry); an audit write that raises still returns `UNAUTHORIZED`; `verify_token` and `verify_pass` use `hmac.compare_digest` (a test patches it and asserts it was called) and accept non-ASCII input without raising; the token text never appears in any audit row or log record (canary).
     - Extend `services/access.py` (`AccessControl`, `AdminResult`, `AdminOutcome`, `WrongTokenLimiter`, `ADMIN_HEADER`).
     - _Requirements: 6.2, 6.3, 6.4, 6.7_
-  - [ ] 5.4 Reduce-operations limiter
+  - [x] 5.4 Reduce-operations limiter
     - Write `tests/unit/test_services_limiter.py` first, with a fake clock: calls 1 to 10 from one key in a window return `True` and each writes its own row; calls 11 and 12 return `False`; after the window ends `flush_due` writes one `reduce_ops_suppressed` row with `count=2`; `aclose` flushes a window that has not ended; a second key is independent; the table never exceeds 256 keys and an evicted key's pending count is flushed first; an audit store that raises changes no return value and is logged; the limiter never refuses or delays a call (every `record` returns); `reduce_key("rest", "127.0.0.1")`, `("irc", nick)` and `("terminal", addr)` give the documented key formats; the scheduled `call_later` runs `flush_due` (test with a short real delay).
     - Create `services/limiter.py`.
     - _Requirements: 6.5_
-  - [ ] 5.5 IRC policy functions
+  - [x] 5.5 IRC policy functions
     - Write `tests/unit/test_services_irc_policy.py` first: `is_reserved_nick` is true for `dashboard`, `DASHBOARD`, `ChimericBot`, `chimericbot`, ` Dashboard` (stripped) and false for `dashboard2`, `bot`, `alice`; `operator_verdict` truth table: operators `None` or empty gives `OPERATORS_UNSET` whatever the nick and `pass_ok`; a nick not in the set gives `NOT_OPERATOR` (case-insensitive match); a listed nick without `pass_ok` gives `NEEDS_PASS`; a listed nick with `pass_ok` gives `ALLOWED`; `verify_pass` accepts only the real token and never raises on 10 000 characters; `OperatorVerdict.BASELINE` exists, is never returned by `operator_verdict`, and means "apply `hub.is_operator(nick)`" (used by the terminal for `!resolve`); a test asserts `RESERVED_NICKS` equals the lower-cased `WEB_NICK` and `BOT_NICK` of `hub.py` (the one wiring-level import in this file).
     - Extend `services/access.py`.
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
-  - [ ] 5.6 Property tests for the Host allow-list and the limiter
+  - [x] 5.6 Property tests for the Host allow-list and the limiter
     - Create `tests/pbt/test_services_access_properties.py` (arbitrary header text, generated `host[:port]` forms in random case, random call sequences with random keys and times against the limiter and an `AuditLog`).
     - **Property 13: Host allow-list**
     - **Property 15: Reduce limiter accounting**
     - **Validates: Requirements 6.5, 7.2, 7.3**
-  - [ ]* 5.7 Property tests for tokens, the wrong-token limiter, IRC and canaries
+  - [x]* 5.7 Property tests for tokens, the wrong-token limiter, IRC and canaries
     - Create `tests/pbt/test_services_security_properties.py`.
     - **Property 14: Token comparison**
     - **Property 16: Wrong-token limiter**
     - **Property 20: IRC verdict** (and the NICK sequence part, after 7.3 exists)
     - **Property 21: No token material in outputs**
     - **Validates: Requirements 6.2, 6.4, 6.7, 9.1, 9.2, 9.3, 9.4, 9.5**
-  - [ ] 5.8 Checkpoint: run `python -m pytest -q`; everything, including tasks 4 and 5, must pass.
+  - [x] 5.8 Checkpoint: run `python -m pytest -q`; everything, including tasks 4 and 5, must pass.
 
 - [ ] 6. HTTP layer
   - [ ] 6.1 `require_admin` dependency
