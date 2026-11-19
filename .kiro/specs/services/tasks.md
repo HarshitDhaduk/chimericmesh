@@ -1,4 +1,4 @@
-﻿# Implementation Plan: services (V1)
+# Implementation Plan: services (V1)
 
 Requirements: [requirements.md](requirements.md). Design: [design.md](design.md). Property numbers below are the numbered Correctness Properties in the design. Sub-criterion ids (4.2a to 4.2e, 10.2a to 10.2f) are the tables in the design.
 
@@ -10,28 +10,28 @@ Review notes (see "Review resolutions" in the design): M1 is task 1.3; M2 is the
 
 Round 1 changes (see "Round 1 review resolutions" in the design): the plan has 44 sub-tasks (39 required, 5 optional). New: 6.5 (pure ASGI guards) and 7.10 (interim dashboard token). Build order inside task 7: 7.1, 7.2, 7.3, 7.4, 7.5, 7.10, 7.6, 7.7, 7.8, 7.9, so the shipped page and the README demo work as soon as enforcement is on. Trims applied: no duplicate-path rule, no `path_state`, no token auto-reload, no DOS device-name check, no durable counters (one startup query instead), no `Subscription.cancel`, no `registry.version`, no `auth_blocked` row. Added: the `backfill_lines` field, the deleted-id tombstone, the fail-closed `handle_command`, the 64 KB body cap, the corrected README lines and the interim token prompt. Where the first draft's tests assumed behaviour the framework does not have (token check before JSON parsing), the tests now pin the real order.
 
-- [ ] 1. Pure validation and path rules
-  - [ ] 1.1 Package skeleton, errors, models, field validators
+- [x] 1. Pure validation and path rules
+  - [x] 1.1 Package skeleton, errors, models, field validators
     - Write `tests/unit/test_services_validate.py` first: slug accepts `a`, `proxy-worker`, a 40-character id; rejects empty, 41 characters, uppercase, leading `-`, a space, `abc\n` (trailing newline, the case that `$` would accept), a NUL, `unassigned`; `clean_text` removes control characters and lone surrogates and strips; `name` over 80, a list over 20 entries and an entry over 100 characters give `ValidationFailed` whose `.field` is the field name; de-duplication is case-insensitive and keeps the first spelling; an entry that is empty after cleaning is an error; `protocols` outside the five labels are rejected, duplicates dropped; `validate_log_source_fields` rejects a format outside the given `known_formats`, accepts the default five when none is injected, caps `host` at 100 and cleans it, accepts `backfill_lines` from 0 to 1000 (default 0) and rejects -1, 1001, 1.5, `"5"` and `True`; `for_create=False` returns a patch whose untouched fields are `None`; no function reads the filesystem (a test runs them with `os.stat` patched to raise).
     - Create `services/__init__.py` (pure re-exports only), `services/errors.py` (`ServicesError`, `ValidationFailed(field, reason)`, `Conflict`, `ServiceNotFound`, `LogSourceNotFound`, `BuiltinService`, `SubscriberFailed(name, cause)`, `ServicesNotMigrated`, `AccessConfigError`), `services/models.py` (all dataclasses of the design, `ServiceChange` properties), `services/validate.py`.
     - Append to `tests/conftest.py` the fixtures `svc_store`, `svc_mem_store` (a `Store` opened with `services_registry()`; they fail clearly until 3.1 exists, so write them as lazy imports) and `make_registry(store, hub)`; no existing fixture changes.
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 3.1, 8.3_
-  - [ ] 1.2 Code folder and log path rules
+  - [x] 1.2 Code folder and log path rules
     - Write `tests/unit/test_services_paths.py` first, on `tmp_path`: `normalize_code_folder` returns a resolved absolute path for a folder spelled with `./` components, doubled and mixed separators, through a symlink (skipped when symlinks are not permitted) and (Windows) with a different case; it is idempotent; it rejects every input that has a `..` component (`a/../a`, `..\x`, `a/..`, `a\..\a`) with `ValidationFailed("code_folder")` even when the result would be a fine folder (review 5, O1); it rejects a relative path, a missing path, a file, a NUL, a path over 1024 characters; it rejects a filesystem root, the home directory, a folder that contains the home directory (the parent of home), the data directory, a folder that contains it and a folder inside it (the `protected` list is injected, so no real home is touched); a sibling of home is accepted; `path_in_code_folder`: a child (`src/a.py`, `src\a.py`) is true, the folder itself is false, `..\x`, `src/../../x`, an absolute path elsewhere, a NUL are false, a different case is true on Windows only, a trailing dot or space in a component, `C:x` and `a.py:stream` are false on Windows (skip on POSIX), an injected `realpath` that maps `src/link` to a path outside gives false and one that maps it inside gives true, one real-symlink example is skipped when symlink creation is not permitted; `normalize_log_path` rejects relative paths and NUL and applies `normpath`; `inspect_log_path` returns without error for an absent file, for a regular file and when `os.stat` raises `PermissionError`, and raises `ValidationFailed("path")` for a directory (and for a FIFO on POSIX); the file is never opened (patch `open` to raise).
     - Create `services/paths.py`.
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 3.2, 3.3, 3.4_
-  - [ ] 1.3 Add the `services` rows to the dependency-direction test (review M1)
+  - [x] 1.3 Add the `services` rows to the dependency-direction test (review M1)
     - Edit `tests/unit/test_dependency_direction.py` (created by the `store` module, task 1.3): add the `services/*` file-to-group rows from the design, the `services` row in the "may import" table (`core`, `store`), and a per-file third-party allow-list so that only `services/deps.py` and `services/routes.py` may import `fastapi`, `starlette` or `pydantic`. Test first: an AST fixture file `services/x.py` that imports `chimericmesh.hub`, `chimericmesh.connectors`, `chimericmesh.approvals` or `httpx` fails the scan (use a temporary copy of the scanner on a temp tree, not a file under `src/`), and `services/__init__.py` imports neither `deps` nor `routes`.
     - The test must pass on the tree after 1.1 and 1.2. If the `store` test shape differs (the recommended prefix table is not there), add the rows in its existing shape; do not restructure it.
     - _Requirements: 10.4, Success Criterion 10_
-  - [ ] 1.4 Property tests for slug, text, code folder and path containment
+  - [x] 1.4 Property tests for slug, text, code folder and path containment
     - Create `tests/pbt/test_services_validation_properties.py` (strategies: arbitrary text with newlines, NUL and surrogates for the slug and the text fields; generated folder spellings on `tmp_path` built from `.`, doubled and mixed separators and case changes, with and without a `..` component; generated folder and candidate component lists, with an injected `realpath` that models symlinks, case folding and `..` for containment).
     - **Property 1: Slug validity**
     - **Property 2: Text input is clean and capped**
     - **Property 4: Code folder normalization** (accepted spellings give an absolute path without `..` that normalizes to itself; every spelling with a `..` component is rejected)
     - **Property 5: Path containment** (1000 generated escape attempts that are all false and 1000 generated children that are all true, Success Criterion 4)
     - **Validates: Requirements 1.2, 1.3, 2.1, 2.3, 8.3**
-  - [ ]* 1.5 Property tests for protocols and too-broad
+  - [x]* 1.5 Property tests for protocols and too-broad
     - Create `tests/pbt/test_services_validation_more_properties.py`.
     - **Property 3: Protocols are a subset**
     - **Property 6: Too broad**
