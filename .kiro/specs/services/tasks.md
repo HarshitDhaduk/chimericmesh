@@ -147,25 +147,25 @@ Round 1 changes (see "Round 1 review resolutions" in the design): the plan has 4
     - **Validates: Requirements 6.2, 6.4, 6.7, 9.1, 9.2, 9.3, 9.4, 9.5**
   - [x] 5.8 Checkpoint: run `python -m pytest -q`; everything, including tasks 4 and 5, must pass.
 
-- [ ] 6. HTTP layer
-  - [ ] 6.1 `require_admin` dependency
+- [x] 6. HTTP layer
+  - [x] 6.1 `require_admin` dependency
     - Write `tests/unit/test_services_deps.py` first, on a three-route FastAPI app built in the test: with enforcement off every request passes; on, a request without `X-Admin-Token` gets 401 and writes `auth_failed` with the route template (`POST /api/things/{id}`, not the concrete id); a wrong token gets 401; the right token passes; the 11th wrong token from one client gets 429 with a `Retry-After` header, and the right token from that client still passes; a token sent as a query parameter is ignored (401); a wrong token with a body that is valid JSON but fails schema validation gets 401, not 422 (the dependency runs before pydantic validation of a parsed body; this test pins the order); a wrong token with malformed JSON gets 422, because FastAPI parses the JSON before it resolves dependencies (documented and pinned by a test; the size of an unauthenticated body is limited by `BodyLimit`, task 6.5); `require_admin` is a plain `async def` that can be awaited directly with a `Request`; a missing `request.client` uses the address `unknown`.
     - Create `services/deps.py`.
     - _Requirements: 6.3, 6.4, 6.7_
-  - [ ] 6.2 Read routes
+  - [x] 6.2 Read routes
     - Write `tests/unit/test_services_routes_read.py` first, `httpx.ASGITransport` against `build_router`-built app with a real registry (the full `create_app` comes in 7.4): `GET /api/services` returns the status objects with the fields of R5.1, services in creation order and `unassigned` last; `GET /api/services/{id}` returns one, 404 for an unknown id, and `GET /api/services/unassigned` returns the pseudo service with `builtin: true`; `code_folder` is returned (R8.2); no read needs a token even with enforcement on; the responses never contain the admin token or file contents (canary: a log file with a secret line is registered and the response is searched); names are returned as stored (control characters already removed on input).
     - Create the read part of `services/routes.py` (`build_router`).
     - _Requirements: 5.1, 5.5, 5.6, 8.1, 8.2_
-  - [ ] 6.3 Service write routes
+  - [x] 6.3 Service write routes
     - Write `tests/unit/test_services_routes_write.py` first, enforcement on: every write route without the token gets 401 and creates, changes and deletes nothing, including with a body that is valid JSON but fails validation (malformed JSON gets 422, see 6.1); with the token `POST /api/services` returns 201 and the service, a duplicate id 409, the id of a deleted service 409 (tombstone), a bad slug 422 with `"field": "id"`, a 101st service 422 with the field name, a bad code folder 422 with `"field": "code_folder"`; `PATCH` returns 200 and 404, 403 for `unassigned`, `{"code_folder": null}` removes the folder, a body without the key leaves it, `{"name": null}` gets 422 (`model_fields_set` mapping, review 13); `DELETE` returns 200 `{"deleted": id}`, 404, 403 for `unassigned`, and `GET` then returns 404 while `GET /api/events` still returns the service's events; a failing `on_service_changed` subscriber gives 500 `{"detail": "subscriber <name> failed"}` and the service does not exist afterwards (R2.5); a body with an unknown field gets 422; a body over 64 KB gets 413 before any parsing (task 6.5); the audit actor is `rest:<addr>`; no response contains the token.
     - Extend `services/routes.py`.
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.6, 2.5, 6.3, 8.3_
-  - [ ] 6.4 Log source routes
+  - [x] 6.4 Log source routes
     - Extend `tests/unit/test_services_routes_write.py` first: `POST /api/services/{id}/log-sources` returns 201 with the source (including `backfill_lines`, default 0), 401 without the token, 404 for an unknown service, 403 for `unassigned`, 422 for a directory, a relative path, an unknown format or a `backfill_lines` of 1001 (`"field"` is `path`, `format` or `backfill_lines`); registering one path twice is accepted (trim T2); a body that sets `origin` gets 422 (`extra="forbid"`) and the stored origin is `user`; `PATCH` updates `enabled`, `format`, `host`; `DELETE` removes; the file is never opened; the registry status provider is consulted only by the read routes.
     - Extend `services/routes.py`.
     - _Requirements: 1.5, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 6.3_
 
-  - [ ] 6.5 Pure ASGI guards: Host check and body size cap (review 2, 13)
+  - [x] 6.5 Pure ASGI guards: Host check and body size cap (review 2, 13)
     - Write `tests/unit/test_services_asgi.py` first, driving the ASGI callables with hand-made `scope`, `receive` and `send`: `BodyLimit(app, max_bytes=65536)` answers 413 `{"detail": "body too large"}` without calling the app when `content-length` is 65537 and does not read the body; a chunked body that passes 65536 bytes gets 413 after reading at most 65536 plus one chunk; a body of exactly 65536 bytes passes; `GET`, lifespan and websocket scopes pass untouched; only paths that start with `/api/` are limited; `HostGuard(app, access)` with enforcement on answers 403 `{"detail": "host not allowed"}` before calling the app for `Host: evil.example` on `/api/stats`, passes `127.0.0.1:8000`, `localhost` and `[::1]`, passes non-`/api/` paths (the page `/`) and non-HTTP scopes, answers 403 on `/api/` when the Host header is missing, and passes everything when `AccessControl.disabled()`; an app that sends two body chunks with `more_body=True` (the SSE shape) has its first chunk reach `send` before the app returns (no buffering); at most one warning per minute is logged for refused hosts and no audit row is written.
     - Create `services/asgi.py` (`HostGuard`, `BodyLimit`; stdlib only, no framework import).
     - _Requirements: 6.3, 7.2, 7.3_

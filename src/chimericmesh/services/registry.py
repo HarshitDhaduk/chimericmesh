@@ -259,6 +259,10 @@ class ServiceRegistry:
             label = getattr(first, "__qualname__", None) or repr(first) if first is not None else "subscriber"
         self._subs.append(_Subscription(label, *callbacks))
 
+    @property
+    def known_formats(self) -> frozenset[str]:
+        return self._known_formats
+
     def set_known_formats(self, names: Iterable[str]) -> None:
         cleaned: set[str] = set()
         for name in names:
