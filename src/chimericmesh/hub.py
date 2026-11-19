@@ -11,7 +11,7 @@ import time
 from collections import OrderedDict, deque
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Awaitable, Callable, Mapping
+from typing import Any, Awaitable, Callable, Mapping
 
 from typing import TYPE_CHECKING
 
@@ -103,10 +103,16 @@ class Hub:
     def __init__(self, capacity: int = 2000, code_root: Path | None = None,
                  webhook_url: str | None = None, irc_channel: str = "#ops",
                  clock: Callable[[], float] = time.time, *, reopen_after: int | None = None,
-                 audit: AuditSink | None = None, store: Store | None = None) -> None:
+                 audit: AuditSink | None = None, store: Store | None = None,
+                 enforce_access: bool = False) -> None:
         self.events: deque[Event] = deque(maxlen=capacity)  # bounded log view only
         self._event_seq = 0  # last event id handed out; ids start at 1
         self.store = store
+        # Wiring slots filled by create_app; the defaults leave a bare Hub exactly as it was.
+        self.enforce_access = enforce_access
+        self.access: Any = None
+        self.tagger: Callable[[Event], Event] | None = None
+        self._tagger_warned = float("-inf")
         self._audit = audit if audit is not None or store is None else store.audit
         self._closed = False
         self._stored_unloaded_ids: set[str] = set()  # stored incidents not in the tracker (ids only)
@@ -290,6 +296,11 @@ class Hub:
         Everything up to the first ``await`` runs without yielding, so a second ``ingest`` for the
         same incident that runs during an await sees the new state and cannot open or reopen it twice.
         """
+        if self.tagger is not None:
+            try:
+                event = self.tagger(event)
+            except Exception:  # a tagging bug must never lose an event
+                self._warn_tagger_failed()
         pid = self.tracker.preview_id(event)  # None when the tracker would ignore the event
         rehydrated = True
         if pid is not None and pid in self._stored_unloaded_ids and not self.tracker.known(pid):
@@ -332,6 +343,12 @@ class Hub:
             else:
                 self.lifecycle.mark_dirty(inc)
         return event
+
+    def _warn_tagger_failed(self) -> None:
+        now = time.monotonic()
+        if now - self._tagger_warned >= 60.0:  # one line per minute
+            self._tagger_warned = now
+            log.exception("tagger failed; ingesting untagged")
 
     def _count(self, event: Event) -> None:
         self.total_events += 1

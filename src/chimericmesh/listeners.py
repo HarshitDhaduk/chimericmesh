@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import socket
 
 from .commands import handle_command, parse_command
 from .hub import Hub
+from .services.access import OperatorVerdict, is_reserved_nick
 from .parsers import format_privmsg, irc_to_event, parse_irc_line, parse_syslog, telnet_to_event
 
 log = logging.getLogger("chimericmesh.listeners")
 MAX_READ = 4096
+MAX_PASS = 200
+_CTRL = re.compile(r"[\r\n\x00]")
 
 
 class SyslogProtocol(asyncio.DatagramProtocol):
@@ -83,7 +87,7 @@ class IrcServer:
             self.clients.pop(writer, None)
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        info = {"nick": "*", "channels": set(), "registered": False}
+        info = {"nick": "*", "channels": set(), "registered": False, "pass_ok": False}
         self.clients[writer] = info
         try:
             while data := await reader.readline():
@@ -101,8 +105,23 @@ class IrcServer:
 
     async def _dispatch(self, writer, info, msg, line: str) -> None:
         cmd, params = msg.command, msg.params
-        if cmd == "NICK" and params:
-            info["nick"] = params[0][:30]
+        enforce = self.hub.enforce_access
+        if cmd == "PASS" and params and enforce and not info["registered"]:
+            # The value is compared and dropped: never stored, echoed, logged or recorded.
+            access = self.hub.access
+            value = params[0]
+            info["pass_ok"] = bool(access is not None and len(value) <= MAX_PASS and access.verify_pass(value))
+            if not info["pass_ok"]:
+                self._send(writer, f":{self.name} 464 {info['nick']} :Password incorrect")
+        elif cmd == "NICK" and params:
+            nick = _CTRL.sub("", params[0])[:30]
+            if not nick:
+                self._send(writer, f":{self.name} 431 {info['nick']} :No nickname given")
+                return
+            if enforce and is_reserved_nick(nick):
+                self._send(writer, f":{self.name} 433 {info['nick']} {nick} :Nickname is already in use")
+                return
+            info["nick"] = nick
             if not info["registered"]:
                 info["registered"] = True
                 self._send(writer, f":{self.name} 001 {info['nick']} :Welcome to ChimericMesh")
@@ -121,7 +140,8 @@ class IrcServer:
                     command = parse_command(params[-1])
                     if command is not None:
                         self.hub.record(info["nick"], params[-1], "user")
-                        await handle_command(self.hub, info["nick"], params[0], command)
+                        await handle_command(self.hub, info["nick"], params[0], command,
+                                             verdict=self._verdict(info))
                     return
                 tagged = f":{info['nick']}!u@h {cmd} {params[0]} :{params[-1]}"
                 event = irc_to_event(tagged)
@@ -129,6 +149,13 @@ class IrcServer:
                     await self.hub.ingest(event)
         elif cmd == "QUIT":
             raise ConnectionError
+
+    def _verdict(self, info: dict) -> OperatorVerdict | None:
+        """The operator verdict for this connection; ``None`` (baseline) while enforcement is off."""
+        access = self.hub.access
+        if not self.hub.enforce_access or access is None:
+            return None  # off: baseline rule. On without access: handle_command fails closed.
+        return access.operator_verdict(info["nick"], operators=self.hub.operators, pass_ok=info["pass_ok"])
 
     async def start(self, host: str, port: int) -> asyncio.Server:
         return await asyncio.start_server(self.handle, host, port)

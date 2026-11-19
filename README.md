@@ -145,7 +145,19 @@ Includes Hypothesis property tests for parser totality, IRC injection safety, an
 
 ## Security notes
 
-No authentication; intended for localhost or trusted networks. Log text is rendered as text only, and outbound IRC is stripped of control characters.
+Intended for localhost. Changes that widen what can happen (approving, denying, editing services) need the admin token; see "Access control". Log text is rendered as text only, and outbound IRC is stripped of control characters.
+
+## Access control
+
+`python -m chimericmesh` turns access enforcement on. A test or embedding that passes its own hub to `create_app` gets it off unless it asks for `enforce_access=True`.
+
+- **Admin token.** A random token lives in `~/.chimericmesh/admin.token` (owner-only permissions). Set `CHIMERICMESH_TOKEN_FILE` to use another path. The startup log prints the file's path, never the token. `python -m chimericmesh token --rotate` writes a new token and prints only the path. A running hub keeps its old token, and the new one takes effect at the next hub start. With `CHIMERICMESH_DB=:memory:` the token exists only in memory and no file is written.
+- **What needs the token.** Creating, editing or deleting services and log sources (`/api/services...`), `POST /api/proposals/{id}/decide`, and `!approve` / `!deny` in the dashboard terminal. Clients send it in the `X-Admin-Token` header. Reads, ingest, creating or completing proposals, `!resolve` and the demo routes need no token.
+- **Reducing operations are open.** Pause, revoke and withdraw need no token and are open to any local caller, including the agent from a shell. The cost is that a local process can stop auto-approvals or withdraw proposals: an annoyance, not escalation. Resume and every other rule change need the user.
+- **Honest limit.** The token keeps out web pages and local processes that cannot read your files. It does not stop the agent, which runs as you and can read the token file. Kiro's shell prompt is the real gate for what the agent does.
+- **Host check.** Requests to `/api/*` must carry a `Host` of `127.0.0.1`, `localhost` or `[::1]` (any port), which blocks DNS rebinding. `CHIMERICMESH_ALLOWED_HOSTS` (comma-separated) replaces that list. `CHIMERICMESH_BIND` sets the listen address; a non-loopback value logs a warning, because the dashboard is then reachable from other machines.
+- **IRC operators.** `CHIMERICMESH_OPERATORS` lists the nicks that may use `!approve`, `!deny` and `!resolve`. With enforcement on, an IRC client must also set the server password to the admin token (`PASS`, for example `/server 127.0.0.1 6667 <token>`). If `CHIMERICMESH_OPERATORS` is unset, operator commands are refused on IRC. The nicks `dashboard` and `ChimericBot` are reserved.
+- **Services and incidents.** Two services behind one sender host that log the same error signature share an incident; it belongs to the service of its first tagged event.
 
 ## License
 
@@ -165,7 +177,7 @@ IRC is a two-way operator interface. Registered clients can send commands (messa
 | `!resolve <id> [note]` | operator | Resolve an incident |
 | `!approve <pid>` / `!deny <pid>` | operator | Decide a proposal |
 
-Operators are set with `CHIMERICMESH_OPERATORS` (comma-separated nicks, case-insensitive). If it is unset or empty, any registered nick counts as an operator. That is only acceptable on localhost or a trusted network, since IRC nicks are not authenticated here.
+Operators are set with `CHIMERICMESH_OPERATORS` (comma-separated nicks, case-insensitive) and, with enforcement on (the default for `python -m chimericmesh`), must also send the admin token as the server password; if it is unset or empty, operator commands are refused. Only with enforcement off (an injected hub, as in tests) does an unset list mean any registered nick counts as an operator. See "Access control".
 
 ### Human-approved remediation loop
 
@@ -193,7 +205,7 @@ Safety: ChimericMesh never executes a proposed action on any host. It only recor
 2. Run the service: `python examples/legacy_app/run.py`. It sends syslog to the hub.
 3. Open the dashboard and wait for the `network` incident about the upstream timeout.
 4. In Kiro, pick the `mesh-responder` agent and ask it to investigate and propose a fix.
-5. Approve with `!approve p1` in the dashboard terminal or on IRC.
+5. Approve with `!approve p1` in the dashboard terminal: it needs the admin token, and the page asks for it once (paste the contents of `~/.chimericmesh/admin.token`). On IRC, set the server password to the admin token and use a nick listed in `CHIMERICMESH_OPERATORS`.
 6. The agent edits the code, runs `python -m pytest examples/legacy_app/tests -q`, restarts nothing on its own, and reports the event rate. Restart `run.py` to load the fix and watch the rate fall.
 7. Reset the buggy state: `git checkout -- examples/legacy_app` and `git clean -fd examples/legacy_app`.
 
@@ -201,7 +213,7 @@ Safety: ChimericMesh never executes a proposed action on any host. It only recor
 
 The dashboard has a ChimericBot terminal: a transcript of everything the bot says plus an input line that accepts the same `!` commands as IRC (`!help`, `!status`, `!incidents`, `!explain <id>`, `!proposals`, `!approve`, `!deny`, `!resolve`). Dashboard buttons just send these commands, so every action appears in the transcript and one authorization check applies everywhere. Replies are also broadcast to IRC.
 
-Web commands run as the fixed nick `dashboard`; the browser cannot choose a nick. To restrict approvals, set `CHIMERICMESH_OPERATORS` (comma-separated). If you restrict it and want the dashboard user to decide, include `dashboard`, for example `CHIMERICMESH_OPERATORS=alice,dashboard`.
+Web commands run as the fixed nick `dashboard`; the browser cannot choose a nick. With enforcement on, `!approve` and `!deny` in the terminal need the admin token instead of an operator nick (the page asks for it once and keeps it for the tab), so `CHIMERICMESH_OPERATORS` only governs IRC and `!resolve`.
 
 The guided workflow (`GET /api/workflow`) has six steps:
 1. Send some traffic (any event ingested)

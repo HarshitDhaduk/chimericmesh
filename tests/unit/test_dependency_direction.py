@@ -29,6 +29,7 @@ FILE_GROUPS: dict[str, str] = {
     "parsers/": "core",
     "store/": "store",
     "fsperms.py": "store",
+    "services/": "services",
     "notify.py": "wiring",
     "replay.py": "wiring",
     "replay_irc.py": "wiring",
@@ -59,6 +60,12 @@ MAY_IMPORT: dict[str, set[str]] = {
 }
 
 THIRD_PARTY_ALLOWED_GROUPS = {"wiring"}
+
+# Per-file allow-list (services, task 1.3): only the HTTP layer of a module may import the web stack.
+THIRD_PARTY_FILES: dict[str, set[str]] = {
+    "services/deps.py": {"fastapi", "starlette", "pydantic"},
+    "services/routes.py": {"fastapi", "starlette", "pydantic"},
+}
 
 
 def group_of(rel: str) -> str | None:
@@ -154,8 +161,9 @@ def test_third_party_imports_only_in_wiring():
         group = group_of(rel)
         if group in THIRD_PARTY_ALLOWED_GROUPS:
             continue
+        allowed_here = THIRD_PARTY_FILES.get(rel, set())
         for top, parts in imports_of(path):
-            if top != PKG and top not in stdlib:
+            if top != PKG and top not in stdlib and top not in allowed_here:
                 problems.append(f"{rel} ({group}) imports third-party {top}")
     assert not problems, "\n".join(problems)
 
@@ -198,3 +206,66 @@ def test_checker_detects_violations(tmp_path, monkeypatch):
     assert (PKG, ["hub"]) in found
     assert ("httpx", None) in found
     assert group_of(_module_rel(["hub"])) == "wiring"
+
+
+def test_services_init_loads_no_web_layer():
+    init = SRC / "services" / "__init__.py"
+    imported = {".".join(parts) for top, parts in imports_of(init) if top == PKG and parts}
+    assert not [m for m in imported if m.endswith(("services.deps", "services.routes"))]
+    text = init.read_text(encoding="utf-8")
+    assert "from .deps" not in text and "from .routes" not in text
+    assert "import deps" not in text and "import routes" not in text
+
+
+def _violations(root: Path) -> list[str]:
+    """The scanner of this file, run on another tree (its logic with SRC swapped)."""
+    global SRC
+    saved = SRC
+    SRC = root
+    try:
+        stdlib = set(sys.stdlib_module_names)
+        out: list[str] = []
+        for path in all_files():
+            rel = path.relative_to(SRC).as_posix()
+            group = group_of(rel)
+            for top, parts in imports_of(path):
+                if top == PKG and parts is not None:
+                    target = group_of(_module_rel(parts))
+                    if target is not None and target not in MAY_IMPORT[group]:
+                        out.append(f"{rel} imports {'.'.join(parts)} ({target})")
+                elif (top != PKG and top not in stdlib and group not in THIRD_PARTY_ALLOWED_GROUPS
+                      and top not in THIRD_PARTY_FILES.get(rel, set())):
+                    out.append(f"{rel} imports third-party {top}")
+        return out
+    finally:
+        SRC = saved
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "from chimericmesh.hub import Hub",
+        "import chimericmesh.connectors",
+        "from chimericmesh import approvals",
+        "import httpx",
+        "import fastapi",
+    ],
+)
+def test_services_file_with_forbidden_import_fails_the_scan(tmp_path, monkeypatch, line):
+    pkg = tmp_path / PKG
+    (pkg / "services").mkdir(parents=True)
+    (pkg / "store").mkdir()
+    (pkg / "store" / "__init__.py").write_text("")
+    for name in ("hub.py", "connectors.py", "approvals.py"):
+        (pkg / name).write_text("")
+    monkeypatch.setitem(FILE_GROUPS, "connectors.py", "connectors")
+    monkeypatch.setitem(FILE_GROUPS, "approvals.py", "auto-approval")
+    (pkg / "services" / "x.py").write_text(line + "\n")
+    assert _violations(pkg), line
+    (pkg / "services" / "x.py").write_text("import os\nfrom chimericmesh.store import Store\n")
+    assert _violations(pkg) == []
+    # the web stack is allowed in services/routes.py only
+    (pkg / "services" / "routes.py").write_text("import fastapi\n")
+    assert _violations(pkg) == []
+    (pkg / "services" / "asgi.py").write_text("import starlette\n")
+    assert _violations(pkg) == ["services/asgi.py imports third-party starlette"]
