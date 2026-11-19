@@ -112,3 +112,18 @@ def test_scheduled_call_later_runs_flush_due():
         assert audit.rows[-1][1] == "reduce_ops_suppressed" and audit.rows[-1][3] == "count=2"
         await lim.aclose()
     asyncio.run(go())
+
+
+def test_timer_firing_early_rearms_until_window_is_due():
+    async def go():
+        import time as _t
+        audit = FakeAudit()
+        lag = 0.03                                  # wall clock behind the loop timer
+        lim = ReduceAuditLimiter(audit, lambda: _t.time() - lag, per_minute=1, window=0.1)
+        assert await call(lim, n=3) == [True, False, False]
+        await asyncio.sleep(0.5)
+        assert audit.rows[-1][1] == "reduce_ops_suppressed" and audit.rows[-1][3] == "count=2"
+        assert not lim._windows
+        await lim.aclose()
+    asyncio.run(go())
+

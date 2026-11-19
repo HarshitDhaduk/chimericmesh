@@ -86,7 +86,9 @@ class ReduceAuditLimiter:
     # ---- internals -----------------------------------------------------------------------------
 
     async def _flush_one(self, key: str, win: _Window) -> None:
-        self._windows.pop(key, None)
+        if self._windows.get(key) is not win:
+            return
+        del self._windows[key]
         if win.suppressed:
             await self._write("reduce-limiter", "reduce_ops_suppressed", key, f"count={win.suppressed}")
 
@@ -112,9 +114,17 @@ class ReduceAuditLimiter:
 
         def fire() -> None:
             self._timers.discard(handle)
-            task = loop.create_task(self.flush_due())
+            task = loop.create_task(self._fire())
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
 
         handle = loop.call_later(delay, fire)
         self._timers.add(handle)
+
+    async def _fire(self) -> None:
+        """Flush due windows, then re-arm for a pending window the timer fired too early for."""
+        await self.flush_due()
+        now = float(self._now())
+        pending = [w.start + self._window - now for w in self._windows.values() if w.suppressed]
+        if pending:
+            self._schedule(max(0.01, min(pending)) + 0.01)
