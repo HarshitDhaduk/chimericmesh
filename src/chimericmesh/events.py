@@ -7,7 +7,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
-Source = Literal["syslog", "irc", "telnet", "api"]
+Source = Literal["syslog", "irc", "telnet", "api", "file"]
 
 # Syslog severities (RFC 5424): 0 emerg ... 7 debug
 SEVERITY_NAMES = ["emerg", "alert", "crit", "err", "warning", "notice", "info", "debug"]
