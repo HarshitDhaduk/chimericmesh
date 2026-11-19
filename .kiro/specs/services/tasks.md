@@ -37,61 +37,61 @@ Round 1 changes (see "Round 1 review resolutions" in the design): the plan has 4
     - **Property 6: Too broad**
     - **Validates: Requirements 1.4, 2.2**
 
-- [ ] 2. Tagging
-  - [ ] 2.1 Service index and `resolve_service`
+- [x] 2. Tagging
+  - [x] 2.1 Service index and `resolve_service`
     - Write `tests/unit/test_services_tagging.py` first, one test per sub-criterion: 4.2a (no `log_source_id`: app, then host decide), 4.2b (a known `log_source_id` wins over a different service's app and host match), 4.2c (app name, case-insensitive), 4.2d (host, case-insensitive), 4.2e (no match gives `None`); an unknown `log_source_id` falls through to app and host; two services matching the same app give the one created first (`seq` order, tested by building the index from a reversed list); `build_index` of an empty list resolves everything to `None`; the function returns only ids in the index; inputs of 1 MB of text and NUL do not raise; micro benchmark (R4.7): 100 services with 20 hosts and apps each, 20 000 lookups, mean under 1 ms (skipped when `CHIMERICMESH_SKIP_BENCH=1`).
     - Create `services/tagging.py`.
     - _Requirements: 4.1, 4.2, 4.3, 4.7_
-  - [ ] 2.2 Property tests for tagging
+  - [x] 2.2 Property tests for tagging
     - Create `tests/pbt/test_services_tagging_properties.py` (random service sets with overlapping hosts and apps, random event fields, shuffled build order, mixed case, arbitrary text).
     - **Property 7: Tagging precedence and determinism**
     - **Property 8: Tagging is total**
     - **Validates: Requirements 4.1, 4.2, 4.3, 4.4**
-  - [ ]* 2.3 Property test for edits and stored events
+  - [x]* 2.3 Property test for edits and stored events
     - Create `tests/pbt/test_services_tagging_edits_properties.py` (uses the registry from 3.3, so write it after 3.3 and run it there).
     - **Property 9: Tagging ignores later registry changes for stored events**
     - **Validates: Requirements 4.6**
 
-- [ ] 3. Schema, persistence, registry and subscriptions
-  - [ ] 3.1 Migration and schema
+- [x] 3. Schema, persistence, registry and subscriptions
+  - [x] 3.1 Migration and schema
     - Write `tests/unit/test_services_schema.py` first: a new store opened with `services_registry()` has `services`, `log_sources` and `service_tombstones` and the index, and `user_version` is at least 100; opening twice applies migration `services:0100-registry` once; inserting a service with id `unassigned`, a name of 81 characters or a code folder over 1024 characters fails the `CHECK`; deleting a service cascades to its log sources (`foreign_keys` is on) and leaves rows in `events`, `incidents` and `proposals` that carry its `service_id`; a `backfill_lines` of -1 or 1001 fails the `CHECK`; `service_tombstones` exists and a duplicate tombstone id fails; there is no `service_stats` table and no `path_key` column (trims T2, T3); a version below 100 or above 199 cannot be registered by `register_migrations` (the store's registry raises); `core_registry()` alone yields a store without these tables.
     - Create `services/schema.py` (`register_migrations`, `services_registry`).
     - _Requirements: 1.1, 1.6, 1.7, 3.1_
-  - [ ] 3.2 Registry load and create (against a plain and a store-backed hub)
+  - [x] 3.2 Registry load and create (against a plain and a store-backed hub)
     - Write `tests/unit/test_services_registry.py` first, parametrized over `Hub()` with a private `:memory:` store and `Hub(store=<file store>)` (review M2): `ServiceRegistry.load` on an empty store gives `list() == []`; `create_service` returns a `Service` with `seq`, `created_at == updated_at`, writes one audit row `service_created` (actor, service id, field names only, no values); the registry survives close and reopen on a file store (R1.7) with the same order and ids; with the private `:memory:` store it behaves identically and writes no file; a duplicate id gives `Conflict`; the 101st service gives `ValidationFailed` with field `services`; two concurrent `create_service` calls with one id give one success and one `Conflict`; cancelling the awaiting task after the commit still applies the delta (block the writer, cancel, release: `get(id)` returns the service, no `InvalidStateError` is logged); a store opened without the migrations makes `load` raise `ServicesNotMigrated`; `set_known_formats` and the default format set are used by 3.4.
     - Create `services/registry.py` (load, reads, `create_service`, `_mutate`, `_commit_and_apply`, the lock, the index rebuild).
     - _Requirements: 1.1, 1.2, 1.3, 1.5, 1.7, 4.5_
-  - [ ] 3.2a Atomic `create_service_with_sources` (accepted 2026-11-18, discovery O2)
+  - [x] 3.2a Atomic `create_service_with_sources` (accepted 2026-11-18, discovery O2)
     - Extend `tests/unit/test_services_registry.py` first (same parametrization as 3.2): a call with a service and three sources returns the `Service` and three `LogSource` rows with ids `ls1` to `ls3` and the given `origin` on each; it writes one `service_created` and three `log_source_added` audit rows; `after_commit` fires after the commit for each change and the in-transaction subscribers run once per change; with an empty source list it behaves like `create_service`. All or nothing: a bad format on the third source, a directory path, a relative path, a duplicate service id, a tombstoned id, the 21st source on the service, the 201st source overall, the 101st service, a raising in-transaction subscriber and an injected store failure each leave no service row, no source row, no audit row, no tombstone and unchanged counters, and the next successful call still gets `ls1`; none of these opens a log file (patch `open`). Code folder ownership (O12): the registry normalizes a raw `code_folder` spelling (`./` components, mixed separators) in `create_service`, `create_service_with_sources` and `update_service`, and an already normalized value is stored unchanged.
     - Extend `services/registry.py` (`create_service_with_sources` on top of `_mutate`, reusing the existing validators and caps).
     - _Requirements: 1.1, 1.5, 1.6, 2.1, 3.1, 3.3, 3.4_
     - _Requirements: 10.1, 10.2_
-  - [ ] 3.3 Edit and delete a service
+  - [x] 3.3 Edit and delete a service
     - Extend `tests/unit/test_services_registry.py` first (same parametrization): `update_service` changes only the given fields, rejects an unknown id (`ServiceNotFound`), refuses `unassigned` (`BuiltinService`), writes `service_updated` with the changed field names, and for `code_folder` a detail with the old and new path; a code folder that does not exist, is a file, is too broad or is relative gives `ValidationFailed("code_folder")`; setting `code_folder=CLEAR` removes it; a service without a code folder reports `code_folder is None` (R2.4: no auto-approvable scope); an edit whose values equal the stored values writes nothing and keeps `updated_at` (R10.5); `delete_service` removes the service, its log sources and its in-memory counters, inserts the id into `service_tombstones`, keeps events, incidents and proposals with the deleted id (insert rows through the store and read them back), writes `service_deleted`, and `get(id)` is `None` afterwards; `create_service` with the deleted id gives `Conflict` (the tombstone, also after a restart and also when the second create races a delete), a different id works, and the old open incidents are not counted for any new service (review 7); events that arrive after a delete are `unassigned` (R4.6: stored events are not rewritten); a service created after another with the same host takes precedence by `seq` after the first is deleted.
     - Extend `services/registry.py`.
     - _Requirements: 1.5, 1.6, 2.1, 2.2, 2.4, 4.6, 10.5_
-  - [ ] 3.4 Log sources
+  - [x] 3.4 Log sources
     - Extend `tests/unit/test_services_registry.py` first: `add_log_source` returns the `LogSource` (with `backfill_lines`, default 0, stored and returned as given from 0 to 1000); a missing file is accepted (R3.3); a directory path gives `ValidationFailed("path")`; a relative path and a NUL give 422; a format outside `known_formats` gives 422 (after `set_known_formats(["plain"])` only `plain` passes; the default five apply before the call); ids are `ls1`, `ls2`, never reused after a delete and a restart; `origin` is `user` by default and `discovery` only through the keyword; the 21st source on one service and the 201st overall give `ValidationFailed` with field `log_sources`; a second source with the same path is accepted (trim T2; `connectors` refuses to tail one path twice, its task 7.2); `update_log_source` changes `format`, `enabled`, `host` and `backfill_lines` and writes `log_source_updated` with field names; an update whose values equal the stored ones writes nothing, calls no subscriber and writes no audit row (R10.5 for log sources, review 13); `remove_log_source` writes `log_source_removed`; none of these opens the file (patch `open`); `log_sources(enabled_only=True)` and `source(id)` reflect changes after each commit; the status provider is not consulted by these calls.
     - Extend `services/registry.py`.
     - _Requirements: 1.5, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
-  - [ ] 3.5 Subscriptions and transaction semantics (review M3, L8)
+  - [x] 3.5 Subscriptions and transaction semantics (review M3, L8)
     - Write `tests/unit/test_services_subscribe.py` first, one test per sub-criterion: 10.2a (three `on_service_changed` subscribers run in registration order, receive an open `tx`, and each can write a row through it; the thread name recorded inside is `store-writer`); 10.2b (the second raises: no service row, no audit row, counters unchanged, the other subscribers still registered); 10.2c (no `after_commit` call, index unchanged); 10.2d (`SubscriberFailed.name` equals the `name` given at `subscribe`, and the `__qualname__` when none was given); 10.2e (`after_commit` is called once after the commit on the loop thread, with the same `ServiceChange`, and may be a coroutine function); 10.2f (an `after_commit` that raises, and one that sleeps 6 s with the limit patched to 0.2 s, are logged, the change stays, the next callback still runs); the matrix of the design table, one assertion per row (create, edit with a code folder change calls both `on_service_changed` and `on_code_folder_changed` with `old_code_folder` and `new_code_folder`, edit with equal values calls nothing, log source add, edit, remove, delete calls only `on_service_deleted` and its `change.old.log_sources` lists the removed sources); a subscriber that calls `store.transact_sync` (or awaits through `asyncio.run_coroutine_threadsafe`) raises `StoreReentryError` and the whole change is rolled back with that subscriber named; a subscriber registered while a change is in flight is not called for that change (the writer thread iterates a snapshot taken before `transact`); an `on_*` callback may run again when the store retries the transaction (a store stub runs the closure twice, as store T8 allows) and must leave exactly one row; the callbacks of two back-to-back changes may overlap and a slow `after_commit` of the first does not delay the second change's commit; a subscriber that only writes (an offsets row) and a delete leave no orphan row when a later subscriber fails; the module docstring states the callback contract (a test greps for the words `may not await` and `re-runnable`).
     - Extend `services/registry.py` (`subscribe`, callback dispatch with `run_callbacks` over a snapshot of the subscriber tuple, the 5-second guard).
     - _Requirements: 1.6, 2.5, 10.1, 10.2, 10.5_
-  - [ ] 3.6 Injection points for `connectors` (known formats, status provider, reads)
+  - [x] 3.6 Injection points for `connectors` (known formats, status provider, reads)
     - Extend `tests/unit/test_services_registry.py` first: `set_known_formats` copies and lower-cases the names, rejects a name that does not match `[a-z0-9][a-z0-9-]{0,29}` with `ValueError`, and affects only later writes (existing sources stay); `set_status_provider(fn)` stores the function and `set_status_provider(None)` removes it; `list()` is in creation order; `log_sources()` returns every source in creation order; a test imports `chimericmesh.services` in a fresh interpreter and asserts that neither `fastapi` nor `chimericmesh.connectors` is in `sys.modules`.
     - Edit `services/registry.py`.
     - _Requirements: 3.1, 5.1, 10.3_
-  - [ ] 3.7 Property tests for subscribers and persistence
+  - [x] 3.7 Property tests for subscribers and persistence
     - Create `tests/pbt/test_services_registry_properties.py` (random operation lists on a temporary file store, random subscriber lists with one failing at a random position, restarts).
     - **Property 17: Subscriber atomicity**
     - **Property 18: Registry round trip**
     - **Validates: Requirements 1.1, 1.2, 1.6, 1.7, 2.5, 10.2**
-  - [ ]* 3.8 Property test for spurious notifications
+  - [x]* 3.8 Property test for spurious notifications
     - Create `tests/pbt/test_services_notify_properties.py`.
     - **Property 19: No spurious notifications**
     - **Validates: Requirements 10.5**
-  - [ ] 3.9 Checkpoint: run `python -m pytest -q`; the whole existing suite and tasks 1 to 3 must pass.
+  - [x] 3.9 Checkpoint: run `python -m pytest -q`; the whole existing suite and tasks 1 to 3 must pass.
 
 - [ ] 4. Status
   - [ ] 4.1 Counters, `state` and `error_rate`

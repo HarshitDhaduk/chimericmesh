@@ -26,10 +26,14 @@ from .models import (
     StatusProvider,
 )
 from .paths import path_in_code_folder
+from .registry import ServiceRegistry
+from .schema import register_migrations, services_registry
+from .tagging import ServiceIndex, build_index, resolve_service
 
 __all__ = [
     "AccessConfigError", "BuiltinService", "CLEAR", "Conflict", "LogSource", "LogSourceFields",
     "LogSourceNotFound", "LogSourcePatch", "Service", "ServiceChange", "ServiceFields",
     "ServiceNotFound", "ServicePatch", "ServicesError", "ServicesNotMigrated", "SourceRuntime",
-    "StatusProvider", "SubscriberFailed", "ValidationFailed", "path_in_code_folder",
+    "StatusProvider", "SubscriberFailed", "ValidationFailed", "path_in_code_folder", "ServiceRegistry",
+    "register_migrations", "services_registry", "ServiceIndex", "build_index", "resolve_service",
 ]
