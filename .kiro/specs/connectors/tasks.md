@@ -70,22 +70,22 @@ Round 1 changes (see "Round 1 review resolutions" in the design): 8.6 is new and
     - **Property 20: Submit contract**
     - **Validates: Requirements 1.1**
 
-- [ ] 3. Syslog over TCP
-  - [ ] 3.1 Frame decoder
+- [x] 3. Syslog over TCP
+  - [x] 3.1 Frame decoder
     - Write `tests/unit/test_tcp_framing.py` first: `detect_mode(b"12 <34>x")` is `octet`; `b"1234 x"` octet; `b"12345 x"`, `b"102400 x"`, `b"2026-11-18T10:00:00 host x"`, `b"<34>Nov 18"`, `b"5-abc"`, `b"abc"` and `b"\n"` are `lf`; `b"12"` and `b""` are `None` (undecided); the octet decoder yields `b"hello"` for `b"5 hello"`, two frames from `b"5 hello3 abc"`, a frame split across `feed` calls one byte at a time, and tolerates `\r\n` between frames; `b"0 x"`, `b"9999 x"`, `b"8193 x"`, `b"12345 x"` and `b"102400 x"` after a first valid octet frame, `b"9999 x"` as the very first bytes (octet mode, then the length error), `b"x5 hello"` after one, and `b"5hello"` give one `FrameError` and the decoder is `failed` (later `feed` returns `[]`); a frame of exactly 8192 bytes is accepted; the LF decoder splits on `\n`, strips `\r`, skips empty lines, emits an 8192-byte line without newline cut, discards the rest of that line and parses the next line normally; `finish()` returns the unterminated LF line at EOF and nothing for octet mode; frames are `bytes`, never `str`; a 5 MB single `feed` of garbage in LF mode returns lines of at most 8192 bytes.
     - Create `connectors/framing.py`.
     - _Requirements: 2.2, 2.3, 2.4, 2.5, 2.8_
-  - [ ] 3.2 Property tests for framing
+  - [x] 3.2 Property tests for framing
     - Create `tests/pbt/test_tcp_framing_properties.py` (strategies: lists of messages without newline for LF mode and with any bytes for octet mode, random chunk partitions, random first bytes, streams with an invalid header at a random position).
     - **Property 9: Framing is chunking-invariant**
     - **Property 10: Framing detection**
     - **Property 11: Invalid frames close only that connection** (the decoder part; the server part is in 3.3)
     - **Validates: Requirements 2.2, 2.3, 2.4, 2.5**
-  - [ ] 3.3 The TCP server
+  - [x] 3.3 The TCP server
     - Write `tests/unit/test_tcp_server.py` first, real sockets on port 0 and a recording `submit`: an octet-framed message and an LF-framed line each produce one event with `source="syslog"`, parsed by `parse_syslog` (PRI severity kept); the peer IP is the host when the message carries none and the message host wins when it has one (R2.7); invalid UTF-8 bytes decode with replacement characters (R2.8); Success Criterion 3 (review 1, Option A, O10): on a connection that first sent a valid `5 hello` frame (the decoder is in octet mode), a 100 KB octet frame (`102400 ` header) closes that connection, `stats.dropped == 1` and `framing_errors == 1`; a connection whose first bytes are `9999 ` closes the same way; a second connection that was open before keeps working and delivers its next message; a first frame `102400 <100 KB>` on a fresh connection is handled as LF (one truncated 8192-byte event, the connection stays open, `dropped == 0`, `framing_errors == 0`) so that behaviour is explicit; a first line `2026-11-18T10:00:00 host app: x\n` is handled as LF and the connection stays open; the 65th simultaneous connection is closed at once and `stats.refused == 1` while the first 64 still work; a connection idle for the (test-shortened) timeout is closed and `idle_closed == 1`; an exception from `submit` on one frame counts `dropped` and the next frame on the same connection is still delivered; a multi-line octet frame becomes one event; the server never writes a byte to the client (read with a timeout and expect nothing); a connection closed in the middle of a frame leaves no task behind.
     - Create `connectors/syslog_tcp.py` (`ListenerStats`, `TcpSyslogServer.start`, handler).
     - _Requirements: 1.3, 2.2, 2.3, 2.5, 2.6, 2.7, 2.8, 6.1_
-  - [ ] 3.4 Listener lifecycle: port in use, disabled, shutdown
+  - [x] 3.4 Listener lifecycle: port in use, disabled, shutdown
     - Write `tests/unit/test_tcp_lifecycle.py` first: `start_syslog_tcp(submit, "127.0.0.1", None)` returns `None` and binds nothing (the `CHIMERICMESH_SYSLOG_TCP_PORT=0` case); with a port already bound by the test, `start` returns `False`/`None`, logs exactly one warning naming the port, and raises nothing (B15); UDP and TCP on the same port number both bind (separate sockets); `aclose` closes the listening socket and every open connection within the timeout, even with 10 idle clients connected and with a client that never reads; the bound address is the one given (`127.0.0.1`), and nothing binds `0.0.0.0` by default; calling `aclose` twice is harmless; after `aclose` the port can be bound again by the test.
     - Edit `connectors/syslog_tcp.py` (`start_syslog_tcp`, `aclose`).
     - _Requirements: 1.4, 2.1_
