@@ -846,3 +846,5 @@ Statements that other specs or the capability map must reflect. This phase edits
 |---|---|---|
 | `create_service_with_sources` (discovery O2, N1) | Added to the registry: one transaction creates the service and its log sources, all or nothing, using the existing validation. No requirement added. | Registry section, task 3.2a |
 | `code_folder` normalization owner (discovery O12) | The registry normalizes; routes pass raw input; discovery's own check stays. | Registry section |
+
+- 2026-11-19, blocker B-G3-1 (resolved, option A): nine fixture call sites in tests/unit/test_store_app.py and tests/unit/test_store_integration.py open their store with build_registry() instead of core_registry() (create_app now requires the services migrations). The hub-less create_app calls in test_store_integration.py also pass enforce_access=False, because they use a test Host. No assertion changed; test_services_app.py keeps the core_registry-only ServicesNotMigrated test.

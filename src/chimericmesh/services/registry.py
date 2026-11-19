@@ -18,6 +18,7 @@ import dataclasses
 import json
 import logging
 import sqlite3
+import weakref
 from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass
@@ -172,7 +173,9 @@ class ServiceRegistry:
                  protected: Sequence[str] = (), known_formats: Iterable[str] | None = None,
                  clock: Callable[[], float] | None = None, home: str | None = None,
                  stats_rows: Iterable[tuple[str | None, int, float | None]] = ()) -> None:
-        self._store = store
+        # Weak, like AuditLog's: the hub holds ``registry.tag``, and a strong store reference here would keep a
+        # private ``:memory:`` store (and its writer thread) alive after the app that owns it is dropped.
+        self._store_ref = weakref.ref(store)
         self._state = state
         self._protected = tuple(protected)
         self._home = home
@@ -189,6 +192,17 @@ class ServiceRegistry:
         self._guard = ProviderGuard(self._clock)
         self._lock = asyncio.Lock()
         self._replace(services, ())
+
+    @property
+    def _store(self) -> Store:
+        store = self._store_ref()
+        if store is None:
+            raise RuntimeError("the service registry was used after its store was dropped")
+        return store
+
+    @_store.setter
+    def _store(self, store: Store) -> None:   # tests swap in a stand-in store; that one is held strongly
+        self._store_ref = lambda: store
 
     # ---- construction --------------------------------------------------------------------------
 

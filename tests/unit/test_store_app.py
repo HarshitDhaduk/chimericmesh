@@ -14,6 +14,7 @@ from chimericmesh.api import create_app
 from chimericmesh.events import Event
 from chimericmesh.hub import Hub
 from chimericmesh.store.errors import StoreCorruptError, StoreWriteError
+from chimericmesh.api import build_registry
 from chimericmesh.store.schema import core_registry
 from chimericmesh.store.store import Store
 
@@ -86,7 +87,7 @@ def test_bare_hub_keeps_an_existing_audit_sink():
 
 
 def test_store_backed_hub_uses_its_store(tmp_path):
-    s = Store.open(tmp_path / "s.db", registry=core_registry())
+    s = Store.open(tmp_path / "s.db", registry=build_registry())
     hub = Hub(store=s)
     audit = hub.audit
     app = create_app(hub, start_listeners=False)
@@ -97,7 +98,7 @@ def test_store_backed_hub_uses_its_store(tmp_path):
 
 
 def test_store_only_builds_a_hub_on_it(tmp_path):
-    s = Store.open(tmp_path / "s.db", registry=core_registry())
+    s = Store.open(tmp_path / "s.db", registry=build_registry())
     app = create_app(store=s, start_listeners=False)
     assert app.state.hub.store is s and app.state.store is s and app.state.hub.audit is s.audit
     asyncio.run(lifespan(app))
@@ -106,7 +107,7 @@ def test_store_only_builds_a_hub_on_it(tmp_path):
 
 
 def test_bare_hub_with_a_store(tmp_path):
-    s = Store.open(":memory:", registry=core_registry())
+    s = Store.open(":memory:", registry=build_registry())
     hub = Hub()
     app = create_app(hub, store=s, start_listeners=False)
     assert app.state.store is s and hub.store is None and hub.audit is s.audit
@@ -211,10 +212,10 @@ def test_startup_failure_closes_the_store_unclean(tmp_path, monkeypatch):
     app = create_app()
     with pytest.raises(OSError):
         asyncio.run(lifespan(app))
-    s = Store.open(path, registry=core_registry())
+    s = Store.open(path, registry=build_registry())
     assert s.previous_shutdown_clean is False  # the failed start left the marker at 0
     s.close()
-    s = Store.open(path, registry=core_registry())
+    s = Store.open(path, registry=build_registry())
     assert s.previous_shutdown_clean is True  # a normal close sets it to 1
     s.close()
 
@@ -247,7 +248,7 @@ def test_rest_validation():
 
 
 def test_store_error_in_a_route_is_503(tmp_path):
-    s = Store.open(tmp_path / "e.db", registry=core_registry())
+    s = Store.open(tmp_path / "e.db", registry=build_registry())
     hub = Hub(store=s)
 
     async def seed():

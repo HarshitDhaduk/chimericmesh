@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from .events import SEVERITY_NAMES
 from .hub import Hub
+from .services.access import OperatorVerdict
 from .store.errors import StoreError
 
 log = logging.getLogger("chimericmesh.commands")
@@ -27,6 +28,10 @@ MAX_LIST = 5
 MAX_STEPS = 4
 PREFIX = "[mesh]"
 _CTRL = re.compile(r"[\r\n\x00]+")
+
+_NOT_OPERATOR = "sorry {nick}, only operators may use !{name}"
+_OPERATORS_UNSET = "operator commands are disabled: set CHIMERICMESH_OPERATORS to a comma-separated list of nicks"
+_NEEDS_PASS = "operator commands need the admin token as the server password (PASS)"
 
 HELP_LINES = [
     "commands: !help !status !incidents !explain <id> !proposals",
@@ -61,11 +66,16 @@ def _line(text: str) -> str:
     return f"{PREFIX} {_CTRL.sub(' ', text)}"
 
 
-async def handle_command(hub: Hub, nick: str, channel: str, cmd: Command) -> list[str]:
-    """Execute a command and post its replies to the channel. Returns the reply lines."""
+async def handle_command(hub: Hub, nick: str, channel: str, cmd: Command, *,
+                         verdict: OperatorVerdict | None = None) -> list[str]:
+    """Execute a command and post its replies to the channel. Returns the reply lines.
+
+    ``verdict`` decides ``!resolve``, ``!approve`` and ``!deny``. ``None`` keeps the baseline rule
+    (``hub.is_operator``) while ``hub.enforce_access`` is off, and refuses (fail closed) while it is on.
+    """
     hub.commands_run += 1
     try:
-        lines = await _run(hub, nick, cmd)
+        lines = await _run(hub, nick, cmd, verdict)
     except StoreError:
         log.error("store unavailable while running !%s", cmd.name)
         lines = ["store unavailable, try again"]
@@ -76,7 +86,22 @@ async def handle_command(hub: Hub, nick: str, channel: str, cmd: Command) -> lis
     return replies
 
 
-async def _run(hub: Hub, nick: str, cmd: Command) -> list[str]:
+def _refusal(hub: Hub, nick: str, name: str, verdict: OperatorVerdict | None) -> str | None:
+    """None when the nick may run an operator command, else the reply line that refuses it."""
+    if verdict is None:
+        verdict = OperatorVerdict.NOT_OPERATOR if hub.enforce_access else OperatorVerdict.BASELINE
+    if verdict is OperatorVerdict.ALLOWED:
+        return None
+    if verdict is OperatorVerdict.BASELINE:
+        return None if hub.is_operator(nick) else _NOT_OPERATOR.format(nick=_clean(nick, 30), name=name)
+    if verdict is OperatorVerdict.OPERATORS_UNSET:
+        return _OPERATORS_UNSET
+    if verdict is OperatorVerdict.NEEDS_PASS:
+        return _NEEDS_PASS
+    return _NOT_OPERATOR.format(nick=_clean(nick, 30), name=name)
+
+
+async def _run(hub: Hub, nick: str, cmd: Command, verdict: OperatorVerdict | None = None) -> list[str]:
     name, args = cmd.name, cmd.args
     if name == "help":
         return list(HELP_LINES)
@@ -89,8 +114,9 @@ async def _run(hub: Hub, nick: str, cmd: Command) -> list[str]:
     if name == "proposals":
         return _proposals(hub)
     if name in {"resolve", "approve", "deny"}:
-        if not hub.is_operator(nick):
-            return [f"sorry {_clean(nick, 30)}, only operators may use !{name}"]
+        refused = _refusal(hub, nick, name, verdict)
+        if refused is not None:
+            return [refused]
         if name == "resolve":
             return await _resolve(hub, nick, args)
         return await _decide(hub, nick, name == "approve", args)

@@ -7,6 +7,7 @@ import httpx
 from chimericmesh.api import create_app
 from chimericmesh.hub import Hub
 from chimericmesh.store.config import StoreConfig, resolve_db_path
+from chimericmesh.api import build_registry
 from chimericmesh.store.schema import core_registry
 from chimericmesh.store.store import Store
 
@@ -51,8 +52,8 @@ def test_sc1_proposal_ids_continue_and_are_never_reused(tmp_path):
         return iid
 
     def app_on(path):
-        s = Store.open(path, registry=core_registry())
-        return s, create_app(store=s, start_listeners=False)
+        s = Store.open(path, registry=build_registry())
+        return s, create_app(store=s, start_listeners=False, enforce_access=False)
 
     s, app = app_on(path)
     iid = asyncio.run(run_app(app, first))
@@ -77,11 +78,11 @@ def test_sc2_incident_count_survives_a_restart_without_reannouncing(tmp_path, mo
         await ingest(client, 50)
         return (await client.get("/api/incidents")).json()[0]
 
-    app = create_app(start_listeners=False)
+    app = create_app(start_listeners=False, enforce_access=False)
     inc = asyncio.run(run_app(app, first))
     assert inc["count"] == 50
 
-    app = create_app(start_listeners=False)
+    app = create_app(start_listeners=False, enforce_access=False)
     hub = app.state.hub
 
     async def second(client):
@@ -94,8 +95,8 @@ def test_sc2_incident_count_survives_a_restart_without_reannouncing(tmp_path, mo
 
 def test_sc4_event_table_is_bounded_and_incidents_untouched(tmp_path):
     cfg = StoreConfig.from_env({"CHIMERICMESH_MAX_EVENTS": "1000"}, batch_rows=100, trim_interval=0.0)
-    s = Store.open(tmp_path / "sc4.db", registry=core_registry(), config=cfg)
-    app = create_app(store=s, start_listeners=False)
+    s = Store.open(tmp_path / "sc4.db", registry=build_registry(), config=cfg)
+    app = create_app(store=s, start_listeners=False, enforce_access=False)
     hub = app.state.hub
 
     async def body(client):
@@ -127,7 +128,7 @@ def hub_event(n):
 def test_sc6_reopen_window_end_to_end(tmp_path, monkeypatch):
     monkeypatch.setenv("CHIMERICMESH_REOPEN_AFTER_SECONDS", "300")
     clock = Clock()
-    s = Store.open(tmp_path / "sc6.db", registry=core_registry())
+    s = Store.open(tmp_path / "sc6.db", registry=build_registry())
     hub = Hub(store=s, clock=clock)
     app = create_app(hub, start_listeners=False)
 
@@ -159,7 +160,7 @@ def test_two_working_directories_open_the_same_file(tmp_path, monkeypatch):
     paths = []
     for d in (a, b):
         monkeypatch.chdir(d)
-        app = create_app(start_listeners=False)
+        app = create_app(start_listeners=False, enforce_access=False)
         paths.append(app.state.store.path)
         asyncio.run(run_app(app, lambda client: asyncio.sleep(0)))
     assert paths[0] == paths[1] == resolve_db_path() and os.path.isabs(paths[0])
