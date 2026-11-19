@@ -51,17 +51,17 @@ Round 1 changes (see "Round 1 review resolutions" in the design): 8.6 is new and
     - **Property 8: Unparsed fallback**
     - **Validates: Requirements 4.2, 4.5, 4.8**
 
-- [ ] 2. Package skeleton, dependency rules, configuration, `submit`
-  - [ ] 2.1 `connectors` rows in the dependency-direction test (review M1)
+- [x] 2. Package skeleton, dependency rules, configuration, `submit`
+  - [x] 2.1 `connectors` rows in the dependency-direction test (review M1)
     - Edit `tests/unit/test_dependency_direction.py` (created by `store`, extended by `services`): add the `connectors/*` file-to-group rows, the `connectors` row in the "may import" table (`core`, `store`, `services`), and per-file rules: only `connectors/manager.py` may import `socket`; only `connectors/tailread.py` and `connectors/tailer.py` may import `os`; no `connectors/*` file imports `fastapi`, `starlette`, `pydantic`, `httpx`, `urllib`, `http`, `smtplib`, `ftplib`, `subprocess`, `chimericmesh.services.deps` or `chimericmesh.services.routes`; no `parsers/*` file imports `os`, `socket` or anything outside `core`. Test first: AST fixtures on a temporary tree (not under `src/`) that import `chimericmesh.hub`, `chimericmesh.listeners`, `chimericmesh.discovery`, `chimericmesh.approvals`, `httpx` or `subprocess` from a `connectors/x.py` fail the scan, a `parsers/x.py` that imports `os` fails, and a `connectors/__init__.py` that imports `manager` at module level is allowed (pure re-export rule is about web frameworks only).
     - Create `connectors/__init__.py` (empty re-exports for now) so the new package has its group row to test.
     - The test must pass on the tree after 1.1 to 1.6. If the shape of the test differs from the recommended prefix table, add rows in its existing shape and do not restructure it.
     - _Requirements: Success Criterion 5 (dependency test), 1.1d_
-  - [ ] 2.2 Configuration and the TCP port rule
+  - [x] 2.2 Configuration and the TCP port rule
     - Write `tests/unit/test_connectors_config.py` first: `ConnectorConfig()` and `TcpConfig()` hold the defaults of the design (poll 0.5, catch-up 0.1, missing 5, unreadable 30, error 5, not-regular 30, busy polls 5, flush 5, reconcile 30, max read 1 MiB, max line 8192, head 256, rate 2000, notice interval 10, 64 connections, idle 60, frame 8192); both are frozen; `resolve_tcp_port({})` is 5514, `{"CHIMERICMESH_SYSLOG_TCP_PORT": "0"}` is `None`, `"6514"` is 6514, `"65535"` is 65535, and `"65536"`, `"-1"`, `"abc"`, `""` and `"5514 "` log one warning and give 5514; the function reads nothing but the mapping it is given.
     - Create `connectors/config.py`.
     - _Requirements: 2.1_
-  - [ ] 2.3 `submit` (review L1, M2)
+  - [x] 2.3 `submit` (review L1, M2)
     - Write `tests/unit/test_connectors_submit.py` first, one test per sub-criterion: 1.1a (`submit(ev, "ls1")` passes an event equal to `ev` except `log_source_id == "ls1"`; `submit(ev)` passes `ev` unchanged; the input event object is not mutated), 1.1b (the injected `ingest` is awaited exactly once and `submit` returns the `Event` it returned; when `ingest` returns `None` the sent event is returned), 1.1c (against a real `Hub()` with `hub.tagger = registry.tag` from `services`, a file event with a known `log_source_id` comes back with that source's service id and a TCP-style event with `app="proxy-worker"` is matched by app; skip the tagger assertions with a clear message when `Hub.tagger` does not exist yet), 1.1d (a source scan finds no import of `hub` in `connectors/`); an exception from `ingest` propagates unchanged (the callers handle it); `ingest` is never called with a `service_id` set by `submit`.
     - Create `connectors/submit.py`.
     - _Requirements: 1.1_
