@@ -178,6 +178,12 @@
           <span class="spacer"></span>
           <button class="ghost small" type="button" id="termClear">Clear</button>
         </div>
+        <form class="prompt hidden" id="tokenForm" autocomplete="off">
+          <label class="sr" for="tokenInput">Admin token</label>
+          <input type="password" id="tokenInput" maxlength="256" autocomplete="off" spellcheck="false" aria-label="Admin token" placeholder="admin token (from admin.token)">
+          <button type="submit">Save</button>
+        </form>
+        <div class="meta hidden" id="tokenNote" role="status"></div>
         <div class="meta" id="identity" style="margin-top:8px"></div>
         <div class="meta">Press / to focus, Tab to complete, ↑↓ for history.</div>
       </section>
@@ -199,8 +205,32 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
-const api = async (path, opts) => { const r = await fetch(path, opts); if (!r.ok) throw new Error(r.status); return r.json(); };
-const post = (path, body) => api(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
+// Interim admin token (the dashboard module owns the final design): kept for this tab only, sent only
+// to the two routes that need it, never shown, logged or put in the transcript.
+const TOKEN_KEY = 'chimericmesh.adminToken';
+const TOKEN_ROUTES = /^\/api\/(terminal|proposals\/[^/]+\/decide)$/;
+const TOKEN_PROMPT_TEXT = 'Approving or denying needs the admin token. Paste the contents of admin.token, then send the command again.';
+const readToken = () => { try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } };
+function askForToken() {
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* storage unavailable */ }
+  const note = $('tokenNote');
+  note.textContent = TOKEN_PROMPT_TEXT;
+  note.classList.remove('hidden');
+  $('tokenForm').classList.remove('hidden');
+  $('tokenInput').focus();
+}
+const api = async (path, opts) => {
+  const r = await fetch(path, opts);
+  if (r.status === 401 && TOKEN_ROUTES.test(path)) { askForToken(); throw new Error('token required'); }
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+};
+const post = (path, body) => {
+  const headers = { 'content-type': 'application/json' };
+  const token = readToken();
+  if (token && TOKEN_ROUTES.test(path)) headers['X-Admin-Token'] = token;
+  return api(path, { method: 'POST', headers, body: JSON.stringify(body || {}) });
+};
 const SEV = ['emerg','alert','crit','err','warning','notice','info','debug'];
 const COMMANDS = ['!help', '!status', '!incidents', '!explain', '!proposals', '!resolve', '!approve', '!deny'];
 
@@ -458,9 +488,20 @@ async function runCommand(text) {
   if (state.history.length > 50) state.history.shift();
   state.histIdx = state.history.length;
   try { await post('/api/terminal', { text }); }
-  catch (e) { unreachable(); return; }
+  catch (e) { if (e.message !== 'token required') unreachable(); return; }
   await Promise.allSettled([fetchChat(), loadProposals(), loadIncidents(), loadWorkflow()]);
 }
+
+$('tokenForm').onsubmit = (ev) => {
+  ev.preventDefault();
+  const value = $('tokenInput').value.trim();
+  $('tokenInput').value = '';
+  if (!value) return;
+  try { sessionStorage.setItem(TOKEN_KEY, value); } catch (e) { /* storage unavailable */ }
+  $('tokenForm').classList.add('hidden');
+  $('tokenNote').classList.add('hidden');
+  toast('Token saved for this tab');
+};
 
 const termInput = $('termInput');
 $('termForm').onsubmit = (ev) => { ev.preventDefault(); const t = termInput.value; termInput.value = ''; runCommand(t); };

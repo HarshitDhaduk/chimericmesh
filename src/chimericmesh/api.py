@@ -13,7 +13,7 @@ from typing import Literal
 
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
@@ -24,7 +24,7 @@ from .listeners import IrcServer, start_syslog, start_telnet
 from .parsers import irc_to_event, parse_syslog, telnet_to_event
 from .services.access import AccessControl, OperatorVerdict, is_loopback, parse_allowed_hosts
 from .services.asgi import MAX_BODY_BYTES, BodyLimit, HostGuard
-from .services.deps import client_address, make_require_admin
+from .services.deps import make_require_admin
 from .services.limiter import ReduceAuditLimiter
 from .services.registry import ServiceRegistry
 from .services.routes import build_router
@@ -301,7 +301,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
             raise HTTPException(404, "incident not found")
         return prop.to_dict()
 
-    @app.post("/api/proposals/{pid}/decide")
+    @app.post("/api/proposals/{pid}/decide", dependencies=[Depends(require_admin)])
     async def decide_proposal(pid: str, req: DecideRequest):
         _proposal_or_404(pid)
         prop = await hub.decide(pid, req.approve, req.by)
@@ -353,16 +353,23 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
         return hub.chat(after, limit)
 
     @app.post("/api/terminal")
-    async def terminal(req: TerminalRequest):
+    async def terminal(req: TerminalRequest, request: Request):
         # Identity is fixed server-side; the client can never choose a nick.
         text = req.text
-        hub.record(WEB_NICK, text, "user")
         cmd = parse_command(text)
+        verdict: OperatorVerdict | None = None
+        if cmd is not None and cmd.name in {"approve", "deny"}:
+            # Token first, transcript second: a refused request leaves no forged "dashboard> !approve" line.
+            await require_admin(request)
+            verdict = OperatorVerdict.ALLOWED if hub.enforce_access else None
+        elif cmd is not None and cmd.name == "resolve":
+            verdict = OperatorVerdict.BASELINE
+        hub.record(WEB_NICK, text, "user")
         if cmd is None:
             reply = "commands start with ! - try !help"
             hub.record("ChimericBot", reply, "system")
             return {"ok": True, "handled": False, "replies": [reply]}
-        replies = await handle_command(hub, WEB_NICK, hub.irc_channel, cmd)
+        replies = await handle_command(hub, WEB_NICK, hub.irc_channel, cmd, verdict=verdict)
         return {"ok": True, "handled": True, "replies": replies}
 
     @app.get("/api/workflow")
