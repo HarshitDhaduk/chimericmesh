@@ -18,6 +18,7 @@ import dataclasses
 import json
 import logging
 import sqlite3
+from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -49,6 +50,7 @@ from .models import (
     StatusProvider,
 )
 from .paths import inspect_log_path, normalize_code_folder, normalize_log_path
+from .status import ProviderGuard, ServiceStatus, StatsTracker, build_status, build_statuses
 from .tagging import EMPTY_INDEX, ServiceIndex, build_index, resolve_service
 from .validate import (
     DEFAULT_FORMATS,
@@ -70,6 +72,7 @@ _SELECT_SERVICES = "SELECT * FROM services ORDER BY seq"
 _SELECT_SOURCES = "SELECT * FROM log_sources ORDER BY seq"
 _SELECT_ONE_SERVICE = "SELECT * FROM services WHERE id = ?"
 _SELECT_ONE_SOURCES = "SELECT * FROM log_sources WHERE service_id = ? ORDER BY seq"
+_SEED_STATS = "SELECT service_id, COUNT(*), MAX(id) FROM events GROUP BY service_id"  # covered by idx_events_service
 _HAS_TABLE = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'services'"
 
 
@@ -109,6 +112,15 @@ def _load_all(tx: Tx) -> list[Service]:
     for row in tx.all(_SELECT_SOURCES):
         by_service.setdefault(row["service_id"], []).append(_source_from_row(row))
     return [_service_from_row(r, by_service.get(r["id"], [])) for r in tx.all(_SELECT_SERVICES)]
+
+
+def _seed_rows(tx: Tx) -> list[tuple[str | None, int, float | None]]:
+    """Count and newest receive time per service. The newest row is found by id (index only) and its time read by primary key, so no table scan happens (R5.7)."""
+    out: list[tuple[str | None, int, float | None]] = []
+    for sid, total, newest in tx.all(_SEED_STATS):
+        row = tx.one("SELECT ingested FROM events WHERE id = ?", (newest,))
+        out.append((sid, int(total), None if row is None else float(row[0])))
+    return out
 
 
 def _load_one(tx: Tx, service_id: str) -> Service | None:
@@ -158,7 +170,8 @@ class ServiceRegistry:
 
     def __init__(self, store: Store, state: StateView, *, services: Sequence[Service] = (),
                  protected: Sequence[str] = (), known_formats: Iterable[str] | None = None,
-                 clock: Callable[[], float] | None = None, home: str | None = None) -> None:
+                 clock: Callable[[], float] | None = None, home: str | None = None,
+                 stats_rows: Iterable[tuple[str | None, int, float | None]] = ()) -> None:
         self._store = store
         self._state = state
         self._protected = tuple(protected)
@@ -171,6 +184,9 @@ class ServiceRegistry:
         self._index: ServiceIndex = EMPTY_INDEX
         self._subs: list[_Subscription] = []
         self._status_provider: StatusProvider | None = None
+        self._stats = StatsTracker()
+        self._stats.seed(stats_rows)
+        self._guard = ProviderGuard(self._clock)
         self._lock = asyncio.Lock()
         self._replace(services, ())
 
@@ -180,16 +196,17 @@ class ServiceRegistry:
     def load(cls, store: Store, *, state: StateView, protected: Sequence[str] = (),
              known_formats: Iterable[str] | None = None, clock: Callable[[], float] | None = None,
              home: str | None = None) -> "ServiceRegistry":
-        def read(tx: Tx) -> list[Service] | None:
+        def read(tx: Tx) -> tuple[list[Service], list[tuple[str | None, int, float | None]]] | None:
             if tx.one(_HAS_TABLE) is None:
                 return None
-            return _load_all(tx)
+            return _load_all(tx), _seed_rows(tx)
 
-        services = store.read_sync(read, allow_blocking=True)
-        if services is None:
+        loaded = store.read_sync(read, allow_blocking=True)
+        if loaded is None:
             raise ServicesNotMigrated("open the store with services.register_migrations")
+        services, stats_rows = loaded
         return cls(store, state, services=services, protected=protected, known_formats=known_formats,
-                   clock=clock, home=home)
+                   clock=clock, home=home, stats_rows=stats_rows)
 
     # ---- reads (loop thread, no I/O) -----------------------------------------------------------
 
@@ -213,9 +230,21 @@ class ServiceRegistry:
     def tag(self, event: Event) -> Event:
         """Assign the service of the event (R4.2). Only ``service_id`` can change."""
         found = resolve_service(self._index, event.source, event.host, event.app, event.log_source_id)
+        self._stats.observe(found, event.severity, float(self._clock()))
         if found == event.service_id:
             return event
         return dataclasses.replace(event, service_id=found)
+
+    def statuses(self) -> list[ServiceStatus]:
+        return build_statuses(list(self._services.values()), self._stats, self._open_counts(),
+                              self._status_provider, self._guard, float(self._clock()))
+
+    def status_of(self, service_id: str) -> ServiceStatus | None:
+        return build_status(service_id, self._services, self._stats, self._open_counts(),
+                            self._status_provider, self._guard, float(self._clock()))
+
+    def _open_counts(self) -> Counter[str]:
+        return Counter(i.service_id or "unassigned" for i in self._state.incidents(status="open"))
 
     # ---- injection -----------------------------------------------------------------------------
 
@@ -296,6 +325,8 @@ class ServiceRegistry:
             except sqlite3.IntegrityError as exc:
                 raise Conflict("conflicting change") from exc
             self._replace(delta.upserts, delta.removed)
+            for sid in delta.removed:
+                self._stats.drop(sid)
         for change in delta.changes:
             for sub in tuple(self._subs):
                 if sub.after_commit is not None:

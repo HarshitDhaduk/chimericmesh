@@ -93,21 +93,21 @@ Round 1 changes (see "Round 1 review resolutions" in the design): the plan has 4
     - **Validates: Requirements 10.5**
   - [x] 3.9 Checkpoint: run `python -m pytest -q`; the whole existing suite and tasks 1 to 3 must pass.
 
-- [ ] 4. Status
-  - [ ] 4.1 Counters, `state` and `error_rate`
+- [x] 4. Status
+  - [x] 4.1 Counters, `state` and `error_rate`
     - Write `tests/unit/test_services_status_counters.py` first, with a fake clock: `compute_state` returns `never_seen` for `None`, `active` at 299 and 300 seconds, `idle` at 301, `active` for a future `last_seen`; `error_rate` of 0, 4, 5, 6 errors is 0.0, 0.8, 1.0, 1.2; only severity 0 to 3 counts; with integer-second event times an event at second 100 counts at `now` 399 and no longer at 400 (buckets are whole seconds, so the window is at most 300 seconds and an event can leave it up to 1 second early; the test pins this, review 10); `events_total` and `last_seen` update on `observe`; `tag(event)` calls `observe` once with the resolved id (`None` becomes `unassigned`) and returns the event with only `service_id` changed; `ServiceRegistry.load` seeds the counters from the grouped query (a file store with event rows inserted directly: after a restart a service with stored events is `idle` with `events_total` equal to the stored count and `last_seen` equal to the newest `ingested`, a service without stored events is `never_seen`, rows with a NULL `service_id` seed `unassigned`, and a plain in-memory hub starts at zero); `drop` removes a deleted service's counters; seeding 100 000 stored rows takes under 500 ms (tolerant benchmark, skipped with `CHIMERICMESH_SKIP_BENCH=1`); the registry creates no task and no thread (`asyncio.all_tasks()` and `threading.active_count()` are unchanged by `load` and by every mutation).
     - Create `services/status.py` (`compute_state`, `error_rate`, `StatsTracker`); edit `services/registry.py` (`tag`, seed at load).
     - _Requirements: 4.4, 5.1, 5.2, 5.3_
-  - [ ] 4.2 Status snapshot, unassigned and the provider (review M2)
+  - [x] 4.2 Status snapshot, unassigned and the provider (review M2)
     - Write `tests/unit/test_services_status.py` first, parametrized over a plain `Hub()` (private `:memory:` store) and a store-backed hub: `statuses()` returns every service with `last_seen`, `state`, `error_rate`, `open_incidents`, `events_total` and each log source; the open incident count per service equals the count from `hub.incidents()` filtered by status and `service_id`, a resolved incident is not counted, an incident without a service counts for `unassigned`; the `unassigned` object is last, has `builtin: true`, empty lists, `code_folder: null`, `created_at: null`; `status_of("unassigned")` returns it and `status_of("nope")` returns `None`; with no provider each source has `status: "unknown"` and no counter keys; a provider that returns a `SourceRuntime` fills the six fields and cuts `last_error` to 200 characters; a provider that raises or returns another type gives `unknown` for that source only and logs once per minute; the provider is called once per source per call; benchmark (R5.7, skipped when `CHIMERICMESH_SKIP_BENCH=1`, tolerant): 100 services, 100 000 rows inserted directly into the `events` table of a file store, 2000 open incidents, `statuses()` under 50 ms and no SQLite call (a store whose `read` raises proves it).
     - Edit `services/status.py` (`ServiceStatus`, `LogSourceStatus`, `build_statuses`) and `services/registry.py` (`statuses`, `status_of`).
     - _Requirements: 4.4, 5.1, 5.4, 5.5, 5.6, 5.7_
-  - [ ] 4.3 Property tests for `state` and `error_rate`
+  - [x] 4.3 Property tests for `state` and `error_rate`
     - Create `tests/pbt/test_services_status_properties.py` (random observation streams with equal and out-of-order seconds, boundary times 299, 300, 301, naive model computed from the stream).
     - **Property 10: State formula**
     - **Property 11: Error rate formula**
     - **Validates: Requirements 5.1, 5.2, 5.3**
-  - [ ]* 4.4 Property test for open incidents across both hubs
+  - [x]* 4.4 Property test for open incidents across both hubs
     - Create `tests/pbt/test_services_open_incidents_properties.py` (random events with and without services against a plain hub and a store-backed hub, resolves and clock advances).
     - **Property 12: Open incidents match the view**
     - **Validates: Requirements 5.4, 5.5**
