@@ -118,6 +118,13 @@ class OffsetStore:
                    1 if r.discarding else 0, r.updated_at) for r in rows]
         await self._store.transact(lambda tx: tx.executemany(_UPSERT, params))
 
+    async def delete(self, ids: Sequence[str]) -> None:
+        """Delete the given rows (a disabled source). A `StoreError` propagates to the caller."""
+        if not ids or not await self.available():
+            return
+        params = [(i,) for i in ids]
+        await self._store.transact(lambda tx: tx.executemany(_DELETE, params))
+
     async def prune(self, keep: frozenset[str]) -> int:
         """Delete the rows whose id is not in ``keep``; return how many were deleted."""
         if not await self.available():
