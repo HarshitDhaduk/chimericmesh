@@ -44,20 +44,20 @@ Review findings that became work are cited as `(M1)`, `(M3)`, `(L5)`, `(L8)` on 
     - **Property 4: Catalog validator is total**
     - **Validates: Requirements 2.2, 3.1, 3.2, 3.4, 3.5**
 
-- [ ] 3. OS tools, parsers and the runner
-  - [ ] 3.1 Implement the output parsers
+- [x] 3. OS tools, parsers and the runner
+  - [x] 3.1 Implement the output parsers
     - Write `tests/unit/test_discovery_parse.py` first, with fixture output of each tool: `ss -ltnup` lines with and without `users:(("nginx",pid=812,fd=6),...)`, IPv6 `[::]:80`, UDP; `netstat -ltnup` with `812/nginx` and `-`; `tasklist /fo csv /nh` with quoted names containing spaces and commas; `netstat -ano` TCP listening (foreign `0.0.0.0:0` and `[::]:0`), TCP established (skipped), UDP, a localized state word, IPv6; `ps -axo pid=,comm=` with a path containing spaces; `lsof` with `\x20` in the command and `*:80 (LISTEN)`, `127.0.0.1:5353`; empty input, header-only input and a truncated last line give empty or partial results and no exception.
     - Create `discovery/parse.py` (the six parsers; names pass through `normalize_process_name`; every result capped at 20000).
     - _Requirements: 2.1, 4.7_
-  - [ ] 3.2 Write the property test for parsers
+  - [x] 3.2 Write the property test for parsers
     - Create `tests/pbt/test_discovery_parse_properties.py` (arbitrary text, arbitrary bytes decoded with `replace`, very long lines).
     - **Property 5: Parser totality**
     - **Validates: Requirements 2.4, 4.7**
-  - [ ] 3.3 Implement the command runner
+  - [x] 3.3 Implement the command runner
     - Write `tests/unit/test_discovery_runner.py` first, using real child processes started through a private `run_argv` entry (the public `run(tool)` resolves system tools): a child that sleeps is killed at the timeout and the result is `timeout` within 1 second of it; a child that prints 5 MB returns at most `max_bytes` with `truncated=True` and the child is gone; an argument containing `;`, `&&` and `$(x)` reaches the child literally (no shell); a nonexistent executable gives `missing`; a non-executable file gives `denied` or `error` without raising; setting `cancel` kills the child within 0.5 second and the result is `cancelled`; stdin is closed; the child's environment contains only `SystemRoot`, `LC_ALL`, `PATH`; `resolve_tool` never returns a path under the current directory or from the caller's `PATH` (plant `netstat.exe`, `ss` and `tasklist` in a temp working directory and put it first on `PATH`; assert they are not chosen), returns `None` for an unknown tool name, and uses `<SystemRoot>\System32` on `windows` (pure test with a fake `exists`). (L8) Sub-criteria 2.1f, 2.1g, 2.1h are named in the test ids.
     - Create `discovery/runner.py` (`CommandRunner`, `SubprocessRunner`, `resolve_tool`; reader thread, 50 ms wait slices, kill on timeout, cap or cancel).
     - _Requirements: 2.1, 2.4, 2.5_
-  - [ ] 3.4 Implement the probes and `collect`
+  - [x] 3.4 Implement the probes and `collect`
     - Write `tests/unit/test_discovery_collect.py` and `tests/unit/test_discovery_probe.py` first. (L8) `tool_plan("linux")`, `("windows")`, `("macos")` equal the R2.1 lists exactly as `ToolSpec` data (2.1a, 2.1d, 2.1e); `netstat -ltnup` runs only when `ss` is missing, errors or times out (2.1b); Linux names come from `ProcFs.comm` (2.1c); with a fake runner a missing tool is recorded and the others still run, the snapshot is `limited` and usable (2.5a); a timed-out tool is treated the same (2.5b); all tools failing gives `usable=False` and the names in `failed_tools` (2.5c); denied output sets `limited` and no retry or elevation call exists (a fake runner counts calls: exactly one per tool); a non-zero exit with output is parsed and `limited`; a Linux `ss` line without a process and `is_admin=False` sets `limited`, with `is_admin=True` it does not; `macos` with `is_admin=False` is `limited`; the 30-second deadline: a fake clock past the deadline marks the remaining tools failed with `timeout` and keeps the earlier data; the own pid is removed from procs and listeners; the raw process list is not an attribute of anything returned except `Snapshot` (R2.7: the returned `Snapshot` is dropped by the engine, tested in 4.2). Probe: `OsFsProbe.stat` returns `(False, None)` for a missing path and `(True, size)` for a file; `readable` matches `os.access`; `listdir` returns at most `limit` names and never calls `open` (patched to fail); `LinuxProcFs` is skipped on non-Linux hosts, and with a fake `/proc` directory it reads only `/proc/<int>/comm` and skips non-numeric entries and `PermissionError`.
     - Create `discovery/probe.py` (`FsProbe`, `ProcFs`, `OsFsProbe`, `LinuxProcFs`), `discovery/collect.py` (`tool_plan`, `collect_snapshot`).
     - _Requirements: 2.1, 2.2, 2.4, 2.5, 2.6, 2.7_
