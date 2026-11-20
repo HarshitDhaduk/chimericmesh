@@ -21,24 +21,24 @@ Review findings that became work are cited as `(M1)`, `(M3)`, `(L5)`, `(L8)` on 
     - **Property 1: Name normalization**
     - **Validates: Requirements 4.1, 4.7**
 
-- [ ] 2. Catalog and path expansion
-  - [ ] 2.1 Implement environment and wildcard expansion
+- [x] 2. Catalog and path expansion
+  - [x] 2.1 Implement environment and wildcard expansion
     - Write `tests/unit/test_discovery_expand.py` first: `%SystemDrive%\inetpub\logs\LogFiles\W3SVC*\*.log` on `windows` with a fake lister expands to the matching directories and files (case-insensitive match); `$HOME/logs/*.log` on `linux`; a placeholder not in `ALLOWED_ENV` (`%PATH%`, `$SECRET`) yields nothing; a missing variable yields nothing; a value with a control character, a relative value, or a placeholder not at the start yields nothing; the expanded value is a literal base: `HOME=/tmp/*` and a value containing `%ProgramData%` are not expanded again, and the lister is never called on a directory that is not under the literal base; at most 200 names are listed per pattern even with a 10 000 entry directory (fake lister records its `limit`); names with a separator or a control character are skipped; results are sorted and deterministic; `ntpath` and `posixpath` are chosen by `os_name`, not by the host (run both OS names on any host).
     - Create `discovery/expand.py` (`ALLOWED_ENV`, `expand_leading_env`, `expand_pattern`).
     - _Requirements: 2.2, 3.2, 3.6_
-  - [ ] 2.2 Implement the catalog validator and loader
+  - [x] 2.2 Implement the catalog validator and loader
     - Write `tests/unit/test_discovery_catalog.py` first: a minimal valid document loads; each rule of `validate_catalog` in the design has one failing case that names the field (unknown key, bad `app_id`, duplicate `app_id`, `.exe` in a process name, port 0 and 65536, an OS key missing, all OS lists empty, relative path, `..`, `**`, `[`, three wildcard components, a placeholder in the middle, a placeholder not in `ALLOWED_ENV`, a last component ending in `*`, a format not in `known_formats`, a bad `kind`, a non-core `app_id` without `justification`, a `mosquitto` entry without one and the same entry with one); `load_catalog(text=invalid)` returns `CatalogLoad(None, reason)` and logs one error and never raises; `load_catalog(text="not json")` and `text=""` do the same; `Catalog.process_index("linux")` is keyed by the first 15 characters of each name, `windows` and `macos` by the whole name; `fingerprint` is 16 hex characters, stable under rule order, different for different OS or pattern sets.
     - Create `discovery/catalog.py` (`PathRule`, `CatalogEntry`, `Catalog`, `CatalogLoad`, `validate_catalog`, `load_catalog`, `fingerprint`).
     - _Requirements: 3.1, 3.2, 3.4, 3.5_
-  - [ ] 2.3 Ship the catalog data and package it
+  - [x] 2.3 Ship the catalog data and package it
     - Write `tests/unit/test_discovery_catalog_data.py` first: the packaged file loads through `importlib.resources.files("chimericmesh")` and validates with `frozenset(FORMAT_NAMES)` (from `chimericmesh.parsers.formats`); at least 14 entries and exactly the 15 core ids of the design; every format of every rule is in `FORMAT_NAMES` (Success Criterion 5); no entry mentions Mosquitto or MQTT; every `kind` and placeholder is allowed; `pyproject.toml` (parsed with `tomllib`) lists `catalog/*.json` under `[tool.setuptools.package-data]` next to `web/*.html`; the file path matches that pattern with `fnmatch`; a test builds a wheel with `python -m pip wheel . --no-deps --no-build-isolation -w <tmp>` and asserts `chimericmesh/catalog/legacy_apps.json` is inside (skipped when `CHIMERICMESH_SKIP_BUILD=1` or when `pip` or `setuptools` cannot be imported); a loaded catalog with the contingency edit (`w3c` and `xferlog` replaced by `plain` in the text) still validates.
     - Create `src/chimericmesh/catalog/legacy_apps.json` from the design table (no `__init__.py`), edit `pyproject.toml` (`package-data`).
     - _Requirements: 3.1, 3.3, 3.4, Success Criterion 5_
-  - [ ] 2.4 Write the property test for placeholder expansion
+  - [x] 2.4 Write the property test for placeholder expansion
     - Create `tests/pbt/test_discovery_expand_properties.py` (arbitrary pattern text, arbitrary environment mappings with a recording mapping spy).
     - **Property 2: Placeholder expansion allow-list**
     - **Validates: Requirements 3.2, 3.6**
-  - [ ]* 2.5 Write property tests for wildcard expansion and the validator
+  - [x]* 2.5 Write property tests for wildcard expansion and the validator
     - Create `tests/pbt/test_discovery_catalog_properties.py` (generated directory trees; JSON-like values; single-fault mutations of the shipped catalog).
     - **Property 3: Wildcard expansion is bounded and sound**
     - **Property 4: Catalog validator is total**
