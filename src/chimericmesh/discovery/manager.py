@@ -54,6 +54,10 @@ class ScanManager:
         with self._id_lock:
             return f"sg{next(self._suggestion_ids)}"
 
+    @property
+    def os_name(self) -> str | None:
+        return self._os_name
+
     # ---- queries -----------------------------------------------------------------------------------
 
     def _purge(self) -> None:
