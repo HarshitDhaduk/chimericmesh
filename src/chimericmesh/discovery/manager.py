@@ -20,6 +20,7 @@ from chimericmesh.store import Store, StoreError
 from . import dismissals
 from .catalog import CatalogLoad
 from .errors import AlreadyAccepted, CatalogUnavailable, ScanBusy, SuggestionNotFound
+from .expand import ALLOWED_ENV
 from .models import MAX_KEPT_SCANS, SCAN_TOTAL_SECONDS, SCAN_TTL_SECONDS, Scan, ScanInputs, ScanOutcome, Suggestion
 from .text import path_key
 
@@ -37,7 +38,8 @@ class ScanManager:
         self._load, self._engine, self._runner, self._procfs, self._fs = load, engine, runner, procfs, fs
         self._store, self._registry, self._known_formats, self._now = store, registry, known_formats, now
         self._os_name, self._is_admin, self._own_pid = os_name, is_admin, own_pid
-        self._env = dict(env)
+        allowed = {name.casefold() for names in ALLOWED_ENV.values() for name in names}
+        self._env = {k: v for k, v in dict(env).items() if isinstance(k, str) and k.casefold() in allowed}
         self._scan_timeout = scan_timeout
         self._scans: dict[str, Scan] = {}
         self._cancels: dict[str, threading.Event] = {}

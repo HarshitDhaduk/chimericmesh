@@ -404,6 +404,19 @@ def test_aclose_cancels_a_blocked_engine_within_a_fifth_of_a_second():
         e.store.close()
 
 
+def test_only_allow_listed_environment_names_are_kept_review_finding_1():
+    e = Env()
+    try:
+        m = ScanManager(load=LOAD, engine=e.default_engine, runner=None, procfs=None, fs=None, store=e.store,
+                        registry=e.registry, known_formats=FORMATS, now=e.clock, os_name="linux", is_admin=False,
+                        own_pid=1, env={"HOME": "/h", "SECRET_TOKEN": "s3cr3t", "PATH": "/bin", "ProgramData": "C:\\PD",
+                                        "SYSTEMDRIVE": "C:", "AWS_KEY": "k"})
+        assert m._env == {"HOME": "/h", "ProgramData": "C:\\PD", "SYSTEMDRIVE": "C:"}
+        asyncio.run(m.aclose())
+    finally:
+        e.close()
+
+
 def test_scan_ids_use_the_sc_and_sg_prefixes_only(env):
     async def go():
         scan = await env.manager.start(actor="a")

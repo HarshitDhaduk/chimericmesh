@@ -207,3 +207,21 @@ def test_covered_paths_and_dismissals_are_inputs(tmp_path):
     entry = next(e for e in CATALOG.entries if e.app_id == "nginx")
     outcome = scan(tmp_path, dismissed=frozenset({("nginx", fingerprint(entry, HOST))}))
     assert {s.app_id for s in outcome.suggestions} == {"vsftpd"}
+
+
+def test_o16_a_tree_with_source_files_never_yields_a_code_folder(tmp_path):
+    """Discovery never guesses a code folder: scan results name log files only."""
+    make_tree(tmp_path)
+    for rel in ("src/app.py", "package.json", "logs/nginx/server.py", ".git/HEAD"):
+        f = tmp_path / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("x", encoding="utf-8")
+    from chimericmesh.discovery.models import Scan
+    outcome = scan(tmp_path)
+    payload = Scan("sc1", "done", 1.0, 2.0, outcome.limited, HOST, outcome.reason, outcome.failed_tools,
+                   outcome.suggestions).to_dict()
+    text = json.dumps(payload)
+    assert "code_folder" not in text and "folder" not in text
+    paths = [c["path"] for s in payload["suggestions"] for c in s["candidate_log_paths"]]
+    assert paths and all(p.endswith(".log") for p in paths)
+    assert not any(p.endswith((".py", ".json", "HEAD")) for p in paths)
