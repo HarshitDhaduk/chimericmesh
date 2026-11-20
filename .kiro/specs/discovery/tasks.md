@@ -6,17 +6,17 @@ Conventions for every task: write the tests first and watch them fail, then impl
 
 Review findings that became work are cited as `(M1)`, `(M3)`, `(L5)`, `(L8)` on the line they belong to. Findings with no work are listed in the design under "Review resolutions".
 
-- [ ] 1. Skeleton, text helpers and the static rules
-  - [ ] 1.1 Create the package skeleton, models and text helpers
+- [x] 1. Skeleton, text helpers and the static rules
+  - [x] 1.1 Create the package skeleton, models and text helpers
     - Write `tests/unit/test_discovery_text.py` first: `clean_text` removes `[\x00-\x1f\x7f-\x9f]` and lone surrogates, strips, cuts to the limit, accepts non-`str` input; `normalize_process_name` lower-cases, drops directories (`/usr/sbin/nginx`, `C:\Windows\System32\W3WP.EXE`), removes one trailing `.exe`, cuts to 64, returns `""` for empty or hostile input; `path_key` for `windows` is case-insensitive and separator-insensitive, for `linux` it is case-sensitive; every constant of the design has its stated value.
     - Create `discovery/__init__.py` (re-exports only), `discovery/errors.py` (`DiscoveryError`, `CatalogError`, `CatalogUnavailable`, `ScanBusy`, `SuggestionNotFound`, `AlreadyAccepted`), `discovery/models.py` (frozen dataclasses and constants from the design), `discovery/text.py`.
     - _Requirements: 4.1, 4.7_
-  - [ ] 1.2 Add the dependency rows and the static safety scans (M1) (M3) (L5)
+  - [x] 1.2 Add the dependency rows and the static safety scans (M1) (M3) (L5)
     - Edit `tests/unit/test_dependency_direction.py` first (rows only): every `discovery/*.py` file is in group `discovery`; `catalog/` contains no `.py` file; `discovery` may import `core`, `store` and `services` (stdlib-only submodules, never `services.deps` or `services.routes`) and nothing else; `subprocess` only in `runner.py`; `fastapi` and `pydantic` only in `routes.py`; `os` only in `probe.py` and `runner.py`. The "file has no group" check must fail for a new `discovery/*.py` file that is not in the table.
     - Write `tests/unit/test_discovery_static.py`: AST scan of `src/chimericmesh/discovery/`: no import of `socket`, `ssl`, `http`, `urllib`, `httpx`, `ftplib`, `smtplib`, `telnetlib`, `xmlrpc`; no call named `open` (builtin, `io.open`, `Path.open`, `.read_text`, `.read_bytes`) outside `probe.py` (the `/proc/<int>/comm` read) and `catalog.py` (the packaged resource); no `shell=True`, `os.system`, `os.popen`, `os.exec*`, `create_subprocess_shell`; no attribute call `open_connection`, `create_connection`, `getaddrinfo`; `engine.py`, `match.py`, `collect.py`, `probe.py`, `runner.py` import nothing from `chimericmesh.store` or `chimericmesh.services` (M3: the thread-side code shares no hub, registry or store object); no string in `src/chimericmesh/discovery/` or in `tests/**/test_discovery_*` matches `p\d+-[A-Za-z0-9]+` (L5); ids in the sources start with `sc` or `sg`.
     - The tests pass on the files from 1.1 and on any later file added under `discovery/`.
     - _Requirements: 1.5, 2.1f, 2.2, 2.3, Success Criterion 5_
-  - [ ] 1.3 Write the property test for name normalization
+  - [x] 1.3 Write the property test for name normalization
     - Create `tests/pbt/test_discovery_text_properties.py` (arbitrary text including NUL, control characters, lone surrogates, separators, `.EXE`, 10 000-character strings, each OS name).
     - **Property 1: Name normalization**
     - **Validates: Requirements 4.1, 4.7**
