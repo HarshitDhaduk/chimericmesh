@@ -340,6 +340,8 @@ R3.3 sub-criteria used by the tests (L8, resolves the finding for this requireme
 | 3.3g | (design addition) WHEN the file was copy-truncated and regrew beyond the old offset before the next poll, the fingerprint differs and the file is read from its start. |
 | 3.3h | (design addition, review 8) A rename between two polls never fails; a rename that lands inside a poll's read may fail once with WinError 32 on Windows and succeeds on retry; an idle file's stat-only poll never causes a failure. |
 
+Implementation notes (2026-11-19, connectors group 2): (C2-2) the race test of 3.3h measured that one poll of a changed file can hold its handle for hundreds of milliseconds under on-access antivirus scanning or load, not only "about a millisecond"; every failure still fell inside a poll and cleared on retry once the poll returned, so the claim of 3.3h holds and only the test harness changed (see tasks.md 4.4). (C2-1) when `max_read` is configured below `max_line` (tests only), a read without a newline continues to `max_line` bytes in the same poll, so long lines are always cut at `max_line`; the defaults are unaffected.
+
 ### Rate limit and drop notice (`connectors/limiter.py`)
 
 ```python

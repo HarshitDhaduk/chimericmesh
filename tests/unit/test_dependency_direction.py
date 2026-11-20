@@ -30,6 +30,7 @@ FILE_GROUPS: dict[str, str] = {
     "store/": "store",
     "fsperms.py": "store",
     "services/": "services",
+    "connectors/": "connectors",
     "notify.py": "wiring",
     "replay.py": "wiring",
     "replay_irc.py": "wiring",
@@ -269,3 +270,110 @@ def test_services_file_with_forbidden_import_fails_the_scan(tmp_path, monkeypatc
     assert _violations(pkg) == []
     (pkg / "services" / "asgi.py").write_text("import starlette\n")
     assert _violations(pkg) == ["services/asgi.py imports third-party starlette"]
+
+
+# ---- connectors rules (connectors task 2.1, review M1) -------------------------------------------
+
+CONNECTOR_OS_FILES = {"connectors/tailread.py", "connectors/tailer.py"}
+CONNECTOR_SOCKET_FILES = {"connectors/manager.py"}
+CONNECTOR_FORBIDDEN = {
+    "fastapi", "starlette", "pydantic", "httpx", "urllib", "http", "smtplib", "ftplib", "subprocess",
+}
+PARSER_FORBIDDEN = {"os", "socket"}
+SERVICES_WEB_MODULES = {"deps", "routes"}
+
+
+def _file_rule_violations(root: Path) -> list[str]:
+    """Per-file rules of the connectors module, run on any tree (``root`` replaces ``SRC``)."""
+    global SRC
+    saved = SRC
+    SRC = root
+    try:
+        out: list[str] = []
+        for path in all_files():
+            rel = path.relative_to(SRC).as_posix()
+            tops = {top for top, _ in imports_of(path)}
+            if rel.startswith("connectors/"):
+                bad = (tops & CONNECTOR_FORBIDDEN)
+                if "socket" in tops and rel not in CONNECTOR_SOCKET_FILES:
+                    bad.add("socket")
+                if "os" in tops and rel not in CONNECTOR_OS_FILES:
+                    bad.add("os")
+                out += [f"{rel} imports {name}" for name in sorted(bad)]
+                for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                    if isinstance(node, ast.ImportFrom):
+                        mod = (node.module or "").split(".")
+                        if mod[-1:] == ["services"]:
+                            out += [f"{rel} imports services.{a.name}" for a in node.names
+                                    if a.name in SERVICES_WEB_MODULES]
+                        elif mod[-2:-1] == ["services"] and mod[-1] in SERVICES_WEB_MODULES:
+                            out.append(f"{rel} imports services.{mod[-1]}")
+                    elif isinstance(node, ast.Import):
+                        out += [f"{rel} imports {a.name}" for a in node.names
+                                if a.name.split(".")[-2:-1] == ["services"]
+                                and a.name.split(".")[-1] in SERVICES_WEB_MODULES]
+            elif rel.startswith("parsers/"):
+                out += [f"{rel} imports {name}" for name in sorted(tops & PARSER_FORBIDDEN)]
+        return out
+    finally:
+        SRC = saved
+
+
+def test_connectors_per_file_rules_hold_on_the_tree():
+    assert _file_rule_violations(SRC) == []
+
+
+def test_connectors_package_has_a_group_row():
+    assert group_of("connectors/__init__.py") == "connectors"
+    assert group_of("connectors/manager.py") == "connectors"
+    assert MAY_IMPORT["connectors"] == {"core", "store", "services", "connectors"}
+
+
+def _tree(tmp_path: Path, rel: str, text: str, monkeypatch) -> Path:
+    pkg = tmp_path / PKG
+    for sub in ("connectors", "parsers", "services", "store"):
+        (pkg / sub).mkdir(parents=True, exist_ok=True)
+        (pkg / sub / "__init__.py").write_text("")
+    for name in ("hub.py", "listeners.py", "discovery.py", "approvals.py"):
+        (pkg / name).write_text("")
+    monkeypatch.setitem(FILE_GROUPS, "discovery.py", "discovery")
+    monkeypatch.setitem(FILE_GROUPS, "approvals.py", "auto-approval")
+    (pkg / rel).write_text(text)
+    return pkg
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "import chimericmesh.hub",
+        "from chimericmesh import listeners",
+        "import chimericmesh.discovery",
+        "import chimericmesh.approvals",
+        "import httpx",
+        "import subprocess",
+        "import urllib.request",
+        "import socket",
+        "import os",
+        "from chimericmesh.services import routes",
+        "from chimericmesh.services.deps import x",
+    ],
+)
+def test_connectors_file_with_forbidden_import_fails_the_scan(tmp_path, monkeypatch, line):
+    pkg = _tree(tmp_path, "connectors/x.py", line + "\n", monkeypatch)
+    assert _violations(pkg) + _file_rule_violations(pkg), line
+
+
+def test_connectors_allowed_files_pass_the_scan(tmp_path, monkeypatch):
+    pkg = _tree(tmp_path, "connectors/manager.py", "import socket\nfrom chimericmesh.services import registry\n",
+                monkeypatch)
+    (pkg / "services" / "registry.py").write_text("")
+    (pkg / "connectors" / "tailread.py").write_text("import os\nimport asyncio\nfrom chimericmesh.store import x\n")
+    (pkg / "connectors" / "__init__.py").write_text("from .manager import ConnectorManager\n")
+    assert _violations(pkg) + _file_rule_violations(pkg) == []
+
+
+def test_parser_file_importing_os_fails_the_scan(tmp_path, monkeypatch):
+    pkg = _tree(tmp_path, "parsers/x.py", "import os\n", monkeypatch)
+    assert _file_rule_violations(pkg) == ["parsers/x.py imports os"]
+    (pkg / "parsers" / "x.py").write_text("import re\n")
+    assert _file_rule_violations(pkg) == []

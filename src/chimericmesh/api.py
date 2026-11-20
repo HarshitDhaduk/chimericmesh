@@ -18,6 +18,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from .commands import handle_command, parse_command
+from .connectors.config import resolve_tcp_port
+from .connectors.manager import ConnectorManager
+from .connectors.schema import connectors_registry
+from .connectors.submit import make_submit
+from .connectors.syslog_tcp import start_syslog_tcp
 from .events import Event
 from .hub import WEB_NICK, Hub
 from .listeners import IrcServer, start_syslog, start_telnet
@@ -28,7 +33,6 @@ from .services.deps import make_require_admin
 from .services.limiter import ReduceAuditLimiter
 from .services.registry import ServiceRegistry
 from .services.routes import build_router
-from .services.schema import services_registry
 from .services.token import TokenStore, resolve_token_path
 from .store import MigrationRegistry, Store, StoreError
 from .store.config import MEMORY, resolve_db_path, resolve_home
@@ -89,7 +93,7 @@ LIMITER_FLUSH_SECONDS = 0.5
 
 def build_registry() -> MigrationRegistry:
     """Every module's migrations. Later modules add their ``register_migrations`` call here."""
-    return services_registry()  # core plus the services migrations
+    return connectors_registry()  # core, services and connectors migrations
 
 
 def _build_access(enforce: bool, hub: Hub, store: Store) -> AccessControl:
@@ -150,10 +154,13 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
     reduce_limiter = ReduceAuditLimiter(store.audit, now=hub.now)
     require_admin = make_require_admin(access)
     irc = IrcServer(hub)
+    submit = make_submit(hub.ingest)
+    manager = ConnectorManager(registry, store, submit)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         closers = []
+        syslog_tcp = None
         try:
             if start_listeners:
                 ports = {
@@ -167,34 +174,52 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
                 closers.append(telnet_s.close)
                 irc_s = await irc.start(bind, ports["irc"])
                 closers.append(irc_s.close)
+                # A busy TCP port is a warning, never a failed start (B15).
+                syslog_tcp = await start_syslog_tcp(submit, bind, resolve_tcp_port(os.environ))
+                app.state.syslog_tcp = syslog_tcp
             hub.start()
+            # Tailers are not sockets: they start whether or not the listeners do.
+            await manager.start()
         except BaseException:
             for close in closers:
                 close()
+            if syslog_tcp is not None:
+                await syslog_tcp.aclose(0.4)
+            await manager.aclose(0.6)
+            app.state.syslog_tcp = None
             if owns_store:
                 store.close(timeout=SHUTDOWN_SECONDS, clean=False)  # a start that never served stays unclean
             raise
         yield
-        # Shutdown order: listeners stop calling ingest, then the limiter flushes its audit rows, then the
-        # hub flushes, then the store closes, all against one deadline taken when shutdown begins.
+        # Shutdown order: the listeners stop calling ingest, the TCP server and the manager stop (one second
+        # between them), then the limiter flushes its audit rows, then the hub flushes, then the store closes,
+        # all against one deadline taken when shutdown begins. The hub keeps at least 3 seconds.
         deadline = time.monotonic() + SHUTDOWN_SECONDS
+
+        def remaining() -> float:
+            return max(0.05, deadline - time.monotonic())
+
         for close in closers:
             close()
+        if syslog_tcp is not None:
+            await syslog_tcp.aclose(min(0.4, remaining()))
+        app.state.syslog_tcp = None
+        await manager.aclose(min(0.6, remaining()))
         try:
-            await asyncio.wait_for(reduce_limiter.aclose(),
-                                   min(LIMITER_FLUSH_SECONDS, max(0.05, deadline - time.monotonic())))
+            await asyncio.wait_for(reduce_limiter.aclose(), min(LIMITER_FLUSH_SECONDS, remaining()))
         except Exception:  # includes the timeout: the hub flush matters more than a coalesced audit row
             log.error("the reduce-operations limiter did not flush before its slice ended")
-        await hub.aclose(max(0.1, deadline - time.monotonic()))
+        await hub.aclose(max(0.1, remaining()))
         if owns_store:
-            store.close(timeout=max(0.1, deadline - time.monotonic()))
-
+            store.close(timeout=max(0.1, remaining()))
     app = FastAPI(title="ChimericMesh", version="0.1.0", lifespan=lifespan)
     app.state.hub = hub
     app.state.store = store
     app.state.services = registry
     app.state.access = access
     app.state.reduce_limiter = reduce_limiter
+    app.state.connectors = manager
+    app.state.syslog_tcp = None
 
     @app.exception_handler(StoreError)
     async def store_unavailable(request: Request, exc: StoreError):
