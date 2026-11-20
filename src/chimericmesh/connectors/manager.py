@@ -26,7 +26,6 @@ class ConnectorManager:
                  machine: str | None = None, config: ConnectorConfig | None = None,
                  clock: Callable[[], float] = time.monotonic) -> None:
         self.registry = registry
-        self._store = store
         self._submit = submit
         self._cfg = config or ConnectorConfig()
         self._clock = clock
@@ -68,7 +67,7 @@ class ConnectorManager:
 
     async def start(self) -> None:
         if not await self._offsets.available():
-            log.warning("the tail_offsets table is missing; file read positions are not persisted")
+            self._offsets.warn_missing()
         else:
             try:
                 self._rows = await self._offsets.load()

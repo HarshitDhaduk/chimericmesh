@@ -4,10 +4,11 @@ from __future__ import annotations
 import logging
 import re
 import time
+import weakref
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from ..store import Store, Tx
+from ..store import Store, StoreError, Tx
 from .tailread import FileIdent, TailState
 
 log = logging.getLogger("chimericmesh.connectors")
@@ -76,17 +77,27 @@ def _has_table(tx: Tx) -> bool:
 
 class OffsetStore:
     def __init__(self, store: Store, now: Callable[[], float] = time.time) -> None:
-        self._store = store
+        # Weak, like the registry's and AuditLog's: the hub reaches this object through `hub.tagger` and the
+        # registry's subscription, and a strong reference would keep a private `:memory:` store (and its writer
+        # thread) alive after the app that owns it is dropped.
+        self._store_ref = weakref.ref(store)
         self._now = now
         self._available: bool | None = None
         self._warned_missing = False
+
+    @property
+    def _store(self) -> Store:
+        store = self._store_ref()
+        if store is None:
+            raise StoreError("the store was closed and dropped")
+        return store
 
     async def available(self) -> bool:
         if self._available is None:
             self._available = bool(await self._store.read(_has_table))
         return self._available
 
-    def _missing(self) -> None:
+    def warn_missing(self) -> None:
         if not self._warned_missing:
             self._warned_missing = True
             log.warning("the tail_offsets table is missing; file read positions are not persisted")
@@ -112,7 +123,7 @@ class OffsetStore:
         if not rows:
             return
         if not await self.available():
-            self._missing()
+            self.warn_missing()
             return
         params = [(r.log_source_id, str(r.dev), str(r.ino), r.head_len, r.head_sha, r.offset,
                    1 if r.discarding else 0, r.updated_at) for r in rows]

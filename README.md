@@ -82,6 +82,21 @@ This replays a real Ubuntu support channel through the mesh's IRC server, with o
 
 Things the real chat taught us: a chat line is evidence, not proof, so IRC text is capped at error severity and a single message about the OOM killer can no longer open an incident, and the IRC server now ignores any sender prefix a client supplies and uses the registered nickname. Clients must register (`NICK`) before their messages are ingested.
 
+## Log files and TCP syslog
+
+Servers that only write log files (Apache, nginx, IIS, vsftpd, Postfix) are read in place; nothing wraps or launches them. Register a file on a service with `POST /api/services/{id}/log-sources` and a body like `{"path": "C:\\inetpub\\logs\\u_ex.log", "format": "w3c"}`. The formats are `syslog-text`, `ncsa` (Apache and nginx access logs), `w3c` (IIS), `xferlog` (FTP) and `plain`. `GET /api/services/{id}` shows each source's status and counters.
+
+- The hub opens the file for a moment on each poll and never holds it open, so rotation by rename works on Windows too. A rename that lands inside a read can fail with WinError 32; the rotating program should retry after a short wait. Measured on a Windows 11 machine while the file was being appended to, 1.5 to 3 percent of renames needed one retry; on an idle file none did.
+- Lines written in the last half second before a rename or truncation can be lost, and so can a line without its newline at that moment.
+- Read positions are saved every 5 seconds. After a crash the hub can repeat up to 5 seconds of lines, and can lose a few hundred milliseconds of events that the store had not yet written. A graceful stop saves the final position.
+- A source that is disabled and enabled again starts at the end of the file. A new source starts at the end too, unless `backfill_lines` asks for recent lines.
+- Event times are the arrival time at the hub, not the time written in the line.
+- Limits: 2000 lines per second per source (extra lines are counted as dropped and summarised in one warning event), 8192 bytes per line, 1 MiB per poll.
+- The path is fixed. Date-named files such as IIS `u_exYYMMDD.log` need a new path each day.
+- Secrets in query strings and in `password=`, `token=` and `Authorization:` values are replaced by `<redacted>`. This is a best effort, not a guarantee.
+
+Syslog over TCP (octet-counted or newline-framed) listens on `CHIMERICMESH_SYSLOG_TCP_PORT`, which defaults to 5514 (the UDP port number, on its own socket); `0` disables it. A busy port logs one warning and the hub starts anyway.
+
 ## MCP for Kiro
 
 Run `python -m chimericmesh.mcp_server` (stdio) with `PYTHONPATH=src` and `CHIMERICMESH_URL` pointing at the hub. Add it to `.kiro/settings/mcp.json`:
