@@ -31,6 +31,7 @@ FILE_GROUPS: dict[str, str] = {
     "fsperms.py": "store",
     "services/": "services",
     "connectors/": "connectors",
+    "discovery/": "discovery",
     "notify.py": "wiring",
     "replay.py": "wiring",
     "replay_irc.py": "wiring",
@@ -66,6 +67,7 @@ THIRD_PARTY_ALLOWED_GROUPS = {"wiring"}
 THIRD_PARTY_FILES: dict[str, set[str]] = {
     "services/deps.py": {"fastapi", "starlette", "pydantic"},
     "services/routes.py": {"fastapi", "starlette", "pydantic"},
+    "discovery/routes.py": {"fastapi", "starlette", "pydantic"},
 }
 
 
@@ -377,3 +379,101 @@ def test_parser_file_importing_os_fails_the_scan(tmp_path, monkeypatch):
     assert _file_rule_violations(pkg) == ["parsers/x.py imports os"]
     (pkg / "parsers" / "x.py").write_text("import re\n")
     assert _file_rule_violations(pkg) == []
+
+# ---- discovery rules (discovery task 1.2, review M1) ---------------------------------------------
+DISCOVERY_SUBPROCESS_FILES = {"discovery/runner.py"}
+DISCOVERY_OS_FILES = {"discovery/probe.py", "discovery/runner.py"}
+DISCOVERY_WEB_FILES = {"discovery/routes.py"}
+DISCOVERY_NETWORK = {"socket", "ssl", "http", "urllib", "httpx", "ftplib", "smtplib", "telnetlib", "xmlrpc"}
+DISCOVERY_WEB = {"fastapi", "starlette", "pydantic"}
+
+
+def _discovery_rule_violations(root: Path) -> list[str]:
+    global SRC
+    saved = SRC
+    SRC = root
+    try:
+        out: list[str] = []
+        for path in all_files():
+            rel = path.relative_to(SRC).as_posix()
+            if not rel.startswith("discovery/"):
+                continue
+            tops = {top for top, _ in imports_of(path)}
+            bad = tops & DISCOVERY_NETWORK
+            if "subprocess" in tops and rel not in DISCOVERY_SUBPROCESS_FILES:
+                bad.add("subprocess")
+            if "os" in tops and rel not in DISCOVERY_OS_FILES:
+                bad.add("os")
+            if tops & DISCOVERY_WEB and rel not in DISCOVERY_WEB_FILES:
+                bad |= tops & DISCOVERY_WEB
+            out += [f"{rel} imports {name}" for name in sorted(bad)]
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.ImportFrom):
+                    mod = (node.module or "").split(".")
+                    if mod[-1:] == ["services"]:
+                        out += [f"{rel} imports services.{a.name}" for a in node.names
+                                if a.name in SERVICES_WEB_MODULES]
+                    elif mod[-2:-1] == ["services"] and mod[-1] in SERVICES_WEB_MODULES:
+                        out.append(f"{rel} imports services.{mod[-1]}")
+                elif isinstance(node, ast.Import):
+                    out += [f"{rel} imports {a.name}" for a in node.names
+                            if a.name.split(".")[-2:-1] == ["services"]
+                            and a.name.split(".")[-1] in SERVICES_WEB_MODULES]
+        return out
+    finally:
+        SRC = saved
+
+
+def test_discovery_per_file_rules_hold_on_the_tree():
+    assert _discovery_rule_violations(SRC) == []
+
+
+def test_discovery_package_has_a_group_row_and_data_only_catalog():
+    assert group_of("discovery/__init__.py") == "discovery"
+    assert group_of("discovery/runner.py") == "discovery"
+    assert MAY_IMPORT["discovery"] == {"core", "store", "services", "discovery"}
+    catalog = SRC / "catalog"
+    if catalog.exists():
+        assert not list(catalog.rglob("*.py"))
+        assert not (catalog / "__init__.py").exists()
+
+
+def _dtree(tmp_path: Path, rel: str, text: str) -> Path:
+    pkg = tmp_path / PKG
+    for sub in ("discovery", "services", "store", "connectors"):
+        (pkg / sub).mkdir(parents=True, exist_ok=True)
+        (pkg / sub / "__init__.py").write_text("")
+    for name in ("hub.py", "api.py"):
+        (pkg / name).write_text("")
+    (pkg / "services" / "deps.py").write_text("")
+    (pkg / rel).write_text(text)
+    return pkg
+
+
+@pytest.mark.parametrize(
+    "rel,line",
+    [
+        ("discovery/match.py", "import subprocess"),
+        ("discovery/match.py", "import os"),
+        ("discovery/collect.py", "import socket"),
+        ("discovery/collect.py", "import urllib.request"),
+        ("discovery/manager.py", "import fastapi"),
+        ("discovery/manager.py", "import pydantic"),
+        ("discovery/manager.py", "from chimericmesh.services import deps"),
+        ("discovery/manager.py", "from chimericmesh.services.deps import x"),
+        ("discovery/manager.py", "from chimericmesh.hub import Hub"),
+        ("discovery/manager.py", "import chimericmesh.connectors"),
+        ("discovery/manager.py", "import httpx"),
+    ],
+)
+def test_discovery_file_with_forbidden_import_fails_the_scan(tmp_path, rel, line):
+    pkg = _dtree(tmp_path, rel, line + "\n")
+    assert _violations(pkg) + _discovery_rule_violations(pkg), (rel, line)
+
+
+def test_discovery_allowed_files_pass_the_scan(tmp_path):
+    pkg = _dtree(tmp_path, "discovery/runner.py", "import subprocess\nimport os\n")
+    (pkg / "discovery" / "probe.py").write_text("import os\n")
+    (pkg / "discovery" / "routes.py").write_text("import fastapi\nimport pydantic\n")
+    (pkg / "discovery" / "accept.py").write_text("from chimericmesh.services.models import X\n")
+    assert _violations(pkg) + _discovery_rule_violations(pkg) == []

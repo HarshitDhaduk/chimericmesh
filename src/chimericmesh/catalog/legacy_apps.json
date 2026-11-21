@@ -1,0 +1,612 @@
+{
+ "version": 1,
+ "apps": [
+  {
+   "app_id": "apache",
+   "name": "Apache httpd",
+   "process_names": [
+    "httpd",
+    "apache2"
+   ],
+   "ports": [
+    80,
+    443
+   ],
+   "protocol_label": "http",
+   "justification": null,
+   "log_paths": {
+    "linux": [
+     {
+      "path": "/var/log/apache2/*access*.log",
+      "format": "ncsa",
+      "kind": "access"
+     },
+     {
+      "path": "/var/log/apache2/*error*.log",
+      "format": "plain",
+      "kind": "error"
+     },
+     {
+      "path": "/var/log/httpd/*access_log",
+      "format": "ncsa",
+      "kind": "access"
+     },
+     {
+      "path": "/var/log/httpd/*error_log",
+      "format": "plain",
+      "kind": "error"
+     }
+    ],
+    "windows": [
+     {
+      "path": "%SystemDrive%\\Apache24\\logs\\access.log",
+      "format": "ncsa",
+      "kind": "access"
+     },
+     {
+      "path": "%SystemDrive%\\Apache24\\logs\\error.log",
+      "format": "plain",
+      "kind": "error"
+     },
+     {
+      "path": "%SystemDrive%\\xampp\\apache\\logs\\access.log",
+      "format": "ncsa",
+      "kind": "access"
+     },
+     {
+      "path": "%SystemDrive%\\xampp\\apache\\logs\\error.log",
+      "format": "plain",
+      "kind": "error"
+     }
+    ],
+    "macos": [
+     {
+      "path": "/var/log/apache2/access_log",
+      "format": "ncsa",
+      "kind": "access"
+     },
+     {
+      "path": "/var/log/apache2/error_log",
+      "format": "plain",
+      "kind": "error"
+     },
+     {
+      "path": "/opt/homebrew/var/log/httpd/access_log",
+      "format": "ncsa",
+      "kind": "access"
+     },
+     {
+      "path": "/opt/homebrew/var/log/httpd/error_log",
+      "format": "plain",
+      "kind": "error"
+     },
+     {
+      "path": "/usr/local/var/log/httpd/access_log",
+      "format": "ncsa",
+      "kind": "access"
+     },
+     {
+      "path": "/usr/local/var/log/httpd/error_log",
+      "format": "plain",
+      "kind": "error"
+     }
+    ]
+   }
+  },
+  {
+   "app_id": "nginx",
+   "name": "nginx",
+   "process_names": [
+    "nginx"
+   ],
+   "ports": [
+    80,
+    443
+   ],
+   "protocol_label": "http",
+   "justification": null,
+   "log_paths": {
+    "linux": [
+     {
+      "path": "/var/log/nginx/access*.log",
+      "format": "ncsa",
+      "kind": "access"
+     },
+     {
+      "path": "/var/log/nginx/error*.log",
+      "format": "plain",
+      "kind": "error"
+     }
+    ],
+    "windows": [
+     {
+      "path": "%SystemDrive%\\nginx\\logs\\access.log",
+      "format": "ncsa",
+      "kind": "access"
+     },
+     {
+      "path": "%SystemDrive%\\nginx\\logs\\error.log",
+      "format": "plain",
+      "kind": "error"
+     }
+    ],
+    "macos": [
+     {
+      "path": "/opt/homebrew/var/log/nginx/access.log",
+      "format": "ncsa",
+      "kind": "access"
+     },
+     {
+      "path": "/opt/homebrew/var/log/nginx/error.log",
+      "format": "plain",
+      "kind": "error"
+     },
+     {
+      "path": "/usr/local/var/log/nginx/access.log",
+      "format": "ncsa",
+      "kind": "access"
+     },
+     {
+      "path": "/usr/local/var/log/nginx/error.log",
+      "format": "plain",
+      "kind": "error"
+     }
+    ]
+   }
+  },
+  {
+   "app_id": "iis",
+   "name": "Microsoft IIS",
+   "process_names": [
+    "w3wp",
+    "inetinfo"
+   ],
+   "ports": [
+    80,
+    443
+   ],
+   "protocol_label": "http",
+   "justification": null,
+   "log_paths": {
+    "linux": [],
+    "windows": [
+     {
+      "path": "%SystemDrive%\\inetpub\\logs\\LogFiles\\W3SVC*\\*.log",
+      "format": "w3c",
+      "kind": "access"
+     },
+     {
+      "path": "%SystemRoot%\\System32\\LogFiles\\HTTPERR\\*.log",
+      "format": "w3c",
+      "kind": "error"
+     }
+    ],
+    "macos": []
+   }
+  },
+  {
+   "app_id": "vsftpd",
+   "name": "vsftpd",
+   "process_names": [
+    "vsftpd"
+   ],
+   "ports": [
+    21
+   ],
+   "protocol_label": "ftp",
+   "justification": null,
+   "log_paths": {
+    "linux": [
+     {
+      "path": "/var/log/vsftpd.log",
+      "format": "plain",
+      "kind": "ftp"
+     },
+     {
+      "path": "/var/log/xferlog",
+      "format": "xferlog",
+      "kind": "ftp"
+     }
+    ],
+    "windows": [],
+    "macos": []
+   }
+  },
+  {
+   "app_id": "proftpd",
+   "name": "ProFTPD",
+   "process_names": [
+    "proftpd"
+   ],
+   "ports": [
+    21
+   ],
+   "protocol_label": "ftp",
+   "justification": null,
+   "log_paths": {
+    "linux": [
+     {
+      "path": "/var/log/proftpd/proftpd.log",
+      "format": "plain",
+      "kind": "ftp"
+     },
+     {
+      "path": "/var/log/proftpd/xferlog",
+      "format": "xferlog",
+      "kind": "ftp"
+     }
+    ],
+    "windows": [],
+    "macos": []
+   }
+  },
+  {
+   "app_id": "filezilla-server",
+   "name": "FileZilla Server",
+   "process_names": [
+    "filezilla server",
+    "filezilla-server"
+   ],
+   "ports": [
+    21
+   ],
+   "protocol_label": "ftp",
+   "justification": null,
+   "log_paths": {
+    "linux": [],
+    "windows": [
+     {
+      "path": "%ProgramData%\\filezilla-server\\logs\\*.log",
+      "format": "plain",
+      "kind": "ftp"
+     },
+     {
+      "path": "%ProgramFiles%\\FileZilla Server\\Logs\\*.log",
+      "format": "plain",
+      "kind": "ftp"
+     },
+     {
+      "path": "%ProgramFiles(x86)%\\FileZilla Server\\Logs\\*.log",
+      "format": "plain",
+      "kind": "ftp"
+     }
+    ],
+    "macos": []
+   }
+  },
+  {
+   "app_id": "sendmail",
+   "name": "Sendmail",
+   "process_names": [
+    "sendmail"
+   ],
+   "ports": [
+    25,
+    587
+   ],
+   "protocol_label": "smtp",
+   "justification": null,
+   "log_paths": {
+    "linux": [
+     {
+      "path": "/var/log/maillog",
+      "format": "syslog-text",
+      "kind": "mail"
+     },
+     {
+      "path": "/var/log/mail.log",
+      "format": "syslog-text",
+      "kind": "mail"
+     }
+    ],
+    "windows": [],
+    "macos": [
+     {
+      "path": "/var/log/mail.log",
+      "format": "syslog-text",
+      "kind": "mail"
+     }
+    ]
+   }
+  },
+  {
+   "app_id": "postfix",
+   "name": "Postfix",
+   "process_names": [
+    "postfix",
+    "qmgr",
+    "pickup"
+   ],
+   "ports": [
+    25,
+    587
+   ],
+   "protocol_label": "smtp",
+   "justification": null,
+   "log_paths": {
+    "linux": [
+     {
+      "path": "/var/log/mail.log",
+      "format": "syslog-text",
+      "kind": "mail"
+     },
+     {
+      "path": "/var/log/maillog",
+      "format": "syslog-text",
+      "kind": "mail"
+     },
+     {
+      "path": "/var/log/mail.err",
+      "format": "syslog-text",
+      "kind": "mail"
+     }
+    ],
+    "windows": [],
+    "macos": [
+     {
+      "path": "/var/log/mail.log",
+      "format": "syslog-text",
+      "kind": "mail"
+     }
+    ]
+   }
+  },
+  {
+   "app_id": "exim",
+   "name": "Exim",
+   "process_names": [
+    "exim",
+    "exim4"
+   ],
+   "ports": [
+    25,
+    465,
+    587
+   ],
+   "protocol_label": "smtp",
+   "justification": null,
+   "log_paths": {
+    "linux": [
+     {
+      "path": "/var/log/exim4/mainlog",
+      "format": "plain",
+      "kind": "mail"
+     },
+     {
+      "path": "/var/log/exim4/rejectlog",
+      "format": "plain",
+      "kind": "mail"
+     },
+     {
+      "path": "/var/log/exim4/paniclog",
+      "format": "plain",
+      "kind": "mail"
+     },
+     {
+      "path": "/var/log/exim/main.log",
+      "format": "plain",
+      "kind": "mail"
+     }
+    ],
+    "windows": [],
+    "macos": []
+   }
+  },
+  {
+   "app_id": "bind",
+   "name": "BIND (named)",
+   "process_names": [
+    "named"
+   ],
+   "ports": [
+    53
+   ],
+   "protocol_label": "dns",
+   "justification": null,
+   "log_paths": {
+    "linux": [
+     {
+      "path": "/var/log/named/*.log",
+      "format": "plain",
+      "kind": "other"
+     },
+     {
+      "path": "/var/log/bind/*.log",
+      "format": "plain",
+      "kind": "other"
+     }
+    ],
+    "windows": [
+     {
+      "path": "%ProgramFiles%\\ISC BIND 9\\log\\*.log",
+      "format": "plain",
+      "kind": "other"
+     }
+    ],
+    "macos": []
+   }
+  },
+  {
+   "app_id": "samba",
+   "name": "Samba",
+   "process_names": [
+    "smbd",
+    "nmbd"
+   ],
+   "ports": [
+    139,
+    445
+   ],
+   "protocol_label": "smb",
+   "justification": null,
+   "log_paths": {
+    "linux": [
+     {
+      "path": "/var/log/samba/log.smbd",
+      "format": "plain",
+      "kind": "other"
+     },
+     {
+      "path": "/var/log/samba/log.nmbd",
+      "format": "plain",
+      "kind": "other"
+     }
+    ],
+    "windows": [],
+    "macos": []
+   }
+  },
+  {
+   "app_id": "squid",
+   "name": "Squid",
+   "process_names": [
+    "squid",
+    "squid3"
+   ],
+   "ports": [
+    3128
+   ],
+   "protocol_label": "proxy",
+   "justification": null,
+   "log_paths": {
+    "linux": [
+     {
+      "path": "/var/log/squid/access.log",
+      "format": "plain",
+      "kind": "access"
+     },
+     {
+      "path": "/var/log/squid/cache.log",
+      "format": "plain",
+      "kind": "other"
+     },
+     {
+      "path": "/var/log/squid3/access.log",
+      "format": "plain",
+      "kind": "access"
+     },
+     {
+      "path": "/var/log/squid3/cache.log",
+      "format": "plain",
+      "kind": "other"
+     }
+    ],
+    "windows": [
+     {
+      "path": "%SystemDrive%\\Squid\\var\\log\\squid\\*.log",
+      "format": "plain",
+      "kind": "other"
+     }
+    ],
+    "macos": []
+   }
+  },
+  {
+   "app_id": "inetd",
+   "name": "inetd, xinetd and telnetd",
+   "process_names": [
+    "inetd",
+    "xinetd",
+    "in.telnetd",
+    "telnetd",
+    "openbsd-inetd"
+   ],
+   "ports": [
+    23
+   ],
+   "protocol_label": "telnet",
+   "justification": null,
+   "log_paths": {
+    "linux": [
+     {
+      "path": "/var/log/auth.log",
+      "format": "syslog-text",
+      "kind": "other"
+     },
+     {
+      "path": "/var/log/secure",
+      "format": "syslog-text",
+      "kind": "other"
+     },
+     {
+      "path": "/var/log/daemon.log",
+      "format": "syslog-text",
+      "kind": "other"
+     }
+    ],
+    "windows": [],
+    "macos": []
+   }
+  },
+  {
+   "app_id": "syslog-daemon",
+   "name": "Syslog daemon",
+   "process_names": [
+    "rsyslogd",
+    "syslog-ng",
+    "syslogd"
+   ],
+   "ports": [
+    514
+   ],
+   "protocol_label": "syslog",
+   "justification": null,
+   "log_paths": {
+    "linux": [
+     {
+      "path": "/var/log/syslog",
+      "format": "syslog-text",
+      "kind": "other"
+     },
+     {
+      "path": "/var/log/messages",
+      "format": "syslog-text",
+      "kind": "other"
+     }
+    ],
+    "windows": [],
+    "macos": [
+     {
+      "path": "/var/log/system.log",
+      "format": "syslog-text",
+      "kind": "other"
+     }
+    ]
+   }
+  },
+  {
+   "app_id": "snmpd",
+   "name": "net-snmp agent (snmpd)",
+   "process_names": [
+    "snmpd"
+   ],
+   "ports": [
+    161
+   ],
+   "protocol_label": "snmp",
+   "justification": null,
+   "log_paths": {
+    "linux": [
+     {
+      "path": "/var/log/snmpd.log",
+      "format": "plain",
+      "kind": "other"
+     },
+     {
+      "path": "/var/log/snmp/snmpd.log",
+      "format": "plain",
+      "kind": "other"
+     }
+    ],
+    "windows": [],
+    "macos": [
+     {
+      "path": "/var/log/snmpd.log",
+      "format": "plain",
+      "kind": "other"
+     }
+    ]
+   }
+  }
+ ]
+}

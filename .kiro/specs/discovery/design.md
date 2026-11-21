@@ -707,3 +707,17 @@ Dependencies for the schedule: build order is `store`, `services`, `connectors`,
 | 15 LOW wheel test | Addressed: build from a temporary copy of `pyproject.toml` and `src/`, opt-in skip. Task 2.3. |
 
 Real-machine output fixtures for `ss`, `netstat`, `lsof` and non-English `netstat -ano` are required input for task 3.1 (review "unverified" note).
+
+## Implementation deviations (2026-11-20)
+
+Recorded during the build on `feat/discovery`. None changes an approved requirement; each is the conservative reading. Details in `.agents/tasks/discovery-impl/blockers.md`.
+
+| Id | Design text | As built | Why |
+|---|---|---|---|
+| D1 | `parse_lsof`: the port is the last `:(\d+)` in `NAME`. | The first local `:port` (a colon after an address character). | For a connected UDP socket `a:1->b:2` the last match is the remote port. Same result for `LISTEN` lines. |
+| D2 | Not stated: an entry that matches but has no rules for the host OS. | Skipped (for example `w3wp` or port 21 matching FileZilla on Linux). | A suggestion with zero paths cannot be accepted (O10); this only removes noise. |
+| D3 | `usable` is false when no tool produced any records. | `usable` is true when at least one tool ran successfully, even with empty output. | R2.5 fails a scan only when every tool fails. |
+| D4 | The manager receives `env` (the wiring passes `os.environ`). | The manager keeps only the `ALLOWED_ENV` names (self-review finding). The runner gets only `SystemRoot`. | Tokens or keys in the environment never sit in scan objects. |
+| D5 | The `socket` test patches `socket.socket` while the scan runs. | The patch is a `socket.socket` subclass that fails only on the `discovery-scan` thread. | On Windows the event loop itself creates sockets and asyncio uses `isinstance(x, socket.socket)`; a global function patch hangs the loop. The engine-level test still patches `socket.socket` globally. |
+| D6 | One audit row per scan (R1.6). | A scan cancelled by shutdown is marked `failed` with reason `cancelled` but writes no audit row. | The store may be closing during shutdown; review-2 finding 1, LOW. |
+| D7 | Wheel test builds with `pip wheel`. | Skipped on this machine: `setuptools` is not installed and installs were not allowed. The `pyproject.toml` package-data test runs. | Environment. |

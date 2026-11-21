@@ -97,6 +97,48 @@ Servers that only write log files (Apache, nginx, IIS, vsftpd, Postfix) are read
 
 Syslog over TCP (octet-counted or newline-framed) listens on `CHIMERICMESH_SYSLOG_TCP_PORT`, which defaults to 5514 (the UDP port number, on its own socket); `0` disables it. A busy port logs one warning and the hub starts anyway.
 
+## Discovery
+
+Discovery is an opt-in scan of the local machine that suggests services for well-known legacy servers (Apache, nginx, IIS, vsftpd, ProFTPD, FileZilla Server, Sendmail, Postfix, Exim, BIND, Samba, Squid, inetd and telnetd, syslog daemons, snmpd). It never runs on its own: no scan at startup, on a timer or as a side effect. Nothing is watched until you accept a suggestion.
+
+Every route needs the admin token (`X-Admin-Token`), including reading the results, because a scan lists the software installed on the machine:
+
+| Route | Does |
+|---|---|
+| `POST /api/discovery/scan` | Start one scan. `202 {"scan_id", "state": "running"}`; `409` while a scan runs; `503` when the catalog could not be loaded. |
+| `GET /api/discovery/scans/{id}` | `state` (`running`, `done`, `failed`), `started_at`, `finished_at`, `limited`, `os`, `reason` and the suggestions. Results are kept in memory for one hour (at most 5 scans). |
+| `POST /api/discovery/suggestions/{id}/accept` | Body `{"id", "name", "log_paths": [{"path", "format"}], "code_folder"?, "app_names"?}`. Creates the service and its log sources in one step (`origin: discovery`), or `422` with a `field` and nothing created. |
+| `POST /api/discovery/suggestions/{id}/dismiss` | Do not offer this app with these paths again. |
+| `GET /api/discovery/dismissals` | List dismissals. |
+| `DELETE /api/discovery/dismissals` | Clear all dismissals; the apps are offered again on the next scan. |
+
+```powershell
+$h = @{ "X-Admin-Token" = (Get-Content "$env:USERPROFILE\.chimericmesh\admin.token") }
+$scan = Invoke-RestMethod -Method Post -Headers $h http://127.0.0.1:8000/api/discovery/scan
+Invoke-RestMethod -Headers $h "http://127.0.0.1:8000/api/discovery/scans/$($scan.scan_id)"
+```
+
+What a scan does: it runs the operating system's own tools with a fixed argument list, never through a shell, from their system directory (never the current folder or `PATH`), each with a 10 second timeout and 2 MB of output, 30 seconds in total. On Windows `tasklist /fo csv /nh` and `netstat -ano`; on Linux the names in `/proc/<pid>/comm` and `ss -ltnup` (or `netstat -ltnup` when `ss` fails); on macOS `ps -axo pid=,comm=` and `lsof -nP -iTCP -sTCP:LISTEN -iUDP`. It matches process names (and, for protocol-specific ports such as 21, 23 and 25, listening ports) against `src/chimericmesh/catalog/legacy_apps.json`, then looks at each candidate log path with `stat` only. It never reads log contents, never reads command lines, makes no network connection and keeps no process list: a suggestion holds only the matched process name, the lowest pid, the number of matching processes and the listening ports. It runs with your normal rights and never asks for elevation. When some details were not visible (a tool failed or timed out, output was cut, another user's processes are hidden, a candidate list was cut at 25 paths), the result says `limited: true` and gives a `reason`.
+
+Discovery cannot be started by an agent: there is no MCP tool for it, and the results are not exposed to MCP. The dashboard's discovery screen (when built) uses the same routes; you can always add a path by hand with `POST /api/services/{id}/log-sources`.
+
+Limits to know:
+
+- Accept stores the files that exist at accept time, not the pattern. A rotating log needs its new file added by hand; patterns are not stored. This matters for daily files such as IIS `u_exYYMMDD.log` and FileZilla Server logs.
+- IIS may not appear: its worker `w3wp` starts only after the first request to a site, and port 80 alone is not evidence of IIS. Make one request to the site, then scan again, or add the IIS log path by hand.
+- Discovery never guesses a code folder. Suggestions contain no `code_folder`; you may type one at accept time, and the services rules refuse a home directory, a drive root or the hub's data directory.
+- The demo `examples/legacy_app` is not in the catalog on purpose. Add it by hand as a service to show the manual path.
+- To add or change an app, edit `catalog/legacy_apps.json` (it is validated at startup; an invalid file disables discovery and nothing else). If the `w3c` or `xferlog` format is ever dropped, change those entries to `plain` in the same change.
+
+Manual checks (not automated):
+
+1. Verify the catalog paths against vendor documentation or a sample machine for each of the 15 entries.
+2. On the Windows development machine, scan with a real IIS or Apache if present, otherwise with the demo `legacy_app` running (it is not suggested and is added by hand; `examples/legacy_app/upstream.py` is not changed by discovery). Check that the suggestions and the `limited` flag are sensible.
+3. Run once as a non-admin user on Linux and check `limited: true`.
+4. Rehearse the demo with nginx or Apache: scan, accept, append an error line, watch the incident.
+5. On a Windows machine with IIS, scan once before and once after the first request to the site: `iis` should appear only after `w3wp` runs.
+6. Capture real output of `ss -ltnup`, `netstat -ltnup`, `lsof` and `netstat -ano` on a non-English Windows and add them as parser fixtures.
+
 ## MCP for Kiro
 
 Run `python -m chimericmesh.mcp_server` (stdio) with `PYTHONPATH=src` and `CHIMERICMESH_URL` pointing at the hub. Add it to `.kiro/settings/mcp.json`:

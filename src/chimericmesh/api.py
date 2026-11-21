@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import random
+import sys
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -23,10 +24,20 @@ from .connectors.manager import ConnectorManager
 from .connectors.schema import connectors_registry
 from .connectors.submit import make_submit
 from .connectors.syslog_tcp import start_syslog_tcp
+from .discovery.accept import Acceptor, RegistrySink
+from .discovery.catalog import load_catalog
+from .discovery.engine import run_scan_sync
+from .discovery.manager import DiscoveryService, ScanManager
+from .discovery.probe import LinuxProcFs, OsFsProbe
+from .discovery.routes import build_router as build_discovery_router
+from .discovery.runner import SubprocessRunner
+from .discovery.schema import register_migrations as register_discovery_migrations
+from .discovery.text import os_name_from_platform
 from .events import Event
 from .hub import WEB_NICK, Hub
 from .listeners import IrcServer, start_syslog, start_telnet
 from .parsers import irc_to_event, parse_syslog, telnet_to_event
+from .parsers.formats import FORMAT_NAMES
 from .services.access import AccessControl, OperatorVerdict, is_loopback, parse_allowed_hosts
 from .services.asgi import MAX_BODY_BYTES, BodyLimit, HostGuard
 from .services.deps import make_require_admin
@@ -93,7 +104,9 @@ LIMITER_FLUSH_SECONDS = 0.5
 
 def build_registry() -> MigrationRegistry:
     """Every module's migrations. Later modules add their ``register_migrations`` call here."""
-    return connectors_registry()  # core, services and connectors migrations
+    registry = connectors_registry()  # core, services and connectors migrations
+    register_discovery_migrations(registry)
+    return registry
 
 
 def _build_access(enforce: bool, hub: Hub, store: Store) -> AccessControl:
@@ -133,6 +146,31 @@ def _wire_store(hub: Hub | None, store: Store | None) -> tuple[Hub, Store, bool]
     return hub, store, owned
 
 
+def _is_admin() -> bool:
+    """Whether the hub runs with administrator rights. Only used to explain a ``limited`` scan; never elevates."""
+    try:
+        if os.name == "nt":
+            import ctypes
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())  # type: ignore[attr-defined]
+        return os.geteuid() == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _build_discovery(registry: ServiceRegistry, store: Store, hub: Hub) -> DiscoveryService:
+    """Build discovery. Nothing here starts a scan, a task or a thread (R1.1)."""
+    known_formats = frozenset(FORMAT_NAMES)
+    load = load_catalog(known_formats)
+    os_name = os_name_from_platform(sys.platform)
+    system_root = {k: v for k, v in os.environ.items() if k.upper() == "SYSTEMROOT"}
+    manager = ScanManager(
+        load=load, engine=run_scan_sync, runner=SubprocessRunner(os_name or "linux", system_root),
+        procfs=LinuxProcFs(), fs=OsFsProbe(), store=store, registry=registry, known_formats=known_formats,
+        now=hub.now, os_name=os_name, is_admin=_is_admin(), own_pid=os.getpid(), env=dict(os.environ))
+    acceptor = Acceptor(manager, RegistrySink(registry), registry, store, known_formats)
+    return DiscoveryService(manager, acceptor, load)
+
+
 def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
                store: Store | None = None, enforce_access: bool | None = None) -> FastAPI:
     # R7.5: an explicit value wins; None means off for an injected hub and on for a hub this call builds.
@@ -156,6 +194,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
     irc = IrcServer(hub)
     submit = make_submit(hub.ingest)
     manager = ConnectorManager(registry, store, submit)
+    discovery = _build_discovery(registry, store, hub)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -183,6 +222,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
         except BaseException:
             for close in closers:
                 close()
+            await discovery.manager.aclose(0.2)
             if syslog_tcp is not None:
                 await syslog_tcp.aclose(0.4)
             await manager.aclose(0.6)
@@ -201,6 +241,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
 
         for close in closers:
             close()
+        await discovery.manager.aclose(min(0.2, remaining()))     # a running scan stops before the connector steps
         if syslog_tcp is not None:
             await syslog_tcp.aclose(min(0.4, remaining()))
         app.state.syslog_tcp = None
@@ -219,6 +260,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
     app.state.access = access
     app.state.reduce_limiter = reduce_limiter
     app.state.connectors = manager
+    app.state.discovery = discovery
     app.state.syslog_tcp = None
 
     @app.exception_handler(StoreError)
@@ -242,6 +284,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
     app.add_middleware(BodyLimit, max_bytes=MAX_BODY_BYTES)
     app.add_middleware(HostGuard, access=access)
     app.include_router(build_router(registry, access, require_admin))
+    app.include_router(build_discovery_router(discovery, require_admin))
 
     @app.get("/", include_in_schema=False)
     async def index():
