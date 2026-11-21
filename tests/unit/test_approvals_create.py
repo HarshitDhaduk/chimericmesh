@@ -225,6 +225,8 @@ def test_revoke_during_an_in_flight_create_denies_the_new_proposal():
         lines = bot_lines(rig)
         assert any("denied" in t and "r1" in t and "revoked" in t for t in lines)
         assert not any(t.startswith("AUTO-APPROVED") for t in lines)
+        mentions = [m.text for m in rig.hub.transcript if m.kind == "bot" and prop.id in m.text]
+        assert len(mentions) == 1                                          # exactly one line about the proposal
         uses = await rig.store.read(lambda tx: tx.one("SELECT COUNT(*) FROM rule_uses")[0])
         count = (await db_rule(rig, "r1")).use_count
         assert uses == 1 and count == 1                                    # the use was spent

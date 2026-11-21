@@ -514,7 +514,7 @@ class Hub:
         if plan is not None and (self.store is None or not approver.shares_store(self.store)):
             await approver.persist(plan, prop)
         if denial is not None:  # a revoke, suspension or expiry ran while the create was in flight (review M1)
-            denied = await self.hub_transition(prop.id, "denied", decided_by=denial)
+            denied = await self.hub_transition(prop.id, "denied", decided_by=denial, announce=False)
             prop = denied or prop
         base = f"PROPOSAL {prop.id} {text}{prop.action} - reply !approve {prop.id} or !deny {prop.id}"
         line = approver.line_for(plan, base, prop) if plan is not None else base
@@ -541,8 +541,10 @@ class Hub:
                 self._run_proposals += 1
             elif run_flag == "decided":
                 self._run_decided += 1
+            text = line(prop)
             try:
-                await self.say(self.irc_channel, line(prop))
+                if text:
+                    await self.say(self.irc_channel, text)
             except Exception:
                 log.exception("could not announce %s after commit", prop.id)
             if after is not None:
@@ -622,8 +624,10 @@ class Hub:
 
     async def hub_transition(self, pid: str, new_status: str, *, decided_by: str,
                              approved_by_rule: str | None = None, result_note: str | None = None,
-                             extra: Mapping[str, object] | None = None) -> Proposal | None:
+                             extra: Mapping[str, object] | None = None, announce: bool = True) -> Proposal | None:
         """A transition made by the hub's own rule logic; the only place that builds ``HubAuthority``.
+
+        ``announce=False`` is for a caller that announces the outcome itself in its own words.
 
         Only the restricted set of ``check_hub_transition`` is accepted. REST, IRC and MCP never call it.
         """
@@ -643,7 +647,7 @@ class Hub:
                                            result_note=result_note, extra=extra)
 
             return await self._commit_and_mirror(
-                write, lambda p: f"{p.id} {p.status.upper()} by {p.decided_by}", "decided")
+                write, lambda p: f"{p.id} {p.status.upper()} by {p.decided_by}" if announce else "", "decided")
         prop = self._proposals.get(pid)
         if prop is None:
             return None
@@ -663,7 +667,8 @@ class Hub:
             if value is not None:
                 setattr(prop, key, value)
         self._run_decided += 1
-        await self.say(self.irc_channel, f"{prop.id} {prop.status.upper()} by {prop.decided_by}")
+        if announce:
+            await self.say(self.irc_channel, f"{prop.id} {prop.status.upper()} by {prop.decided_by}")
         return prop
 
     def get_proposal(self, pid: str) -> Proposal | None:

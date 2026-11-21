@@ -287,3 +287,8 @@ Human-in-the-loop work, separate from build time:
 | Demo rehearsal of Success Criteria 1 and 8 with short windows (restore the `upstream.py` defect first) | 20 to 30 min |
 | Merge approval after store, services and connectors are merged | 10 min |
 | **Total human time** | **about 75 to 95 min** |
+
+## Implementation notes (2026-11-21)
+
+Deviations B1 to B3 and the clock change are recorded in design.md (Implementation deviations) and in the blockers file of the build. Test runs of the whole suite on the build machine took 28 to 49 minutes; the suite was run on snapshots of each committed task.
+
