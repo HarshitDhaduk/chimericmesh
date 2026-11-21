@@ -62,7 +62,10 @@ def _drain(path: str, state: TailState, out: list[bytes], limit: int | None = No
 
 
 @SET
-@given(st.lists(st.binary(max_size=40).map(lambda b: b.replace(b"\n", b".")), min_size=1, max_size=60),
+# "\r" is replaced too: a "\r" before the "\n" makes a CRLF ending, which the tailer strips by design
+# (connectors design, task 4.1). CRLF handling is covered by property 13; this test is about resume.
+@given(st.lists(st.binary(max_size=40).map(lambda b: b.replace(b"\n", b".").replace(b"\r", b".")),
+                min_size=1, max_size=60),
        st.integers(0, 60), st.booleans())
 def test_graceful_stop_and_resume_emit_each_line_once(lines, stop_after, rotate):
     with tempfile.TemporaryDirectory() as d:
