@@ -27,6 +27,8 @@ from .store.incidents import (
     row_to_incident,
     stored_ids_beyond,
 )
+from .approvals.errors import ProposalExpired
+from .approvals.models import CreateContext
 from .store.models import Proposal
 from .store.proposals import create_proposal as store_create_proposal
 from .store.proposals import get_proposal as store_get_proposal
@@ -448,33 +450,81 @@ class Hub:
         inc = self.get_incident(incident_id)
         if inc is None:
             return None
-        if self.store is not None:
-            now, svc, opening = self._clock(), inc.service_id, inc.opening
-            text = f"for {inc.id} ({inc.category} on {inc.host}): "
+        plan = None
+        approver = self.approver
+        if approver is not None:
+            ctx = CreateContext(
+                incident_id=incident_id, service_id=inc.service_id, signature=inc.signature, category=inc.category,
+                severity=inc.severity, opening=inc.opening, action=action, details=details,
+                extra={k: v for k, v in fields.items() if v is not None}, enforce_limits=self.enforce_limits)
+            plan = approver.prepare(ctx)  # synchronous: may raise, and then reserves nothing
+        unit = asyncio.ensure_future(self._create_unit(inc, action, details, extra, plan))
+        self._commit_tasks.add(unit)
+        unit.add_done_callback(self._task_done)
+        return await asyncio.shield(unit)
 
-            def write(tx):
-                return store_create_proposal(tx, incident_id=incident_id, action=action, details=details,
-                                             service_id=svc, incident_opening=opening, now=now, extra=extra)
+    def _hub_authority(self) -> HubAuthority:
+        """The one place that builds the capability only the hub's own rule logic may hold."""
+        return HubAuthority()
 
-            def line(p: Proposal) -> str:
-                return f"PROPOSAL {p.id} {text}{p.action} - reply !approve {p.id} or !deny {p.id}"
+    async def _create_unit(self, inc: Incident, action: str, details: str, extra: Mapping[str, object] | None,
+                           plan: Any) -> Proposal:
+        """Commit, mirror, confirm and announce as one unit that a cancelled caller cannot interrupt (T6)."""
+        approver = self.approver
+        approved = plan is not None and plan.kind == "auto"
+        stored_extra = plan.extra if plan is not None else extra
+        text = f"for {inc.id} ({inc.category} on {inc.host}): "
+        now = self._clock()
+        try:
+            if self.store is not None:
+                in_tx = plan is not None and approver.shares_store(self.store)
+                authority = self._hub_authority()
 
-            prop = await self._commit_and_mirror(write, line, "proposals")
-            return prop
-        self._proposal_seq += 1  # no await between here and the insert: atomic on the loop thread
-        prop = Proposal(id=f"p{self._proposal_seq}", incident_id=incident_id,
-                        action=action[:MAX_ACTION], details=details[:MAX_DETAILS],
-                        service_id=inc.service_id, incident_opening=inc.opening, created=self._clock(), **fields)
+                def write(tx):
+                    prop = store_create_proposal(tx, incident_id=inc.id, action=action, details=details,
+                                                 service_id=inc.service_id, incident_opening=inc.opening, now=now,
+                                                 extra=stored_extra)
+                    if approved:
+                        prop = transition_proposal(tx, prop.id, "approved", decided_by=f"rule:{plan.rule_id}",
+                                                   origin="hub", authority=authority, now=now,
+                                                   approved_by_rule=plan.rule_id)
+                    if in_tx:
+                        plan.write_in_tx(tx, prop)
+                    return prop
+
+                prop = await self.store.transact(write)
+            else:
+                self._proposal_seq += 1  # no await between here and the insert: atomic on the loop thread
+                prop = Proposal(id=f"p{self._proposal_seq}", incident_id=inc.id, action=action[:MAX_ACTION],
+                                details=details[:MAX_DETAILS], service_id=inc.service_id,
+                                incident_opening=inc.opening, created=now, **validate_extra(stored_extra))
+                if approved:
+                    prop.status, prop.decided_by, prop.decided_at = "approved", f"rule:{plan.rule_id}", now
+                    prop.decision_origin, prop.approved_by_rule = "hub", plan.rule_id
+        except BaseException:
+            if plan is not None:
+                approver.abort(plan)
+            raise
+        # No await between the commit result and the mirror update.
         self._proposals[prop.id] = prop
         self._run_proposals += 1
-        while len(self._proposals) > MAX_PROPOSALS:
+        while self.store is None and len(self._proposals) > MAX_PROPOSALS:
             self._proposals.popitem(last=False)  # oldest first
-        await self.say(self.irc_channel,
-                       f"PROPOSAL {prop.id} for {inc.id} ({inc.category} on {inc.host}): "
-                       f"{prop.action} - reply !approve {prop.id} or !deny {prop.id}")
+        denial = approver.confirm(plan, prop) if plan is not None else None
+        if plan is not None and (self.store is None or not approver.shares_store(self.store)):
+            await approver.persist(plan, prop)
+        if denial is not None:  # a revoke, suspension or expiry ran while the create was in flight (review M1)
+            denied = await self.hub_transition(prop.id, "denied", decided_by=denial)
+            prop = denied or prop
+        base = f"PROPOSAL {prop.id} {text}{prop.action} - reply !approve {prop.id} or !deny {prop.id}"
+        line = approver.line_for(plan, base, prop) if plan is not None else base
+        try:
+            await self.say(self.irc_channel, line)
+        except Exception:
+            log.exception("could not announce %s after commit", prop.id)
         return prop
 
-    async def _commit_and_mirror(self, write, line, run_flag: str | None) -> Proposal | None:
+    async def _commit_and_mirror(self, write, line, run_flag: str | None, after=None) -> Proposal | None:
         """Commit, mirror and announce as one unit that a cancelled caller cannot interrupt (T6, M7).
 
         ``InvalidTransition`` and ``NotFound`` become ``None``; a ``StoreError`` is raised before memory
@@ -495,6 +545,8 @@ class Hub:
                 await self.say(self.irc_channel, line(prop))
             except Exception:
                 log.exception("could not announce %s after commit", prop.id)
+            if after is not None:
+                await after(prop)
             return prop
 
         task = asyncio.ensure_future(unit())
@@ -530,13 +582,26 @@ class Hub:
 
     async def complete(self, pid: str, note: str = "", *,
                        extra: Mapping[str, object] | None = None) -> Proposal | None:
+        approver = self.approver
+        if approver is not None:
+            try:
+                await approver.before_complete(pid)  # expiry on read (R6.4)
+                extra = approver.validate_completion(pid, extra)  # ProposalInvalid is the caller's 422
+            except ProposalExpired:
+                return None
         fields = validate_extra(extra)
+        done_extra = dict(extra or {})
+
+        async def after(prop: Proposal) -> None:
+            if approver is not None:
+                await approver.after_complete(prop, done_extra)
+
         if self.store is not None:
             now, cut = self._clock(), note[:300]
             return await self._commit_and_mirror(
                 lambda tx: transition_proposal(tx, pid, "done", decided_by="", origin="user", authority=None,
                                                now=now, result_note=cut, extra=extra),
-                lambda p: f"{p.id} DONE: {p.result_note}".strip(), None)
+                lambda p: f"{p.id} DONE: {p.result_note}".strip(), None, after=after)
         prop = self._proposals.get(pid)
         if prop is None or not self._allowed(prop, "done", ""):
             return None
@@ -544,7 +609,15 @@ class Hub:
         for key, value in fields.items():
             if value is not None:
                 setattr(prop, key, value)
-        await self.say(self.irc_channel, f"{prop.id} DONE: {prop.result_note}".strip())
+
+        async def finish() -> None:
+            await self.say(self.irc_channel, f"{prop.id} DONE: {prop.result_note}".strip())
+            await after(prop)
+
+        task = asyncio.ensure_future(finish())
+        self._commit_tasks.add(task)
+        task.add_done_callback(self._task_done)
+        await asyncio.shield(task)
         return prop
 
     async def hub_transition(self, pid: str, new_status: str, *, decided_by: str,
@@ -555,7 +628,7 @@ class Hub:
         Only the restricted set of ``check_hub_transition`` is accepted. REST, IRC and MCP never call it.
         """
         fields = validate_extra(extra)
-        authority = HubAuthority()
+        authority = self._hub_authority()
         if self.store is not None:
             now = self._clock()
 

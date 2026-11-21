@@ -123,10 +123,10 @@ def make_manager(mode: str = "bare", *, limiter: Any = None, settings: ApprovalS
 async def open_incident(hub: Hub, *, host: str = "web01", message: str = "disk full on /var", count: int = 3,
                         severity: int = 3, source: str = "syslog") -> str:
     """Ingest enough identical events to open an incident and return its id."""
-    ev = None
+    event = Event(id=0, ts=hub.now(), source=source, host=host, severity=severity, message=message, app="app")
+    iid = hub.tracker.preview_id(hub.tagger(event) if hub.tagger else event)
+    assert iid is not None, "the event would be ignored"
     for _ in range(count):
-        ev = await hub.ingest(Event(id=0, ts=hub.now(), source=source, host=host, severity=severity,
-                                    message=message, app="app"))
-    inc = hub.incidents()
-    assert inc, "no incident opened"
-    return next(i.id for i in inc if i.host == host)
+        await hub.ingest(event)
+    assert hub.get_incident(iid) is not None, "no incident opened"
+    return iid
