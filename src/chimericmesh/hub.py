@@ -104,13 +104,17 @@ class Hub:
                  webhook_url: str | None = None, irc_channel: str = "#ops",
                  clock: Callable[[], float] = time.time, *, reopen_after: int | None = None,
                  audit: AuditSink | None = None, store: Store | None = None,
-                 enforce_access: bool = False) -> None:
+                 enforce_access: bool = False, enforce_limits: bool = False) -> None:
         self.events: deque[Event] = deque(maxlen=capacity)  # bounded log view only
         self._event_seq = 0  # last event id handed out; ids start at 1
         self.store = store
         # Wiring slots filled by create_app; the defaults leave a bare Hub exactly as it was.
         self.enforce_access = enforce_access
         self.access: Any = None
+        # Auto-approval slots (B3): a bare Hub keeps no limits and no approver until create_app wires them.
+        self.enforce_limits = enforce_limits
+        self.approver: Any = None
+        self.approvals: Any = None
         self.tagger: Callable[[Event], Event] | None = None
         self._tagger_warned = float("-inf")
         self._audit = audit if audit is not None or store is None else store.audit
@@ -445,7 +449,7 @@ class Hub:
         if inc is None:
             return None
         if self.store is not None:
-            now, svc, opening = time.time(), inc.service_id, inc.opening
+            now, svc, opening = self._clock(), inc.service_id, inc.opening
             text = f"for {inc.id} ({inc.category} on {inc.host}): "
 
             def write(tx):
@@ -460,7 +464,7 @@ class Hub:
         self._proposal_seq += 1  # no await between here and the insert: atomic on the loop thread
         prop = Proposal(id=f"p{self._proposal_seq}", incident_id=incident_id,
                         action=action[:MAX_ACTION], details=details[:MAX_DETAILS],
-                        service_id=inc.service_id, incident_opening=inc.opening, **fields)
+                        service_id=inc.service_id, incident_opening=inc.opening, created=self._clock(), **fields)
         self._proposals[prop.id] = prop
         self._run_proposals += 1
         while len(self._proposals) > MAX_PROPOSALS:
@@ -510,7 +514,7 @@ class Hub:
     async def decide(self, pid: str, approve: bool, by: str) -> Proposal | None:
         new = "approved" if approve else "denied"
         if self.store is not None:
-            now = time.time()
+            now = self._clock()
             return await self._commit_and_mirror(
                 lambda tx: transition_proposal(tx, pid, new, decided_by=by, origin="user", authority=None, now=now),
                 lambda p: f"{p.id} {p.status.upper()} by {p.decided_by}", "decided")
@@ -518,7 +522,7 @@ class Hub:
         if prop is None or not self._allowed(prop, new, by):
             return None
         prop.status = new
-        prop.decided_by, prop.decided_at = by[:MAX_DECIDED_BY], time.time()
+        prop.decided_by, prop.decided_at = by[:MAX_DECIDED_BY], self._clock()
         prop.decision_origin = "user"  # only hub_transition (HubAuthority) can write 'hub'
         self._run_decided += 1
         await self.say(self.irc_channel, f"{prop.id} {prop.status.upper()} by {prop.decided_by}")
@@ -528,7 +532,7 @@ class Hub:
                        extra: Mapping[str, object] | None = None) -> Proposal | None:
         fields = validate_extra(extra)
         if self.store is not None:
-            now, cut = time.time(), note[:300]
+            now, cut = self._clock(), note[:300]
             return await self._commit_and_mirror(
                 lambda tx: transition_proposal(tx, pid, "done", decided_by="", origin="user", authority=None,
                                                now=now, result_note=cut, extra=extra),
@@ -553,7 +557,7 @@ class Hub:
         fields = validate_extra(extra)
         authority = HubAuthority()
         if self.store is not None:
-            now = time.time()
+            now = self._clock()
 
             def write(tx):
                 current = store_get_proposal(tx, pid)
@@ -576,7 +580,7 @@ class Hub:
         except InvalidTransition:
             return None
         prop.status = new_status
-        prop.decided_by, prop.decided_at = decided_by[:MAX_DECIDED_BY], time.time()
+        prop.decided_by, prop.decided_at = decided_by[:MAX_DECIDED_BY], self._clock()
         prop.decision_origin = "hub"
         if approved_by_rule is not None:
             prop.approved_by_rule = approved_by_rule[:100]

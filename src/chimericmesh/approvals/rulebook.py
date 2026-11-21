@@ -110,7 +110,7 @@ class RuleBook:
                 continue
             if snap_rule.id in self.dirty or self._changed_at.get(snap_rule.id, 0) > started_epoch:
                 continue
-            if RANK[snap_rule.status] > RANK[mine.status]:
+            if RANK[snap_rule.status] > RANK[mine.status] or snap_rule.status == mine.status:
                 merged = snap_rule
             else:
                 merged = dataclasses.replace(snap_rule, status=mine.status, status_reason=mine.status_reason)
@@ -171,6 +171,10 @@ _SELECT_LIVE_OF_SERVICE = (
 _SUSPEND_SERVICE = (
     "UPDATE approval_rules SET status = 'suspended', status_reason = ?, updated_at = ? "
     "WHERE service_id = ? AND status IN ('active', 'suspended')"
+)
+_SUSPEND_ACTIVE_OF_SERVICE = (
+    "UPDATE approval_rules SET status = 'suspended', status_reason = ?, updated_at = ? "
+    "WHERE service_id = ? AND status = 'active'"
 )
 _BUMP_USE = "UPDATE approval_rules SET use_count = use_count + 1 WHERE id = ?"
 _SELECT_STATE = "SELECT key, value FROM approval_state"
@@ -277,7 +281,9 @@ def live_rule_ids(tx: Tx, service_id: str) -> list[tuple[str, str]]:
     return [(r[0], r[1]) for r in tx.all(_SELECT_LIVE_OF_SERVICE, (service_id,))]
 
 
-def suspend_service_rules(tx: Tx, service_id: str, reason: str, now: float) -> int:
+def suspend_service_rules(tx: Tx, service_id: str, reason: str, now: float, *, only_active: bool) -> int:
+    if only_active:
+        return tx.execute(_SUSPEND_ACTIVE_OF_SERVICE, (reason, now, service_id)).rowcount
     return tx.execute(_SUSPEND_SERVICE, (reason, now, service_id)).rowcount
 
 
