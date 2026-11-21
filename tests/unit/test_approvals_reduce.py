@@ -1,6 +1,8 @@
 """Reduce and re-enable operations (task 4.2), including the ordering interleavings of review H2."""
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 import asyncio
 
 import pytest

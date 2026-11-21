@@ -1,6 +1,8 @@
 """The approvals router (task 6.1): token rules, status codes, bodies, audit rows."""
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 import asyncio
 import inspect
 

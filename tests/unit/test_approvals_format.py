@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 from chimericmesh.approvals.format import auto_approved_line, cooldown_note, rule_line, safe_text
 
 

@@ -1,6 +1,8 @@
 """The README documents the rules honestly (task 8.3)."""
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 from pathlib import Path
 
 README = (Path(__file__).resolve().parents[2] / "README.md").read_text(encoding="utf-8")

@@ -1,6 +1,8 @@
 """Static checks of auto-approval (task 8.2): the agent has no path to rules, time and SQL hygiene."""
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 import ast
 import re
 from pathlib import Path

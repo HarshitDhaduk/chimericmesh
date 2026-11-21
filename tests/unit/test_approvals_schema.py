@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 import re
 import sqlite3
 from pathlib import Path

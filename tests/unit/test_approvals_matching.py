@@ -4,6 +4,8 @@ Each test starts from a rule and context that match and changes exactly one thin
 """
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 import inspect
 
 from approvals_rules import NOW, make_ctx, make_rule, make_usage, replace

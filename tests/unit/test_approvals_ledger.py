@@ -4,6 +4,8 @@ No test here uses ``now - completed_at``: the cooldown is ``reopen_at(opening) -
 """
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 import pytest
 
 from chimericmesh.approvals.errors import ActiveProposalExists, ProposalRateLimited

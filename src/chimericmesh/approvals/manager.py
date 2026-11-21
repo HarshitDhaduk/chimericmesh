@@ -13,6 +13,7 @@ import asyncio
 import dataclasses
 import logging
 import time
+import weakref
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
@@ -61,7 +62,9 @@ class ApprovalManager:
                  limiter: Any, announce: AnnounceFn, protected: Sequence[str] = (),
                  settings: ApprovalSettings | None = None, now: Callable[[], float] | None = None,
                  expire_timeout: float = EXPIRE_DUE_TIMEOUT) -> None:
-        self._store = store
+        # Weak, like the registry's: a strong reference would keep a private ``:memory:`` store (and its writer
+        # thread) alive after the app that owns it is dropped.
+        self._store_ref = weakref.ref(store)
         self._state = state
         self._writer = writer
         self._registry = registry
@@ -119,6 +122,13 @@ class ApprovalManager:
             if now - prop.created < HOUR:
                 by_service.setdefault(prop.service_id or "unassigned", []).append(prop.created)
         self._limits.seed(by_service, now)
+
+    @property
+    def _store(self) -> Store:
+        store = self._store_ref()
+        if store is None:
+            raise RuntimeError("the approval manager was used after its store was dropped")
+        return store
 
     # ---- small helpers -----------------------------------------------------------------------------------
     def _warn_once_a_minute(self, text: str, *args: object) -> None:

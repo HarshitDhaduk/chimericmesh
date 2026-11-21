@@ -1,6 +1,8 @@
 ﻿"""Rule lifecycle: create, patch and read (task 4.1). Runs over a bare hub and a store-backed hub."""
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 import asyncio
 
 import pytest

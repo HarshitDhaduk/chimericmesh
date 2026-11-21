@@ -1,6 +1,8 @@
 """Sweep, expiry on read and withdraw (task 4.4). A fake clock drives everything; no sweep task runs."""
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 import asyncio
 import logging
 

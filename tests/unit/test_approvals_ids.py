@@ -1,6 +1,8 @@
 """Rule ids across restarts, at the rulebook level (the manager-level test is in test_approvals_rules)."""
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 import asyncio
 import dataclasses
 from pathlib import Path

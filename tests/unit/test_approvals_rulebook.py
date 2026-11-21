@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 from approvals_rules import make_rule
 
 from chimericmesh.approvals.rulebook import RANK, RuleBook, Snapshot

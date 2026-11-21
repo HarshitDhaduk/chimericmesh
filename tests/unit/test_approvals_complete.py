@@ -1,6 +1,8 @@
 """Completion checks (task 5.3, R6.4 to R6.6) and the cooldown flow through complete."""
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 import asyncio
 
 import pytest

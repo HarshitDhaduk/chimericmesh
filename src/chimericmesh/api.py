@@ -18,6 +18,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
+from .approvals.errors import ApprovalsNotMigrated
 from .approvals.manager import ApprovalManager
 from .approvals.models import ApprovalSettings
 from .approvals.routes import build_router as build_approvals_router
@@ -192,6 +193,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
                store: Store | None = None, enforce_access: bool | None = None) -> FastAPI:
     # R7.5: an explicit value wins; None means off for an injected hub and on for a hub this call builds.
     effective = enforce_access if enforce_access is not None else hub is None
+    hub_arg, store_arg = hub, store
     if hub is not None and enforce_access is None and hub.enforce_access:
         log.warning("create_app: the hub was built with enforce_access=True but create_app got "
                     "enforce_access=None, which means False for an injected hub; pass "
@@ -216,13 +218,19 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
     async def announce(text: str) -> None:
         await hub.say(hub.irc_channel, text)
 
-    approvals = ApprovalManager.load(
-        store, state=hub, writer=hub, registry=registry, limiter=reduce_limiter, announce=announce,
-        protected=_protected_dirs(store), settings=ApprovalSettings.from_env(os.environ), now=hub.now)
+    approvals: ApprovalManager | None
+    try:
+        approvals = ApprovalManager.load(
+            store, state=hub, writer=hub, registry=registry, limiter=reduce_limiter, announce=announce,
+            protected=_protected_dirs(store), settings=ApprovalSettings.from_env(os.environ), now=hub.now)
+    except ApprovalsNotMigrated:
+        # Fail closed: without the tables there are no rules, so nothing is ever auto-approved (blockers B4).
+        log.warning("the store has no approvals migrations: standing approval rules are off")
+        approvals = None
     hub.approver = approvals
     hub.approvals = approvals
-    if hub.store is not None:
-        hub.enforce_limits = True  # B3: a store-backed hub keeps one active proposal per incident
+    if approvals is not None and hub_arg is None and store_arg is None:
+        hub.enforce_limits = True  # B3: the production path (create_app() and python -m chimericmesh)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -245,14 +253,16 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
                 syslog_tcp = await start_syslog_tcp(submit, bind, resolve_tcp_port(os.environ))
                 app.state.syslog_tcp = syslog_tcp
             hub.start()
-            await approvals.start()
+            if approvals is not None:
+                await approvals.start()
             # Tailers are not sockets: they start whether or not the listeners do.
             await manager.start()
         except BaseException:
             for close in closers:
                 close()
             await discovery.manager.aclose(0.2)
-            await approvals.aclose()
+            if approvals is not None:
+                await approvals.aclose()
             if syslog_tcp is not None:
                 await syslog_tcp.aclose(0.4)
             await manager.aclose(0.6)
@@ -272,7 +282,8 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
         for close in closers:
             close()
         await discovery.manager.aclose(min(0.2, remaining()))     # a running scan stops before the connector steps
-        await approvals.aclose()                                  # the sweep task only
+        if approvals is not None:
+            await approvals.aclose()                              # the sweep task only
         if syslog_tcp is not None:
             await syslog_tcp.aclose(min(0.4, remaining()))
         app.state.syslog_tcp = None
@@ -317,8 +328,9 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
     app.add_middleware(HostGuard, access=access)
     app.include_router(build_router(registry, access, require_admin))
     app.include_router(build_discovery_router(discovery, require_admin))
-    app.include_router(build_approvals_router(approvals, access, require_admin))
-    register_approvals_errors(app)
+    if approvals is not None:
+        app.include_router(build_approvals_router(approvals, access, require_admin))
+        register_approvals_errors(app)
 
     @app.get("/", include_in_schema=False)
     async def index():
@@ -387,18 +399,20 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
         return prop
 
     def _view(prop):
-        return approvals.proposal_view(prop)
+        return prop.to_dict() if approvals is None else approvals.proposal_view(prop)
 
     @app.get("/api/proposals")
     async def proposals(status: Literal["pending", "approved", "denied", "done"] | None = None,
                         service_id: str | None = Query(None, max_length=64),
                         limit: int = Query(200, ge=1, le=500)):
-        await approvals.expire_due()
+        if approvals is not None:
+            await approvals.expire_due()
         return [_view(p) for p in hub.list_proposals(status, service_id=service_id, limit=limit)]
 
     @app.get("/api/proposals/{pid}")
     async def proposal(pid: str):
-        await approvals.expire_due()
+        if approvals is not None:
+            await approvals.expire_due()
         return _view(_proposal_or_404(pid))
 
     @app.post("/api/proposals", status_code=201)

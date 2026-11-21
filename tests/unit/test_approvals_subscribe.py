@@ -1,6 +1,8 @@
 """Service change subscriptions (task 4.5): a folder change or a deleted service suspends the rules (R6.9)."""
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 import asyncio
 import dataclasses
 import os

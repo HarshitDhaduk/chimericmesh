@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from chimericmesh.approvals.manager import ApprovalManager
 from chimericmesh.approvals.models import ApprovalSettings
 from chimericmesh.approvals.schema import approvals_registry
@@ -130,3 +132,12 @@ async def open_incident(hub: Hub, *, host: str = "web01", message: str = "disk f
         await hub.ingest(event)
     assert hub.get_incident(iid) is not None, "no incident opened"
     return iid
+
+
+@pytest.fixture(autouse=True)
+def collect_garbage():
+    """Apps built by a test hold reference cycles; collect them so no private store keeps a writer thread alive."""
+    yield
+    import gc
+
+    gc.collect()

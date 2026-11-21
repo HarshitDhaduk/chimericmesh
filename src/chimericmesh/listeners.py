@@ -119,7 +119,7 @@ class IrcServer:
             if not nick:
                 self._send(writer, f":{self.name} 431 {info['nick']} :No nickname given")
                 return
-            if (enforce and is_reserved_nick(nick)) or is_reserved_decider(nick):
+            if enforce and (is_reserved_nick(nick) or is_reserved_decider(nick)):
                 self._send(writer, f":{self.name} 433 {info['nick']} {nick} :Nickname is already in use")
                 return
             info["nick"] = nick

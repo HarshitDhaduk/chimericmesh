@@ -1,6 +1,8 @@
 """The changed proposal routes in api.py (task 6.2), through ``create_app``, in both modes."""
 from __future__ import annotations
 
+from approvals_helpers import collect_garbage  # noqa: F401  (autouse: frees apps and their stores)
+
 import asyncio
 import os
 import tempfile
@@ -107,13 +109,14 @@ def test_forbidden_keys_in_the_body_are_ignored_not_rejected(rig):
     assert r.json()["decided_by"] == "" and r.json()["approved_by_rule"] is None
 
 
-def test_limit_errors_are_409_and_429():
-    # only a store-backed hub built by create_app enforces the limits
+def test_limit_errors_are_409_and_429(monkeypatch):
+    # only create_app() without a hub or a store (the production path) enforces the limits
     tmp = tempfile.TemporaryDirectory()
-    os.environ["CHIMERICMESH_HOME"] = os.path.join(tmp.name, "home")
+    monkeypatch.setenv("CHIMERICMESH_HOME", os.path.join(tmp.name, "home"))
     os.makedirs(os.path.join(tmp.name, "db"))
-    store = Store.open(os.path.join(tmp.name, "db", "h.db"), registry=build_registry())
-    app = create_app(store=store, start_listeners=False, enforce_access=False)
+    monkeypatch.setenv("CHIMERICMESH_DB", os.path.join(tmp.name, "db", "h.db"))
+    app = create_app(start_listeners=False, enforce_access=False)
+    store = app.state.store
     hub = app.state.hub
     assert hub.enforce_limits is True
 
