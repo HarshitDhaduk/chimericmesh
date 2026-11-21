@@ -232,3 +232,22 @@ def test_a_reopen_after_the_cooldown_is_auto_approved_again():
         asyncio.run(go())
     finally:
         rig.close()
+
+
+def test_a_violation_on_a_rule_that_is_no_longer_active_writes_no_second_suspension(rig):
+    async def go():
+        (iid,) = await setup(rig)
+        prop = await auto_proposal(rig, iid)
+        # the rule is revoked while the fix runs; the agent completes before the denial reaches it
+        import dataclasses
+        rule = rig.manager.rule("r1")
+        rig.manager._book.replace(dataclasses.replace(rule, status="revoked", status_reason="test"))
+        said = len(rig.announced)
+        done = await rig.hub.complete(prop.id, "x", extra={"files_changed": ["../out.py"]})
+        assert done.status == "done" and rig.manager.rule("r1").status == "revoked"
+        assert "rule_suspended" not in await rig.actions(rule_id="r1")
+        assert not [t for t in rig.announced[said:] if "suspended" in t]
+        checked = [r for r in await rig.audit(proposal_id=prop.id) if r["action"] == "completion_checked"]
+        assert checked and "violation=completion_out_of_scope" in checked[0]["detail"]
+
+    asyncio.run(go())

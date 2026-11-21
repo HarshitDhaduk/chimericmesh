@@ -884,25 +884,27 @@ class ApprovalManager:
         unverified = not files and lines is None and result is None
         action = "completion_unverified" if unverified else "completion_checked"
         sid = prop.service_id
+        # Only an active rule is suspended; a rule already suspended, revoked or expired keeps its state and
+        # gets no second rule_suspended row or announcement.
+        suspend = reason is not None and rule is not None and rule.status == "active" and not self._expired_by_clock(rule)
 
         def write(tx: Tx) -> None:
             rb.complete_use(tx, prop.id, now)
             self._audit(tx, "hub", action if reason is None else "completion_checked", prop.id,
                         "" if reason is None else f"violation={reason}", service_id=sid, rule_id=rule_id,
                         proposal_id=prop.id)
-            if reason is not None:
-                rb.suspend_row(tx, rule_id, reason, now)
+            if suspend and rb.suspend_row(tx, rule_id, reason, now):
                 self._audit(tx, "hub", "rule_suspended", rule_id, reason, service_id=sid, rule_id=rule_id)
 
-        if reason is not None and rule is not None and rule.status == "active":
+        if suspend:
             self._book.replace(dataclasses.replace(rule, status="suspended", status_reason=reason, updated_at=now))
             self._book.mark_dirty(rule_id)
         try:
             await self._store.transact(write)
-            if reason is not None:
+            if suspend:
                 self._book.clear_dirty(rule_id)
         except StoreError:
             self._warn_once_a_minute("could not record the completion check of %s", prop.id)
-        if reason is not None and rule is not None:
+        if suspend:
             await self._deny_open_proposals(rule_id, f"rule-suspended:{rule_id}")
             await self._say(rule_line("suspended", rule_id, rule.service_id, "hub", reason))
