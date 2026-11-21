@@ -162,6 +162,14 @@ class ApprovalManager:
     def paused(self) -> bool:
         return self._book.paused
 
+    def now(self) -> float:
+        return self._now()
+
+    @property
+    def audit_log(self):
+        """The audit log the manager writes to (read by ``GET /api/audit``)."""
+        return self._store.audit
+
     def status(self) -> ApprovalStatus:
         return ApprovalStatus(
             paused=self._book.paused, paused_by=self._book.paused_by, paused_at=self._book.paused_at,

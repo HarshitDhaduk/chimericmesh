@@ -193,8 +193,12 @@ def test_proposals_endpoint_fields():
     hub, app, _ = make()
     _with_proposal(hub)
     items = call(app, "GET", "/api/proposals").json()
+    # auto-approval (R9.7): the nine baseline keys plus the extended proposal fields and the approval object
     assert set(items[0]) == {"id", "incident_id", "action", "details", "status", "created",
-                             "decided_by", "decided_at", "result_note"}
+                             "decided_by", "decided_at", "result_note",
+                             "decision_origin", "service_id", "incident_opening", "approved_by_rule", "kind",
+                             "files", "estimated_lines", "verification", "files_changed", "lines_changed",
+                             "verification_result", "approval"}
 
 
 # --- workflow ---
