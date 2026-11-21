@@ -195,8 +195,8 @@ Round 1 review ids (design, "Round 1 review responses"): H1 (one cooldown formul
     - [ ] (L7) The prefix list line.
     - _Requirements: 4.8, 5.4_
 
-- [ ] 9. Property tests across the manager
-  - [ ] 9.1 Write the required manager-level property tests
+- [x] 9. Property tests across the manager
+  - [x] 9.1 Write the required manager-level property tests
     - Create `tests/pbt/test_approvals_manager_properties.py` (temporary file stores, fake clock, `asyncio.run` inside plain tests, `deadline=None`; Hypothesis state machines are allowed but example sequences are enough).
     - **Property 7: Hourly quota under concurrency** (store write delay injected, random interleavings through `asyncio.gather` with random `sleep(0)` counts)
     - **Property 10: Revocation is immediate and total** (includes a create that is blocked in the writer when the revoke starts, M1)
@@ -207,10 +207,10 @@ Round 1 review ids (design, "Round 1 review responses"): H1 (one cooldown formul
     - **Property 22: Audit hygiene** (token and signature canaries, CR/LF/NUL in action text)
     - **Property 24: A reduce is never undone by a widen or a reload** (random `sleep(0)` counts and store write delays between `enable_rule`, `resume`, `patch_rule`, gated reloads and `revoke_rule`, `pause_rule`, `pause`)
     - **Validates: Requirements 4.2 (g), 4.4, 4.8, 2.3, 2.4, 2.6, 6.1, 6.2, 6.3, 6.5, 6.6, 7.6**
-    - [ ] (M3) Property 7 is the executable form of the atomicity requirement.
-    - [ ] (H2) Property 24 is the executable form of "Rule state ordering".
-    - [ ] (M1) Property 10 covers the in-flight create.
-  - [ ]* 9.2 Write the optional property tests
+    - [x] (M3) Property 7 is the executable form of the atomicity requirement.
+    - [x] (H2) Property 24 is the executable form of "Rule state ordering".
+    - [x] (M1) Property 10 covers the in-flight create.
+  - [x]* 9.2 Write the optional property tests
     - Create `tests/pbt/test_approvals_optional_properties.py`.
     - **Property 14: Pause blocks all auto-approval**
     - **Property 19: Proposal creation limits** (with `enforce_limits` on and off)
@@ -290,5 +290,5 @@ Human-in-the-loop work, separate from build time:
 
 ## Implementation notes (2026-11-21)
 
-Deviations B1 to B3 and the clock change are recorded in design.md (Implementation deviations) and in the blockers file of the build. Test runs of the whole suite on the build machine took 28 to 49 minutes; the suite was run on snapshots of each committed task.
+Deviations B1 to B8 (2026-11-21; B4 degrade instead of raising, B5 limits only on the production path, B6 one more existing test edited, B7 nick rule, B8 reduce_key) and the clock change are recorded in design.md (Implementation deviations) and in the blockers file of the build. Test runs of the whole suite on the build machine took 28 to 49 minutes; the suite was run on snapshots of each committed task.
 
