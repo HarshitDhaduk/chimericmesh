@@ -47,6 +47,7 @@ from .services.access import AccessControl, OperatorVerdict, is_loopback, parse_
 from .services.asgi import MAX_BODY_BYTES, BodyLimit, HostGuard
 from .services.deps import make_require_admin
 from .services.limiter import ReduceAuditLimiter
+from .services.limiter import reduce_key as make_reduce_key
 from .services.registry import ServiceRegistry
 from .services.routes import build_router
 from .services.token import TokenStore, resolve_token_path
@@ -481,7 +482,10 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
             reply = "commands start with ! - try !help"
             hub.record("ChimericBot", reply, "system")
             return {"ok": True, "handled": False, "replies": [reply]}
-        replies = await handle_command(hub, WEB_NICK, hub.irc_channel, cmd, verdict=verdict)
+        who = request.client.host if request.client is not None and request.client.host else "unknown"
+        replies = await handle_command(hub, WEB_NICK, hub.irc_channel, cmd, verdict=verdict,
+                                       reduce_key=make_reduce_key("terminal", who),
+                                       actor=f"dashboard-terminal:{who}")
         return {"ok": True, "handled": True, "replies": replies}
 
     @app.get("/api/workflow")
