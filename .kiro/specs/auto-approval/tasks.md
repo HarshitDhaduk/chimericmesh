@@ -40,31 +40,31 @@ Round 1 review ids (design, "Round 1 review responses"): H1 (one cooldown formul
     - **Property 20: IRC line safety**
     - **Validates: Requirements 1.3, 1.4, 5.1, 5.2, 5.3, 7.2, 7.3**
 
-- [ ] 2. Matching, ledger and proposal limits (pure)
-  - [ ] 2.1 Implement `match_rule` and `first_match`
+- [x] 2. Matching, ledger and proposal limits (pure)
+  - [x] 2.1 Implement `match_rule` and `first_match`
     - Write `tests/unit/test_approvals_matching.py` first: one test per condition, each starting from a context and rule that match and changing exactly one thing, asserting the returned code: 4.2.1 paused, 4.2.2 status `suspended`, `revoked` and `now == expires_at`, 4.2.3 kind other than `code_change` and `None`, 4.2.4 incident service `None` and a different service, 4.2.5 different signature, different category (and the same signature with different case does not match), 4.2.6 severity 2 (never), severity 3 with a rule of 4, severity 4 with a rule of 3 (matches), 4.2.7 `usage.hour == max_per_hour`, 4.2.8 `usage.incident_opening == max_per_incident`, 4.2.9 no files, more than `max_files`, `file_problem` set, 4.2.10 `estimated_lines` `None` and `max_lines + 1`, 4.2.11 empty and `None` verification, 4.2.12 live folder different and `None`, 4.2.13 `cooldown_active`; the first failing condition is the one returned when two fail; `first_match` returns the lowest `seq`, lists the checked rules, and returns no rule for an empty list.
-    - [ ] (L8) The thirteen tests are numbered 4.2.1 to 4.2.13 in their names, and the file docstring states that the requirement's (a) to (m) map to them in order.
+    - [x] (L8) The thirteen tests are numbered 4.2.1 to 4.2.13 in their names, and the file docstring states that the requirement's (a) to (m) map to them in order.
     - Create `approvals/matching.py` (`Condition`, `RuleUsage`, `MatchContext`, `match_rule`, `first_match`, `RULE_CONDITIONS`).
     - _Requirements: 4.1, 4.2, 4.3, 4.7_
-  - [ ] 2.2 Implement the usage ledger and the proposal limits
+  - [x] 2.2 Implement the usage ledger and the proposal limits
     - Write `tests/unit/test_approvals_ledger.py` first (fake clock values only): `usage` counts reservations in the last 3600 s and drops older ones at exactly 3600; `reserve` then `release` restores the count; the per-opening count is keyed by (incident, opening) and a new opening starts at 0; `completed` records `completed_at`; `note_opening` records the first sighting of an (incident, opening) only (a second call with a later `now` returns `False` and does not move it); `cooldown_for` implements the one formula `reopen_at(opening) - completed_at < cooldown` and nothing else (H1): completion at 0 and the reopen first seen at 1 h gives the earlier proposal id when asked at 1 h and again after the clock moved to 30 h; the reopen first seen at 25 h gives `None`; at exactly the cooldown gives `None`; a completion recorded after the reopen (negative difference) gives the id; a third opening first seen 100 h later gives `None`; opening 1, a user-approved proposal (no use), a use without `completed_at` and no use all give `None`; with two qualifying uses the one with the latest `completed_at` is returned; `seed` (usage rows and opening rows) and `prune` (31 days). `tests/unit/test_approvals_limits.py`: with `enforce=False` nothing is checked and nothing reserved; with `enforce=True` an active proposal of the incident (given by `active_of`) or an in-flight reservation raises `ActiveProposalExists` carrying the id; the eleventh reservation for a service in 3600 s raises `ProposalRateLimited` with `retry_after`; (L8) `seed` with ten creation times inside the last hour makes the next reservation raise `ProposalRateLimited`, and times older than 3600 s are ignored; `unassigned` is its own key; `release` frees the slot; `commit` keeps it.
-    - [ ] (H1) The cooldown cases above are the executable form of the single formula in the design; no test uses `now - completed_at`.
-    - [ ] (L8) The `seed` cases for the limits.
+    - [x] (H1) The cooldown cases above are the executable form of the single formula in the design; no test uses `now - completed_at`.
+    - [x] (L8) The `seed` cases for the limits.
     - Create `approvals/ledger.py` (`UsageLedger`, `UsageRow`, `OpeningRow`), complete `approvals/limits.py` (`ProposalLimits`, with `seed`).
     - _Requirements: 4.2, 4.9, 9.3, 9.4_
-  - [ ] 2.3 Write property tests for matching
+  - [x] 2.3 Write property tests for matching
     - Create `tests/pbt/test_approvals_matching_properties.py` (strategies build rules, contexts and usages; monotonicity compares a rule with a tightened copy).
     - **Property 1: Matching: no match when any condition fails**
     - **Property 2: Matching is monotone in the limits**
     - **Property 3: First match wins**
     - **Property 4: Never covered**
     - **Validates: Requirements 4.1, 4.2, 4.3, 4.7, 1.3**
-  - [ ] 2.4 Write property tests for the ledger
+  - [x] 2.4 Write property tests for the ledger
     - Create `tests/pbt/test_approvals_ledger_properties.py` (random sequences of reserve, release, complete, first-seen openings and clock advances; for Property 9 the strategy draws completion times, first-seen opening times and query times, and asserts both the formula and that the answer does not depend on the query time).
     - **Property 8: Per-opening counting**
     - **Property 9: Cooldown**
     - **Validates: Requirements 4.2 (h), 4.9**
-  - [ ] 2.5 Checkpoint: run `python -m pytest -q`; the new pure tests and the whole existing suite pass.
+  - [x] 2.5 Checkpoint: run `python -m pytest -q`; the new pure tests and the whole existing suite pass.
 
 - [ ] 3. Persistence and the in-memory mirror
   - [ ] 3.1 Add the migration, the rule book and the test helper
