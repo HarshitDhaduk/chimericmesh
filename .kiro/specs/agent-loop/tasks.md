@@ -10,31 +10,31 @@ Review ids (design, "Review resolutions"): M2 (named interfaces, both hub modes)
 
 Design-review round 1 ids (`R1-H1`, `R1-M1` to `R1-M7`, `R1-L1` to `R1-L10`; design, "Responses to the design review, round 1"): H1 (absolute `files`) in 4.1, 9.1, 10.1; M1 (disconnect) in 5.2, 7.2; M2 (graceful shutdown) in 7.3; M3 (workspace root) in 6.1, 7.3; M4 (verification fails after the fix) in 9.1, 9.2; M5 (hook matcher) in 10.2; M6 (25 s wait, early check, env fallback) in 1.2, 7.2, 9.3, 11.1; M7 (digest scan) in 2.2; L1 in 7.1; L2 in 1.1; L3 in 7.1; L4, L5 in 4.1; L6 in 4.4\* and 11.1 (user decision O13); L7 in 9.1, 9.2; L8 in 6.1, 12.2 (manual); L9 in 11.1; L10 in 1.5, 9.1, 11.2, 12.2. Checklist lines read `- [ ] (R1-xx) ...`.
 
-- [ ] 1. Package skeleton, shared limits and static guards
-  - [ ] 1.1 Create the package skeleton, ports and dependency rows
+- [x] 1. Package skeleton, shared limits and static guards
+  - [x] 1.1 Create the package skeleton, ports and dependency rows
     - Extend `tests/unit/test_dependency_direction.py` first (rows only, as the services task 1.3 allows): every `agent/*.py` is group `agent-loop`; it may import `core`, `store`, `services` (stdlib-only submodules, never `services.deps` or `services.routes`) and `approvals` (only `approvals.scope` and `approvals.models`, never `approvals.routes`, `approvals.manager`); only `agent/routes.py` may import `fastapi`, `starlette` or `pydantic`; `agent/__init__.py` imports none of them; no `agent/*` file imports `hub`, `api`, `commands`, `listeners`, `mcp_server`, `connectors` or `discovery`. Write `tests/unit/test_agent_skeleton.py`: `diagnostics.SKIP_DIRS` and `diagnostics.CODE_SUFFIXES` are public `frozenset`s; `approvals.scope.PROTECTED_PATTERNS`, `SOURCE_SUFFIXES`, `check_file`, `glob_to_regex` exist; `ApprovalReader` is a `Protocol` whose method names are exactly `approval_of`, `rule`, `status` (no mutator name such as `create_rule`, `revoke_rule`, `resume`, `enable_rule`, `patch_rule`, `pause` is a member); an `ApprovalManager` instance satisfies it (`isinstance` with `runtime_checkable`); `AgentPorts` is frozen.
     - Create `agent/__init__.py` (empty re-exports), `agent/errors.py` (`AgentError`, `UnknownService`, `UnknownProposal`, `NoCodeFolder`, `InvalidQuery`, `TooManyWaiters(retry_after)`, `SearchBusy`), `agent/ports.py` (`ApprovalReader`, `AgentPorts`).
-    - [ ] (M2) The three injected interfaces are named and `agent/*` imports no `hub` (the dependency rows above).
-    - [ ] (L4) The public-name assertions above (the rename itself is `auto-approval` task 1.1).
-    - [ ] (R1-L2) Prose and docstrings say "three-method protocol"; the test asserts exactly three member names.
+    - [x] (M2) The three injected interfaces are named and `agent/*` imports no `hub` (the dependency rows above).
+    - [x] (L4) The public-name assertions above (the rename itself is `auto-approval` task 1.1).
+    - [x] (R1-L2) Prose and docstrings say "three-method protocol"; the test asserts exactly three member names.
     - _Requirements: 6.3, Success Criterion 7_
-  - [ ] 1.2 Implement limits and safe text
+  - [x] 1.2 Implement limits and safe text
     - Write `tests/unit/test_agent_limits.py` first: constants equal the requirement numbers (500, 20 480, 100, 25, 240, 4, 35 is in `mcp_server` not here); `clean_text` removes NUL, CR, LF, `\x1b`, `\x7f`, `\x85`, lone surrogates, cuts to the limit, accepts `None` and `int`; `clamp`; `cap_items` keeps all items when small, drops from the tail when over 20 480 bytes, sets `truncated` only then, measures UTF-8 bytes (a list of items with multi-byte text still fits), and returns valid JSON; an empty list fits; `RULE_APPROVAL_WINDOW == ApprovalSettings.from_env({}).rule_approval_ttl` (Needs from auto-approval 3); `watch_max_wait(env)` gives 25 for an empty env, 10 for `"10"`, 25 for `"99"` (never raised), 1 for `"0"` or `"-4"`, and 25 with one logged warning for `"abc"` (R1-M6).
     - Create `agent/limits.py` (`WAIT_CEILING`, `watch_max_wait`, `WAIT_MAX`).
-    - [ ] (R1-M6) The lowering-only setting `CHIMERICMESH_WATCH_MAX_WAIT`.
+    - [x] (R1-M6) The lowering-only setting `CHIMERICMESH_WATCH_MAX_WAIT`.
     - _Requirements: 1.2, 1.3, 1.4, 1.7, 4.2, 4.5_
-  - [ ] 1.3 Add the subprocess allow-list static test
+  - [x] 1.3 Add the subprocess allow-list static test
     - Write `tests/unit/test_no_process_spawn.py` first: an AST scan of `src/chimericmesh/`; the names `subprocess`, `os.system`, `os.popen`, `os.spawn*`, `os.exec*`, `asyncio.create_subprocess_exec`, `asyncio.create_subprocess_shell` appear only in `fsperms.py` and `discovery/runner.py` (discovery A1: the narrow rule); the hub, `mcp_server.py`, the tailer, the parsers and `agent/*` have none; the test lists the allowed files explicitly so a new file fails it; a second assertion states that no file imports a module named `kiro` or builds a `kiro-cli` command line (R4.10, F1, F3).
     - If the discovery module is not merged yet, the test uses the broader `discovery/*` entry and a comment names A1 as the fallback.
     - _Requirements: 4.10_
-  - [ ] 1.4 Write the property test for safe text
+  - [x] 1.4 Write the property test for safe text
     - Create `tests/pbt/test_agent_limits_properties.py` (arbitrary text strategies include NUL, control characters, lone surrogates, very long strings, nested item lists).
     - **Property 4: Safe text**
     - **Validates: Requirements 1.7**
-  - [ ] 1.5 Record the starting state of the tree (R1-L10)
+  - [x] 1.5 Record the starting state of the tree (R1-L10)
     - Write `tests/unit/test_tree_baseline_helpers.py` first for a small helper `tests/unit/tree_baseline.py` (`snapshot(paths) -> dict[str, str]` of path to SHA-256 of the working-tree bytes, `diff_snapshots(a, b) -> list[str]`; missing file gives the value `absent`).
     - Create the helper, then run it once (no edit of any watched file) and write the result to `.agents/tasks/agent-loop-baseline.json`: the hashes of `examples/legacy_app/upstream.py`, `.kiro/agents/mesh-responder.json`, `.kiro/settings/mcp.json`, `src/chimericmesh/hub.py`, `tests/unit/test_kiro_assets.py`, `tests/unit/test_dependency_direction.py`, `tests/unit/test_approvals_static.py`, plus the output of `git status --short` and `git diff --stat`. `upstream.py` is modified in the working tree today (the user's fix is on disk); the snapshot records that state, whatever it is when this task runs.
-    - [ ] (R1-L10) Tasks 9.1, 11.2 and 12.2 compare against this file, not against `HEAD`.
+    - [x] (R1-L10) Tasks 9.1, 11.2 and 12.2 compare against this file, not against `HEAD`.
     - _Requirements: 5.3, Success Criterion 1 (demo precondition)_
 
 - [ ] 2. Service events and the digest
