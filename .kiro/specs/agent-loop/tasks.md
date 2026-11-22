@@ -53,13 +53,13 @@ Design-review round 1 ids (`R1-H1`, `R1-M1` to `R1-M7`, `R1-L1` to `R1-L10`; des
     - **Property 2: Digest is deterministic and consistent**
     - **Validates: Requirements 1.2, 1.3**
 
-- [ ] 3. Code search
-  - [ ] 3.1 Implement `search_code`
+- [x] 3. Code search
+  - [x] 3.1 Implement `search_code`
     - Write `tests/unit/test_agent_codesearch.py` first, on a temporary folder: a case-insensitive literal match returns `file` (relative, `/` separators), `line`, `text` (stripped, at most 200 characters); a regex query such as `.*` or `a(b` matches only the literal text; at most 10 hits and `truncated`; `node_modules`, `.git`, `__pycache__` skipped (the names come from `diagnostics.SKIP_DIRS`, asserted by identity); `.env`, `a/b/.env.local`, `k.pem`, `.kiro/x.py` and a file in `.git` never searched (protected patterns); `.json` and `.ini` files not searched (open item O6) and `.py`, `.php`, `.cs` searched; a file over 512 KB skipped; 2000 files visited stops with `truncated`; a fake clock past 5 s stops with `truncated`; `cancelled()` true stops; a symlink to a file outside the folder is skipped (skip the test when symlinks need a privilege, and add a second test with injected `realpath`); unreadable file skipped; order is deterministic.
-    - [ ] (L4) The skip set is `diagnostics.SKIP_DIRS` and the suffix set is `approvals.scope.SOURCE_SUFFIXES`; `find_code_hints` behaviour is untouched (golden test lives in `auto-approval` 1.1).
-    - Create `agent/codesearch.py`.
+    - [x] (L4) The skip set is `diagnostics.SKIP_DIRS` and the suffix set is `approvals.scope.SOURCE_SUFFIXES`; `find_code_hints` behaviour is untouched (golden test lives in `auto-approval` 1.1).
+    - Create `agent/codesearch.py`. Note (2026-11-22): containment is one `realpath` per file plus a local descendant test, not `path_in_code_folder` (speed on Windows); see the implementation note in design.md, "Code search".
     - _Requirements: 1.4_
-  - [ ] 3.2 Write the property test for code search
+  - [x] 3.2 Write the property test for code search
     - Create `tests/pbt/test_agent_codesearch_properties.py` (generated trees through injected file reader and `realpath`, fake clock).
     - **Property 3: Code search is contained and bounded**
     - **Validates: Requirements 1.4**
