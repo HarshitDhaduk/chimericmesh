@@ -259,3 +259,15 @@ def test_sc9_the_dependency_rows_hold():
 
     test_imports_follow_the_table()
     test_third_party_imports_only_in_wiring()
+
+
+def test_sc5_eleven_pauses_all_take_effect_with_ten_rows_and_the_mcp_list_has_no_rule_tool(app):
+    first_rule(app)
+    for _ in range(11):                 # each pause follows a resume, so each one changes state
+        assert app.post("/api/rules/pause", token=False).json()["paused"] is True
+        assert app.post("/api/rules/resume").json()["paused"] is False
+    rows = [r for r in app.audit() if r["action"].startswith("rules_paused")]
+    assert len(rows) == 10, [r["action"] for r in rows]    # the eleventh is coalesced (test_approvals_reduce)
+    from chimericmesh import mcp_server
+    names = [t.name for t in asyncio.run(mcp_server.mcp.list_tools())]
+    assert names and not [n for n in names if "rule" in n.lower()]
