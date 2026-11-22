@@ -223,7 +223,7 @@ Round 1 review ids (design, "Round 1 review responses"): H1 (one cooldown formul
     - [x] (M2) The same module runs against a plain `Hub()` with `create_app(hub)` and against the store-backed hub with a temporary database.
     - Create `tests/unit/test_approvals_modes.py` if the parametrized cases do not fit in one file (at most two files here).
     - _Requirements: all; Success Criteria 1 to 6, 8, 9_
-  - [x] 10.2 Final checkpoint (automated part; the live smoke test is pending, see the walk below)
+  - [x] 10.2 Final checkpoint (automated part and live smoke test, both passed 2026-11-22; see the walk below)
     - Run `python -m pytest -q`. The full existing suite and all new tests must pass. Confirm by `git diff --stat tests/` that the only existing test file changed is `tests/unit/test_web_terminal.py` (one test) and `tests/unit/test_dependency_direction.py` (rows added), and by `git diff --stat src/` that `examples/legacy_app/upstream.py` is untouched.
     - Walk Success Criteria 1 to 9 against the tests that cover them and note any gap in this file.
 
@@ -233,7 +233,7 @@ Round 1 review ids (design, "Round 1 review responses"): H1 (one cooldown formul
     | SC | Proven by | Status |
     |---|---|---|
     | 1 | I::test_sc1_a_reopened_bug_is_auto_approved_by_the_rule_with_audit_and_one_line (rule r1 from p1, reopen with fake clock, `rule:r1`, audit row, one IRC line, second host); test_approvals_from_proposal.py | tests |
-    | 1 (real IRC line) | the `AUTO-APPROVED` line as seen by a real IRC client | live smoke test |
+    | 1 (real IRC line) | the `AUTO-APPROVED` line as seen by a real IRC client | live smoke PASS: `AUTO-APPROVED p2 by rule r1 (service proxy): raise upstream timeout again. Revoke with !revoke r1` over scripts/irc_client.py, no "reply !approve" |
     | 2 | I::test_sc2_out_of_scope_or_too_large_stays_pending_with_the_condition (`condition=files`, `condition=lines`); test_approvals_matching.py | tests |
     | 3 | I::test_sc3_the_hourly_limit_stops_the_fourth; P::test_approvals_manager_properties::test_property_7 | tests |
     | 4 | I::test_sc4_revoke_denies_and_a_folder_change_suspends; P::test_property_10 | tests |
@@ -242,10 +242,12 @@ Round 1 review ids (design, "Round 1 review responses"): H1 (one cooldown formul
     | 7 | P::test_property_1 (no match when a condition fails), 2 (monotone), 5 (bounds, `max_per_hour` cap), 6 (severity default), 7 (quota under concurrency), 8 (per opening), 12 (reserved prefixes), 15 (file scope), 17 (rule ids across restarts), 20 (IRC line safety); also 3, 4, 9, 10, 11, 13, 16, 22, 24 and the optional 14, 18, 19, 21, 23 | tests |
     | 8 | I::test_sc8_the_cooldown_one_line_and_one_row_and_the_late_proposal_still_waits; I::test_sc8b_a_reopen_after_the_cooldown_is_auto_approved; P::test_property_9 | tests |
     | 9 | I::test_sc9_the_dependency_rows_hold; tests/unit/test_dependency_direction.py | tests |
-    | 1 and 8 with real time | reopen after the real `CHIMERICMESH_REOPEN_AFTER_SECONDS` window, short environment windows | live smoke test |
-    | 4 (live) | revoke against a running hub, from the dashboard and from an IRC client (`!rules`, `!revoke`, `!pause`) | live smoke test |
+    | 1 and 8 with real time | reopen after the real `CHIMERICMESH_REOPEN_AFTER_SECONDS` window, short environment windows | live smoke PASS: p2 auto-approved on opening 2 after a real 5 s reopen window; p3 on opening 3 stayed pending with one `autofix_cooldown` audit row |
+    | 4 (live) | revoke against a running hub, from the dashboard and from an IRC client (`!rules`, `!revoke`, `!pause`) | live smoke PASS: `!revoke r1` in the dashboard terminal denied rule-approved p4 (`rule-revoked:r1`, origin hub); `!revoke` on IRC replied `r1 is already revoked`; `!rules` replied `no active rules` |
 
     Result: 9 of 9 criteria are proven by automated tests; 3 live checks remain for the user (the `AUTO-APPROVED` line over a real IRC client, reopen with real time, revoke against a running hub), plus the README review and the demo rehearsal (the `upstream.py` defect restore is owned by `agent-loop` and `dashboard`).
+
+    Live smoke test (2026-11-22, hub on alternate ports 18000/15514/15515/16667/12323, temp home, enforcement on, real legacy_app copy as code folder): all 12 checks PASS. Evidence in `.agents/tasks/auto-approval-impl/smoke.md` and `smoke-logs/` (git-ignored).
 
     Gaps and notes:
     - The 10.2 file check (`git diff --stat tests/`): existing test files changed are `test_web_terminal.py` (one test), `test_dependency_direction.py` (rows added) and `test_store_app.py` (two tests close their app, blockers B9). The third is beyond the two the task names. `examples/legacy_app/upstream.py` is untouched by this branch.
