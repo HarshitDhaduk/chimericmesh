@@ -518,9 +518,11 @@ def _agent_import_pairs(node: ast.AST) -> list[tuple[str, str | None]]:
     """(first, second) component below the package for one import node of an ``agent/*`` file."""
     pairs: list[tuple[str, str | None]] = []
     if isinstance(node, ast.ImportFrom):
-        if node.level:
-            return pairs        # relative imports stay inside agent/
-        parts = (node.module or "").split(".")
+        if node.level:        # a file of agent/ lives in the package chimericmesh.agent
+            base = [PKG, "agent"][: 2 - (node.level - 1)]
+            parts = base + ((node.module or "").split(".") if node.module else [])
+        else:
+            parts = (node.module or "").split(".")
         if parts[0] != PKG:
             return pairs
         rest = parts[1:]
@@ -612,6 +614,11 @@ def _atree(tmp_path: Path, rel: str, text: str) -> Path:
         ("agent/feed.py", "from chimericmesh.approvals.routes import x"),
         ("agent/feed.py", "from chimericmesh.approvals.manager import ApprovalManager"),
         ("agent/feed.py", "from chimericmesh.approvals import manager"),
+        ("agent/feed.py", "from ..approvals.manager import ApprovalManager"),
+        ("agent/feed.py", "from ..approvals import routes"),
+        ("agent/feed.py", "from ..services.deps import x"),
+        ("agent/feed.py", "from .. import hub"),
+        ("agent/feed.py", "from ..hub import Hub"),
         ("agent/feed.py", "import fastapi"),
         ("agent/feed.py", "import pydantic"),
         ("agent/feed.py", "import httpx"),
