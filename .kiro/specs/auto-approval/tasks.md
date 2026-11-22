@@ -1,4 +1,4 @@
-﻿# Implementation Plan: auto-approval (V1)
+# Implementation Plan: auto-approval (V1)
 
 Requirements: [requirements.md](requirements.md). Design: [design.md](design.md). Property numbers below are the numbered Correctness Properties in the design; condition numbers 4.2.1 to 4.2.13 are the sub-criteria of R4.2 defined in the design (L8).
 
@@ -217,15 +217,40 @@ Round 1 review ids (design, "Round 1 review responses"): H1 (one cooldown formul
     - **Property 23: Approval derives from the column**
     - **Validates: Requirements 2.4, 9.3, 9.4, 4.6, 7.5**
 
-- [ ] 10. Integration and final checkpoint
-  - [ ] 10.1 Integration through the app, in both modes
+- [x] 10. Integration and final checkpoint (automated part; live smoke test pending)
+  - [x] 10.1 Integration through the app, in both modes
     - Write `tests/unit/test_approvals_integration.py` (`httpx.ASGITransport`, fake clock through `Hub(clock=...)`, `CHIMERICMESH_REOPEN_AFTER_SECONDS` 300, parametrized over `("bare", "store")` where the criterion allows) covering Success Criteria 1 to 9: (1) manual approve of `p1`, complete with `passed`, `POST /api/proposals/p1/rule` with the token gives `r1`; resolve, advance the clock past the reopen window, send the same bug again from the same host: the incident reopens (opening 2) and the new proposal with files inside the folder and `estimated_lines` 20 is `approved` with `decided_by` `rule:r1` in the create response, with an audit row and one IRC line; the same signature from a second host of the same service also matches; (2) one file outside the folder, and `estimated_lines` 101, stay `pending` with the failed condition in the audit row; (3) a fourth matching proposal within the hour stays `pending`; (4) revoking `r1` denies its approved proposals with `rule-revoked:r1`, the next proposal stays `pending`, and a code folder change through `PATCH /api/services/{id}` suspends `r1` the same way; (5) no token: `POST /api/rules` 401, the MCP tool list has no rule tool, revoke and pause succeed, `resume` and re-enable give 401, eleven pauses in a minute all take effect with ten rows plus one coalesced row, `POST /api/proposals/p2/rule` for a `done` proposal with `failed` gives 409; (6) a rule-approved completion with a changed file outside the folder suspends the rule; (8) the cooldown: reopen 1 hour after an auto-approved completion gives a `pending` proposal, an `autofix_cooldown` row and one announcement; reopen 25 hours after is auto-approved, and a proposal created 30 hours after a reopen that came 1 hour after the completion is still `pending` (H1); (9) the dependency test passes. Success Criterion 7 is covered by tasks 1.5, 2.3, 2.4, 3.2, 4.3, 9.1.
-    - [ ] (M2) The same module runs against a plain `Hub()` with `create_app(hub)` and against the store-backed hub with a temporary database.
+    - [x] (M2) The same module runs against a plain `Hub()` with `create_app(hub)` and against the store-backed hub with a temporary database.
     - Create `tests/unit/test_approvals_modes.py` if the parametrized cases do not fit in one file (at most two files here).
     - _Requirements: all; Success Criteria 1 to 6, 8, 9_
-  - [ ] 10.2 Final checkpoint
+  - [x] 10.2 Final checkpoint (automated part; the live smoke test is pending, see the walk below)
     - Run `python -m pytest -q`. The full existing suite and all new tests must pass. Confirm by `git diff --stat tests/` that the only existing test file changed is `tests/unit/test_web_terminal.py` (one test) and `tests/unit/test_dependency_direction.py` (rows added), and by `git diff --stat src/` that `examples/legacy_app/upstream.py` is untouched.
     - Walk Success Criteria 1 to 9 against the tests that cover them and note any gap in this file.
+
+    ### Success Criteria walk (10.2, 2026-11-22, head after a95a024)
+    I = `tests/unit/test_approvals_integration.py` (each `sc` test runs in `bare` and `store` mode). P = `tests/pbt/`.
+
+    | SC | Proven by | Status |
+    |---|---|---|
+    | 1 | I::test_sc1_a_reopened_bug_is_auto_approved_by_the_rule_with_audit_and_one_line (rule r1 from p1, reopen with fake clock, `rule:r1`, audit row, one IRC line, second host); test_approvals_from_proposal.py | tests |
+    | 1 (real IRC line) | the `AUTO-APPROVED` line as seen by a real IRC client | live smoke test |
+    | 2 | I::test_sc2_out_of_scope_or_too_large_stays_pending_with_the_condition (`condition=files`, `condition=lines`); test_approvals_matching.py | tests |
+    | 3 | I::test_sc3_the_hourly_limit_stops_the_fourth; P::test_approvals_manager_properties::test_property_7 | tests |
+    | 4 | I::test_sc4_revoke_denies_and_a_folder_change_suspends; P::test_property_10 | tests |
+    | 5 | I::test_sc5_no_token_no_widening_and_the_reduce_operations_always_work (401 on create, enable, resume; revoke and pause succeed; 409 for a failed fix); I::test_sc5_eleven_pauses_all_take_effect_with_ten_rows_and_the_mcp_list_has_no_rule_tool (MCP tool list); test_approvals_reduce.py::test_eleven_calls_all_take_effect_with_ten_rows_and_one_coalesced_row (the coalesced row); test_approvals_static.py::test_mcp_tool_names_mention_no_rules_or_approvals | tests |
+    | 6 | I::test_sc6_a_completion_outside_the_folder_suspends_the_rule; test_approvals_complete.py; P::test_property_16 | tests |
+    | 7 | P::test_property_1 (no match when a condition fails), 2 (monotone), 5 (bounds, `max_per_hour` cap), 6 (severity default), 7 (quota under concurrency), 8 (per opening), 12 (reserved prefixes), 15 (file scope), 17 (rule ids across restarts), 20 (IRC line safety); also 3, 4, 9, 10, 11, 13, 16, 22, 24 and the optional 14, 18, 19, 21, 23 | tests |
+    | 8 | I::test_sc8_the_cooldown_one_line_and_one_row_and_the_late_proposal_still_waits; I::test_sc8b_a_reopen_after_the_cooldown_is_auto_approved; P::test_property_9 | tests |
+    | 9 | I::test_sc9_the_dependency_rows_hold; tests/unit/test_dependency_direction.py | tests |
+    | 1 and 8 with real time | reopen after the real `CHIMERICMESH_REOPEN_AFTER_SECONDS` window, short environment windows | live smoke test |
+    | 4 (live) | revoke against a running hub, from the dashboard and from an IRC client (`!rules`, `!revoke`, `!pause`) | live smoke test |
+
+    Result: 9 of 9 criteria are proven by automated tests; 3 live checks remain for the user (the `AUTO-APPROVED` line over a real IRC client, reopen with real time, revoke against a running hub), plus the README review and the demo rehearsal (the `upstream.py` defect restore is owned by `agent-loop` and `dashboard`).
+
+    Gaps and notes:
+    - The 10.2 file check (`git diff --stat tests/`): existing test files changed are `test_web_terminal.py` (one test), `test_dependency_direction.py` (rows added) and `test_store_app.py` (two tests close their app, blockers B9). The third is beyond the two the task names. `examples/legacy_app/upstream.py` is untouched by this branch.
+    - The integration test sees ten audit rows for eleven pause/resume cycles at the app level; the coalesced eleventh row is written when the limiter's window closes, and is proven at manager level (`test_approvals_reduce.py`).
+    - Repeated global pause while already paused is idempotent: it writes no row (by design, `pause` returns early).
     - Manual checks for the user (not agent work): IRC client (`!rules`, `!revoke`, `!pause`, the `AUTO-APPROVED` line), README review, demo rehearsal of Success Criteria 1 and 8 with short environment windows after the `upstream.py` defect is restored (L6, owned by `agent-loop` and `dashboard`).
     - _Requirements: all; Success Criterion 9_
 
