@@ -21,6 +21,7 @@ _POSIX_NAME = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)(?=/|$)")
 _WIN_NAME = re.compile(r"%([^%\\/]{1,40})%")
 _DRIVE_ONLY = re.compile(r"[A-Za-z]:")
 _WIN_ABS = re.compile(r"[A-Za-z]:[\\/]")
+_WIN_UNC = re.compile(r"[\\/]{2}[^\\/]+[\\/][^\\/]+")
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,14 +46,14 @@ def _lookup(env: Mapping[str, str], name: str, os_name: str) -> str | None:
     return None
 
 
-def _clean_base(value: str, os_name: str) -> str | None:
+def _clean_base(value: str, os_name: str, name: str = "") -> str | None:
     if not value or CONTROL.search(value) or len(value) > 512:
         return None
     if os_name == "windows":
-        if _DRIVE_ONLY.fullmatch(value):
-            return value + "\\"
-        if not ntpath.isabs(value):
-            return None
+        if _DRIVE_ONLY.fullmatch(value):                 # "C:" is the normal SystemDrive value
+            return value + "\\" if name.casefold() == "systemdrive" else None
+        if not (_WIN_ABS.match(value) or _WIN_UNC.fullmatch(ntpath.splitdrive(value)[0])):
+            return None                                  # a drive path or a UNC server and share
         stripped = value.rstrip("\\/")
         return stripped if stripped and not _DRIVE_ONLY.fullmatch(stripped) else value
     if not posixpath.isabs(value):
@@ -78,7 +79,7 @@ def expand_leading_env(pattern: str, os_name: str, env: Mapping[str, str]) -> tu
     value = _lookup(env, name, os_name)
     if value is None:
         return None
-    base = _clean_base(value, os_name)
+    base = _clean_base(value, os_name, name)
     if base is None:
         return None
     return base, pattern[match.end():]

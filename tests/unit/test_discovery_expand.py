@@ -166,3 +166,19 @@ def test_leading_env_returns_rest_unchanged():
     assert expand_leading_env("%ProgramFiles(x86)%\\FileZilla Server\\Logs\\*.log", "windows",
                               {"ProgramFiles(x86)": "C:\\Program Files (x86)"}) == (
         "C:\\Program Files (x86)", "\\FileZilla Server\\Logs\\*.log")
+
+
+@pytest.mark.parametrize("value", ["/\\", "\\", "/", "relative\\x", "C:", "\\\\", "\\\\server", "\\\\server\\"])
+def test_windows_malformed_env_value_gives_no_expansion(value):
+    assert expand_leading_env("%PROGRAMDATA%", "windows", {"ProgramData": value}) is None
+
+
+@pytest.mark.parametrize("value, base", [("C:\\ProgramData", "C:\\ProgramData"),
+                                         ("\\\\server\\share", "\\\\server\\share")])
+def test_windows_absolute_env_value_still_expands(value, base):
+    assert expand_leading_env("%PROGRAMDATA%\\x", "windows", {"ProgramData": value}) == (base, "\\x")
+
+
+@pytest.mark.parametrize("value", ["relative", "", "\\x"])
+def test_posix_env_value_must_start_with_slash(value):
+    assert expand_leading_env("$HOME/x", "linux", {"HOME": value}) is None
