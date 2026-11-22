@@ -86,21 +86,21 @@ Design-review round 1 ids (`R1-H1`, `R1-M1` to `R1-M7`, `R1-L1` to `R1-L10`; des
     - **Property 6: Verify is monotone in the files**
     - **Validates: Requirements 3.1 (c), (d)**
 
-- [ ] 5. Watch queue
-  - [ ] 5.1 Implement `evaluate_work`
+- [x] 5. Watch queue
+  - [x] 5.1 Implement `evaluate_work`
     - Write `tests/unit/test_agent_watch_eval.py` first, one test per sub-criterion: 4.3a.1 resolved incident excluded; 4.3a.2 incident of a deleted service excluded, `unassigned` incident excluded unless `service_id="unassigned"`; 4.3a.3 `pending` and `approved` proposals exclude the incident, `done` and `denied` do not; 4.3a.4 `exclude` contains the incident id; 4.3a.5 a `denied` proposal with `decision_origin="user"` and `incident_opening == opening` hides it, the same with `decision_origin="hub"` does not, a user denial of an earlier opening does not, and a nick `expired-bob` in `decided_by` stays a user denial because only `decision_origin` is read; 4.3a.6 the service filter; 4.3b approved proposals not in `exclude`, at most 5, with their `approval` object, `unassigned` rules as for incidents, `done` and `pending` never listed; ordering `(severity, -count, id)`; at most 5 incidents; `sample` at most 200 characters, other strings at most 500, no control characters, no event bodies; 10 000 proposals and 5000 incidents evaluate in under 50 ms.
-    - [ ] (L8) Test names carry 4.3a.1 to 4.3a.6 and 4.3b.
+    - [x] (L8) Test names carry 4.3a.1 to 4.3a.6 and 4.3b.
     - Create `agent/watch.py` with `WorkResult` and `evaluate_work` (the queue class comes in 5.2).
     - _Requirements: 4.3, 4.4_
-  - [ ] 5.2 Implement `WatchQueue`
+  - [x] 5.2 Implement `WatchQueue`
     - Write `tests/unit/test_agent_watch_queue.py` first (`asyncio.run` inside plain tests, small `tick`, `wait_min`, `wait_max` through the constructor): work present returns at once; an incident opened 0.2 s after the call is returned within `tick + 0.05 s` and, in the integration form, within 1.5 s (Success Criterion 4); no work returns `{status: "timeout", incidents: [], approved_proposals: []}` at the timeout; `kick()` wakes a waiter at once; five concurrent waiters give four held and one `TooManyWaiters(retry_after=5)`; after a return, a cancellation and a `close()` the `waiting` counter is 0; an injected `is_disconnected` that turns true frees the slot within `tick + 0.05 s` and returns `timeout`, so five sequential "abandoned" calls never reach the fifth-waiter 429 (R1-M1); `close()` ends every held waiter with `timeout` immediately and a later call returns `timeout`; 4 held waiters do not delay 200 `hub.ingest` calls (under 2 s); the module has no `threading` import and no `time.sleep`.
     - Complete `agent/watch.py` with `WatchQueue` (event plus 0.5 s tick, `finally` frees the slot).
     - _Requirements: 4.1, 4.2, 4.5, 4.6, 4.7_
-  - [ ] 5.3 Write the property test for the work set
+  - [x] 5.3 Write the property test for the work set
     - Create `tests/pbt/test_agent_watch_properties.py` (generated incidents, proposals with statuses, `decision_origin`, `incident_opening`, services, exclude sets and filters; an independently written oracle).
     - **Property 7: Work set is exactly the specified set**
     - **Validates: Requirements 4.3, 4.4**
-  - [ ]* 5.4 Write the optional watch properties
+  - [x]* 5.4 Write the optional watch properties
     - Add to `tests/pbt/test_agent_watch_properties.py` (fake loop times for the bounds).
     - **Property 8: Reopen returns a denied incident**
     - **Property 9: Long poll bounds**
