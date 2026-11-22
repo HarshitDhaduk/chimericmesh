@@ -183,6 +183,14 @@ def test_a_symlink_to_a_file_outside_the_folder_is_skipped(tmp_path):
     assert names(search_code(root, "needle")) == ["ok.py"]
 
 
+def test_a_windows_junction_that_leaves_the_folder_is_not_searched(tmp_path):
+    winapi = pytest.importorskip("_winapi")
+    outside = tree(tmp_path / "outside", {"secret.py": "needle outside\n"})
+    root = tree(tmp_path / "proj", {"ok.py": "needle\n"})
+    winapi.CreateJunction(outside, os.path.join(root, "jn"))
+    assert names(search_code(root, "needle")) == ["ok.py"]
+
+
 def test_a_symlink_inside_the_folder_to_a_protected_file_is_skipped(tmp_path):
     root = tree(tmp_path, {".env": "needle secret\n", "ok.py": "needle\n"})
     try:
