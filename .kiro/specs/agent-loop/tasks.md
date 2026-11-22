@@ -37,17 +37,17 @@ Design-review round 1 ids (`R1-H1`, `R1-M1` to `R1-M7`, `R1-L1` to `R1-L10`; des
     - [x] (R1-L10) Tasks 9.1, 11.2 and 12.2 compare against this file, not against `HEAD`.
     - _Requirements: 5.3, Success Criterion 1 (demo precondition)_
 
-- [ ] 2. Service events and the digest
-  - [ ] 2.1 Implement `service_events`
+- [x] 2. Service events and the digest
+  - [x] 2.1 Implement `service_events`
     - Write `tests/unit/test_agent_feed.py` first, with `FakeState` (a list of events with ids and services, `events_after` oldest first with a `service_id` filter): returns oldest first after `after_id`; at most 100 whatever the caller passes (the clamp is applied by the route, the function also never returns more than `limit`); default 25; `min_severity=3` keeps severity 0 to 3 and `next_after_id` is the last **scanned** id, so a second call makes progress when nothing matched; nothing scanned gives `next_after_id == after_id`; 1000 scanned events stop the scan; text fields pass through `clean_text`; a response over 20 KB is cut with `truncated` and `next_after_id` equal to the last kept id; events of other services never appear.
     - Create `tests/unit/agent_helpers.py` (`FakeState`, builders, `make_agent(mode)` with a stub until 7.1) and `agent/feed.py`.
     - _Requirements: 1.2, 1.5, 1.7_
-  - [ ] 2.2 Implement the digest
+  - [x] 2.2 Implement the digest
     - Write `tests/unit/test_agent_digest.py` first: severity counts have all eight keys and sum to `total_events`; top signatures use `diagnostics.signature`, are at most 10, ordered by count descending then `first_ts` then text; `sample` at most 200 characters from the earliest event; five equal slices with `per_minute`; events outside the window are not counted; incidents opened in the window (first seen inside it) are listed newest first, at most 20; the same events in another order give an identical result; `collect_window` finds the window start by binary search over ids (assert the number of `events_after(mid, 1)` calls is at most 20 for 100 000 events), pages the service's events, and sets `truncated` at the 20 000 cap; an empty service gives zeros, not an error; one event in the middle with a `ts` far past the window end is skipped and the later in-window events are still counted, with `truncated` false; 200 consecutive events past the end stop the scan with `truncated` true; a future-dated event is never counted (R1-M7).
-    - [ ] (R1-M7) The two future-timestamp tests above.
+    - [x] (R1-M7) The two future-timestamp tests above.
     - Create `agent/digest.py` (`Window`, `collect_window`, `build_digest`).
     - _Requirements: 1.3, 1.5, 1.7_
-  - [ ] 2.3 Write property tests for events and digest
+  - [x] 2.3 Write property tests for events and digest
     - Create `tests/pbt/test_agent_feed_digest_properties.py` (random event lists over several services, random limits including negative and huge, permutations).
     - **Property 1: `service_events` limits and order**
     - **Property 2: Digest is deterministic and consistent**
