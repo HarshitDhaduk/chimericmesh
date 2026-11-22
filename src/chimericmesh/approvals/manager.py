@@ -110,9 +110,27 @@ class ApprovalManager:
         self._book.load(rules, paused=paused, paused_by=by, paused_at=at)
         self._ledger.seed(uses, openings)
         self._seed_limits()
-        registry.subscribe(on_code_folder_changed=self._on_code_folder_changed,
-                           on_service_deleted=self._on_service_deleted, after_commit=self._on_after_commit,
-                           name="approvals")
+        # The registry outlives the app when a caller keeps the hub (hub.tagger is registry.tag), so it holds the
+        # manager weakly: bound methods here would keep the manager and everything it references alive.
+        me = weakref.ref(self)
+
+        def on_code_folder_changed(tx: Tx, change: ServiceChange) -> None:
+            manager = me()
+            if manager is not None:
+                manager._on_code_folder_changed(tx, change)
+
+        def on_service_deleted(tx: Tx, change: ServiceChange) -> None:
+            manager = me()
+            if manager is not None:
+                manager._on_service_deleted(tx, change)
+
+        async def after_commit(change: ServiceChange) -> None:
+            manager = me()
+            if manager is not None:
+                await manager._on_after_commit(change)
+
+        registry.subscribe(on_code_folder_changed=on_code_folder_changed, on_service_deleted=on_service_deleted,
+                           after_commit=after_commit, name="approvals")
         return self
 
     def _seed_limits(self) -> None:
@@ -552,12 +570,19 @@ class ApprovalManager:
         if self._sweep_task is None and not self._closed:
             self._sweep_task = asyncio.get_running_loop().create_task(self._sweep_loop())
 
-    async def aclose(self) -> None:
+    async def aclose(self, timeout: float = 1.0) -> None:
+        """Stop the sweep, then let in-flight store units finish (bounded) so none outlives the store."""
         self._closed = True
         task, self._sweep_task = self._sweep_task, None
         if task is not None:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+        pending = [t for t in self._tasks if not t.done()]
+        if pending:
+            # Units are never cancelled (a decision and its audit row commit together); wait for them instead.
+            _, late = await asyncio.wait(pending, timeout=max(0.0, timeout))
+            if late:
+                log.error("%d approvals store unit(s) still running at shutdown", len(late))
 
     async def _sweep_loop(self) -> None:
         while True:

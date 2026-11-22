@@ -82,8 +82,9 @@ def test_bare_hub_gets_a_private_memory_store_and_no_thread_leaks(tmp_path):
 def test_bare_hub_keeps_an_existing_audit_sink():
     sink = object()
     hub = Hub(audit=sink)  # type: ignore[arg-type]
-    create_app(hub, start_listeners=False)
+    app = create_app(hub, start_listeners=False)
     assert hub.audit is sink
+    asyncio.run(lifespan(app))  # closes the private store, so its writer thread does not wait for the collector
 
 
 def test_store_backed_hub_uses_its_store(tmp_path):
@@ -248,6 +249,7 @@ def test_rest_validation():
         "estimated_lines", "verification", "files_changed", "lines_changed", "verification_result", "approval"}
     stats = call(app, "GET", "/api/stats").json()
     assert stats["store_ok"] is True and stats["dropped_events"] == 0
+    asyncio.run(lifespan(app))  # closes the private store, so its writer thread does not wait for the collector
 
 
 def test_store_error_in_a_route_is_503(tmp_path):

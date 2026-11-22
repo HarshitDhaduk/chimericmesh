@@ -146,6 +146,14 @@ def _protected_dirs(store: Store) -> tuple[str, ...]:
     return tuple(dict.fromkeys((home, db_dir, token_dir)))
 
 
+def _detach_approvals(hub: Hub, approvals: ApprovalManager | None) -> None:
+    """Shutdown: a hub the caller keeps drops the closed manager (fails closed, and breaks the hub-manager cycle)."""
+    if approvals is not None and hub.approver is approvals:
+        hub.approver = None
+    if approvals is not None and hub.approvals is approvals:
+        hub.approvals = None
+
+
 def _wire_store(hub: Hub | None, store: Store | None) -> tuple[Hub, Store, bool]:
     """Apply the create_app contract. Returns (hub, store, whether the lifespan closes the store)."""
     if hub is None:
@@ -262,7 +270,8 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
                 close()
             await discovery.manager.aclose(0.2)
             if approvals is not None:
-                await approvals.aclose()
+                await approvals.aclose(0.2)
+            _detach_approvals(hub, approvals)
             if syslog_tcp is not None:
                 await syslog_tcp.aclose(0.4)
             await manager.aclose(0.6)
@@ -283,7 +292,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
             close()
         await discovery.manager.aclose(min(0.2, remaining()))     # a running scan stops before the connector steps
         if approvals is not None:
-            await approvals.aclose()                              # the sweep task only
+            await approvals.aclose(min(1.0, remaining()))         # the sweep, then in-flight units
         if syslog_tcp is not None:
             await syslog_tcp.aclose(min(0.4, remaining()))
         app.state.syslog_tcp = None
@@ -293,6 +302,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
         except Exception:  # includes the timeout: the hub flush matters more than a coalesced audit row
             log.error("the reduce-operations limiter did not flush before its slice ended")
         await hub.aclose(max(0.1, remaining()))
+        _detach_approvals(hub, approvals)
         if owns_store:
             store.close(timeout=max(0.1, remaining()))
     app = FastAPI(title="ChimericMesh", version="0.1.0", lifespan=lifespan)
