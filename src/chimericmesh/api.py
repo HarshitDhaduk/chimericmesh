@@ -10,7 +10,7 @@ import sys
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from urllib.parse import urlsplit
 
@@ -18,6 +18,12 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
+from .approvals.errors import ApprovalsNotMigrated
+from .approvals.manager import ApprovalManager
+from .approvals.models import ApprovalSettings
+from .approvals.routes import build_router as build_approvals_router
+from .approvals.routes import register_error_handlers as register_approvals_errors
+from .approvals.schema import register_migrations as register_approvals_migrations
 from .commands import handle_command, parse_command
 from .connectors.config import resolve_tcp_port
 from .connectors.manager import ConnectorManager
@@ -42,11 +48,13 @@ from .services.access import AccessControl, OperatorVerdict, is_loopback, parse_
 from .services.asgi import MAX_BODY_BYTES, BodyLimit, HostGuard
 from .services.deps import make_require_admin
 from .services.limiter import ReduceAuditLimiter
+from .services.limiter import reduce_key as make_reduce_key
 from .services.registry import ServiceRegistry
 from .services.routes import build_router
 from .services.token import TokenStore, resolve_token_path
 from .store import MigrationRegistry, Store, StoreError
 from .store.config import MEMORY, resolve_db_path, resolve_home
+from .store.proposals import is_reserved_decider
 
 log = logging.getLogger("chimericmesh.api")
 
@@ -69,9 +77,15 @@ class ResolveRequest(BaseModel):
 
 
 class ProposalRequest(BaseModel):
+    # Unknown keys (status, decided_by, approved_by_rule ...) are ignored and never read (L4).
     incident_id: str = Field(min_length=1, max_length=64)
     action: str = Field(min_length=1, max_length=200)
     details: str = Field(default="", max_length=500)
+    # Optional structure; ``approvals.validate`` checks the values and names the bad field in a 422.
+    files: Any = None
+    estimated_lines: Any = None
+    verification: Any = None
+    kind: Any = None
 
 
 class DecideRequest(BaseModel):
@@ -81,6 +95,9 @@ class DecideRequest(BaseModel):
 
 class CompleteRequest(BaseModel):
     note: str = Field(default="", max_length=300)
+    files_changed: Any = None
+    lines_changed: Any = None
+    verification_result: Any = None
 
 
 class TerminalRequest(BaseModel):
@@ -106,6 +123,7 @@ def build_registry() -> MigrationRegistry:
     """Every module's migrations. Later modules add their ``register_migrations`` call here."""
     registry = connectors_registry()  # core, services and connectors migrations
     register_discovery_migrations(registry)
+    register_approvals_migrations(registry)
     return registry
 
 
@@ -126,6 +144,14 @@ def _protected_dirs(store: Store) -> tuple[str, ...]:
     token_dir = str(resolve_token_path(os.environ, Path(home)).parent)
     db_dir = home if store.path == MEMORY else str(Path(store.path).parent)
     return tuple(dict.fromkeys((home, db_dir, token_dir)))
+
+
+def _detach_approvals(hub: Hub, approvals: ApprovalManager | None) -> None:
+    """Shutdown: a hub the caller keeps drops the closed manager (fails closed, and breaks the hub-manager cycle)."""
+    if approvals is not None and hub.approver is approvals:
+        hub.approver = None
+    if approvals is not None and hub.approvals is approvals:
+        hub.approvals = None
 
 
 def _wire_store(hub: Hub | None, store: Store | None) -> tuple[Hub, Store, bool]:
@@ -175,6 +201,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
                store: Store | None = None, enforce_access: bool | None = None) -> FastAPI:
     # R7.5: an explicit value wins; None means off for an injected hub and on for a hub this call builds.
     effective = enforce_access if enforce_access is not None else hub is None
+    hub_arg, store_arg = hub, store
     if hub is not None and enforce_access is None and hub.enforce_access:
         log.warning("create_app: the hub was built with enforce_access=True but create_app got "
                     "enforce_access=None, which means False for an injected hub; pass "
@@ -195,6 +222,23 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
     submit = make_submit(hub.ingest)
     manager = ConnectorManager(registry, store, submit)
     discovery = _build_discovery(registry, store, hub)
+
+    async def announce(text: str) -> None:
+        await hub.say(hub.irc_channel, text)
+
+    approvals: ApprovalManager | None
+    try:
+        approvals = ApprovalManager.load(
+            store, state=hub, writer=hub, registry=registry, limiter=reduce_limiter, announce=announce,
+            protected=_protected_dirs(store), settings=ApprovalSettings.from_env(os.environ), now=hub.now)
+    except ApprovalsNotMigrated:
+        # Fail closed: without the tables there are no rules, so nothing is ever auto-approved (blockers B4).
+        log.warning("the store has no approvals migrations: standing approval rules are off")
+        approvals = None
+    hub.approver = approvals
+    hub.approvals = approvals
+    if approvals is not None and hub_arg is None and store_arg is None:
+        hub.enforce_limits = True  # B3: the production path (create_app() and python -m chimericmesh)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -217,12 +261,17 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
                 syslog_tcp = await start_syslog_tcp(submit, bind, resolve_tcp_port(os.environ))
                 app.state.syslog_tcp = syslog_tcp
             hub.start()
+            if approvals is not None:
+                await approvals.start()
             # Tailers are not sockets: they start whether or not the listeners do.
             await manager.start()
         except BaseException:
             for close in closers:
                 close()
             await discovery.manager.aclose(0.2)
+            if approvals is not None:
+                await approvals.aclose(0.2)
+            _detach_approvals(hub, approvals)
             if syslog_tcp is not None:
                 await syslog_tcp.aclose(0.4)
             await manager.aclose(0.6)
@@ -242,6 +291,8 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
         for close in closers:
             close()
         await discovery.manager.aclose(min(0.2, remaining()))     # a running scan stops before the connector steps
+        if approvals is not None:
+            await approvals.aclose(min(1.0, remaining()))         # the sweep, then in-flight units
         if syslog_tcp is not None:
             await syslog_tcp.aclose(min(0.4, remaining()))
         app.state.syslog_tcp = None
@@ -251,6 +302,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
         except Exception:  # includes the timeout: the hub flush matters more than a coalesced audit row
             log.error("the reduce-operations limiter did not flush before its slice ended")
         await hub.aclose(max(0.1, remaining()))
+        _detach_approvals(hub, approvals)
         if owns_store:
             store.close(timeout=max(0.1, remaining()))
     app = FastAPI(title="ChimericMesh", version="0.1.0", lifespan=lifespan)
@@ -261,6 +313,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
     app.state.reduce_limiter = reduce_limiter
     app.state.connectors = manager
     app.state.discovery = discovery
+    app.state.approvals = approvals
     app.state.syslog_tcp = None
 
     @app.exception_handler(StoreError)
@@ -285,6 +338,9 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
     app.add_middleware(HostGuard, access=access)
     app.include_router(build_router(registry, access, require_admin))
     app.include_router(build_discovery_router(discovery, require_admin))
+    if approvals is not None:
+        app.include_router(build_approvals_router(approvals, access, require_admin))
+        register_approvals_errors(app)
 
     @app.get("/", include_in_schema=False)
     async def index():
@@ -352,38 +408,51 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
             raise HTTPException(404, "proposal not found")
         return prop
 
+    def _view(prop):
+        return prop.to_dict() if approvals is None else approvals.proposal_view(prop)
+
     @app.get("/api/proposals")
     async def proposals(status: Literal["pending", "approved", "denied", "done"] | None = None,
                         service_id: str | None = Query(None, max_length=64),
                         limit: int = Query(200, ge=1, le=500)):
-        return [p.to_dict() for p in hub.list_proposals(status, service_id=service_id, limit=limit)]
+        if approvals is not None:
+            await approvals.expire_due()
+        return [_view(p) for p in hub.list_proposals(status, service_id=service_id, limit=limit)]
 
     @app.get("/api/proposals/{pid}")
     async def proposal(pid: str):
-        return _proposal_or_404(pid).to_dict()
+        if approvals is not None:
+            await approvals.expire_due()
+        return _view(_proposal_or_404(pid))
 
     @app.post("/api/proposals", status_code=201)
     async def create_proposal(req: ProposalRequest):
-        prop = await hub.create_proposal(req.incident_id, req.action, req.details)
+        extra = {k: v for k, v in (("kind", req.kind), ("files", req.files), ("estimated_lines", req.estimated_lines),
+                                   ("verification", req.verification)) if v is not None}
+        prop = await hub.create_proposal(req.incident_id, req.action, req.details, extra=extra or None)
         if prop is None:
             raise HTTPException(404, "incident not found")
-        return prop.to_dict()
+        return _view(prop)
 
     @app.post("/api/proposals/{pid}/decide", dependencies=[Depends(require_admin)])
     async def decide_proposal(pid: str, req: DecideRequest):
         _proposal_or_404(pid)
+        if is_reserved_decider(req.by):  # R4.8: these prefixes belong to the hub's own rule logic
+            return JSONResponse({"detail": "that decider name is reserved", "field": "by"}, status_code=422)
         prop = await hub.decide(pid, req.approve, req.by)
         if prop is None:
             raise HTTPException(409, "proposal is not pending")
-        return prop.to_dict()
+        return _view(prop)
 
     @app.post("/api/proposals/{pid}/complete")
     async def complete_proposal(pid: str, req: CompleteRequest):
         _proposal_or_404(pid)
-        prop = await hub.complete(pid, req.note)
+        extra = {k: v for k, v in (("files_changed", req.files_changed), ("lines_changed", req.lines_changed),
+                                   ("verification_result", req.verification_result)) if v is not None}
+        prop = await hub.complete(pid, req.note, extra=extra or None)
         if prop is None:
             raise HTTPException(409, "proposal is not approved")
-        return prop.to_dict()
+        return _view(prop)
 
     @app.post("/api/irc/say", status_code=202)
     async def say(req: SayRequest):
@@ -437,7 +506,10 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
             reply = "commands start with ! - try !help"
             hub.record("ChimericBot", reply, "system")
             return {"ok": True, "handled": False, "replies": [reply]}
-        replies = await handle_command(hub, WEB_NICK, hub.irc_channel, cmd, verdict=verdict)
+        who = request.client.host if request.client is not None and request.client.host else "unknown"
+        replies = await handle_command(hub, WEB_NICK, hub.irc_channel, cmd, verdict=verdict,
+                                       reduce_key=make_reduce_key("terminal", who),
+                                       actor=f"dashboard-terminal:{who}")
         return {"ok": True, "handled": True, "replies": replies}
 
     @app.get("/api/workflow")

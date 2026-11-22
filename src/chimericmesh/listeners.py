@@ -10,6 +10,7 @@ import socket
 from .commands import handle_command, parse_command
 from .hub import Hub
 from .services.access import OperatorVerdict, is_reserved_nick
+from .store.proposals import is_reserved_decider
 from .parsers import format_privmsg, irc_to_event, parse_irc_line, parse_syslog, telnet_to_event
 
 log = logging.getLogger("chimericmesh.listeners")
@@ -118,7 +119,7 @@ class IrcServer:
             if not nick:
                 self._send(writer, f":{self.name} 431 {info['nick']} :No nickname given")
                 return
-            if enforce and is_reserved_nick(nick):
+            if enforce and (is_reserved_nick(nick) or is_reserved_decider(nick)):
                 self._send(writer, f":{self.name} 433 {info['nick']} {nick} :Nickname is already in use")
                 return
             info["nick"] = nick

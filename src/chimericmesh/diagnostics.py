@@ -220,8 +220,10 @@ def analyze(events: Iterable[Event], min_count: int = 3, max_severity: int = 2) 
     return tracker.incidents()
 
 
-_CODE_SUFFIXES = {".py", ".js", ".ts", ".c", ".h", ".go", ".java", ".rb", ".sh", ".rs"}
-_SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".hypothesis"}
+CODE_SUFFIXES = frozenset({".py", ".js", ".ts", ".c", ".h", ".go", ".java", ".rb", ".sh", ".rs"})
+SKIP_DIRS = frozenset({".git", "node_modules", "__pycache__", ".venv", "venv", ".hypothesis"})
+_CODE_SUFFIXES = CODE_SUFFIXES  # kept for older imports
+_SKIP_DIRS = SKIP_DIRS
 
 
 def find_code_hints(incident: Incident, root: Path, limit: int = 5) -> list[dict]:

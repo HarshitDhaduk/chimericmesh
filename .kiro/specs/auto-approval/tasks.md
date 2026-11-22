@@ -1,4 +1,4 @@
-﻿# Implementation Plan: auto-approval (V1)
+# Implementation Plan: auto-approval (V1)
 
 Requirements: [requirements.md](requirements.md). Design: [design.md](design.md). Property numbers below are the numbered Correctness Properties in the design; condition numbers 4.2.1 to 4.2.13 are the sub-criteria of R4.2 defined in the design (L8).
 
@@ -12,68 +12,68 @@ Review ids (design, "Review resolutions"): M2 (named interfaces, both hub modes)
 
 Round 1 review ids (design, "Round 1 review responses"): H1 (one cooldown formula) in 2.2, 2.4, 3.1, 5.1, 10.1; H2 (rule state ordering) in 3.1, 4.2, 4.4, 4.5, 9.1; M1 (revoke during an in-flight create) in 5.1, 5.2, 9.1; M2 (`rule_auth_failed` only on 401) in 6.1; M3 (task order) in 3.1, 3.2, 4.1; M4 (views and status) in 4.5, 4.6, 5.2; M5 (`expire_due` contract) in 4.4, 4.6, 5.3, 6.2; M6 (reduce operations never refused) in 4.2, 4.4, 6.1; L1 in 4.5; L2 in 7.1; L4 in 6.1, 6.2; L6 in 1.3; L7 and L10 in 5.1; L8 in 2.2, 4.1; L9 in 4.6. L3, L11 and L12 are open items O3, O9 and O10 in the design; L5 is the counts in this file.
 
-- [ ] 1. Package skeleton, shared names and pure helpers
-  - [ ] 1.1 Create the package skeleton, dependency rows and the public `core` names
+- [x] 1. Package skeleton, shared names and pure helpers
+  - [x] 1.1 Create the package skeleton, dependency rows and the public `core` names
     - Write `tests/unit/test_core_code_names.py` first: `diagnostics.CODE_SUFFIXES` and `diagnostics.SKIP_DIRS` are public `frozenset`s equal to today's private sets; `_CODE_SUFFIXES` and `_SKIP_DIRS` still exist as aliases; a golden test for `find_code_hints` on a temporary folder with `a.py`, `b.php` and `node_modules/c.py` finds only `a.py` (behaviour unchanged).
     - Extend `tests/unit/test_dependency_direction.py` (rows only, as the services task 1.3 allows): `approvals/*` is group `auto-approval`, may import `core`, `store`, `services`; only `approvals/routes.py` may import `fastapi`, `starlette` or `pydantic`; `approvals/__init__.py` imports none of them.
     - Create `approvals/__init__.py` (empty re-exports), `approvals/errors.py` (`ApprovalsError`, `ProposalInvalid(field, reason)`, `RuleInvalid(field, reason)`, `ActiveProposalExists(proposal_id)`, `ProposalRateLimited(retry_after)`, `RuleNotFound`, `RuleConflict(reason)`, `RuleNotApplicable(reason)`, `RuleLimitReached`, `ProposalExpired`, `ApprovalsNotMigrated`), and edit `src/chimericmesh/diagnostics.py` (rename and alias).
-    - [ ] (L4) The public names and the golden test above.
+    - [x] (L4) The public names and the golden test above.
     - _Requirements: 5.2, Success Criterion 9_
-  - [ ] 1.2 Add models, constants, settings and the line formatters
+  - [x] 1.2 Add models, constants, settings and the line formatters
     - Write `tests/unit/test_approvals_format.py` first: `safe_text` removes `[\x00-\x1f\x7f-\x9f]` and lone surrogates and cuts to the limit; `auto_approved_line("p3","r1","api-gw","fix <x>")` equals `AUTO-APPROVED p3 by rule r1 (service api-gw): fix <x>. Revoke with !revoke r1`; it never contains "reply !approve"; an action of 5000 characters (with CR, LF, NUL inside) gives a line of at most 400 UTF-8 bytes with no control character; `cooldown_note`, `rule_line` for created, revoked, suspended, expired, paused, resumed, withdrawn contain the acting identity cleaned. `tests/unit/test_approvals_models.py`: `CATEGORIES` equals the set of categories `diagnostics.RULES` and `_GENERIC` can emit; `MAX_PROPOSALS_PER_SERVICE_HOUR == 10`; `ApprovalSettings.from_env` defaults (86400, 24 hours, 1800, 60) and a warning plus default for out-of-range values (cooldown outside 0 to 2 592 000, TTL outside 1 to 720).
     - Create `approvals/models.py` (`Rule`, `RuleFields`, `RulePatch`, `CreateContext`, `RuleCheck`, `ApprovalPlan`, `RuleDefaults`, `ApprovalStatus`, `ApprovalSettings`, constants), `approvals/format.py`, `approvals/ports.py` (the `ProposalApprover` protocol), `approvals/limits.py` (the constant only for now).
     - _Requirements: 1.1, 1.2, 7.2, 7.3, 7.6_
-  - [ ] 1.3 Implement the file scope check
+  - [x] 1.3 Implement the file scope check
     - Write `tests/unit/test_approvals_scope.py` first, with injected `realpath` and `normcase` so no real symlink is needed: a file inside the folder passes; a relative path is joined to the folder; `../x.py`, an absolute path outside, a sibling folder with a common prefix (`/code/app2` for `/code/app`) give `outside_folder`; `.git/hooks/x.py`, `.kiro/x.py`, `.github/workflows/x.py`, `src/.env`, `a/b/.env.local`, `k.pem`, `k.key`, `id_rsa`, `id_rsa.pub`, `c.pfx` give `protected` (the suffix test must not hide them: use names with a source suffix such as `src/.env.py` and `.git/x.py`); a file inside a `protected_dirs` entry gives `protected`; `.ini`, `.conf`, `.yaml`, `.json`, `.toml` give `extension`; `.php`, `.cs`, `.tsx` pass; 301 characters gives `too_long`; NUL and `\x1b` give `control_char`; Windows case folding (`SRC\A.PY`) with `normcase=str.lower`; the file equal to the folder gives `outside_folder`; `check_files` keeps order and returns every problem; `glob_to_regex("**/.env")` matches `.env` and `a/b/.env` and not `a/.envx`.
     - Create `approvals/scope.py` (`PROTECTED_PATTERNS`, `SOURCE_SUFFIXES = CODE_SUFFIXES | {...}`, `FileProblem`, `check_file`, `check_files`, `glob_to_regex`), using `services.paths.path_in_code_folder`.
-    - [ ] (L4) `SOURCE_SUFFIXES` is built from `diagnostics.CODE_SUFFIXES`, and a test asserts it contains it as a subset.
-    - [ ] (L6) Also write first: `sub/.git/hooks/x.py`, `vendor/lib/.kiro/x.py` and `pkg/.github/workflows/x.py` give `protected` (the patterns are `**/.git/**`, `**/.kiro/**`, `**/.github/**`); `glob_to_regex("**/.git/**")` matches `.git/x` and `a/b/.git/x` and not `a/.gitx/y`; `.gitignore` is not protected.
+    - [x] (L4) `SOURCE_SUFFIXES` is built from `diagnostics.CODE_SUFFIXES`, and a test asserts it contains it as a subset.
+    - [x] (L6) Also write first: `sub/.git/hooks/x.py`, `vendor/lib/.kiro/x.py` and `pkg/.github/workflows/x.py` give `protected` (the patterns are `**/.git/**`, `**/.kiro/**`, `**/.github/**`); `glob_to_regex("**/.git/**")` matches `.git/x` and `a/b/.git/x` and not `a/.gitx/y`; `.gitignore` is not protected.
     - _Requirements: 5.1, 5.2, 5.3_
-  - [ ] 1.4 Implement the validators
+  - [x] 1.4 Implement the validators
     - Write `tests/unit/test_approvals_validate.py` first: every row of the design's input table, one test each: defaults (`most_urgent_severity` 3, `max_per_hour` 3, `max_per_incident` 1, `max_files` 5, `max_lines` 100, `expires_at` now + 7 days); `most_urgent_severity` 2, 5, 7 and `True` give `RuleInvalid("most_urgent_severity")`; `max_per_hour` 0 and 11; `max_per_incident` 4; `max_files` 21; `max_lines` 501; `expires_at` in the past, more than 30 days after `created_at`, `nan`, `inf`; a `signature` match value of 0 and 201 characters and one with a control character; a `category` outside `CATEGORIES`; a note over 200 characters is cut; `created_by`, `status`, `id`, `use_count`, `code_folder` keys are rejected by the model validator (R2.7); `validate_new_proposal`: 21 files, a 301-character file, `estimated_lines` 1001 and `True`, a 301-character `verification`, `kind` other than `code_change`; with a code folder an absolute file, `..`, NUL and `\x1b` entries are rejected, without a code folder only length and control characters are; a proposal without `files` is accepted; `validate_completion`: 51 files, `lines_changed` -1, `verification_result` outside the three values.
     - Create `approvals/validate.py` (`validate_rule_fields`, `validate_rule_patch`, `validate_new_proposal`, `validate_completion`, `clean_note`). All total: only `RuleInvalid` or `ProposalInvalid` escape.
     - _Requirements: 1.2, 1.3, 1.4, 2.7, 9.1, 9.2, 9.6_
-  - [ ] 1.5 Write property tests for scope, bounds and line safety
+  - [x] 1.5 Write property tests for scope, bounds and line safety
     - Create `tests/pbt/test_approvals_pure_properties.py` (arbitrary text strategies include NUL, control characters, lone surrogates, very long strings).
     - **Property 5: Rule bounds**
     - **Property 15: File scope containment**
     - **Property 20: IRC line safety**
     - **Validates: Requirements 1.3, 1.4, 5.1, 5.2, 5.3, 7.2, 7.3**
 
-- [ ] 2. Matching, ledger and proposal limits (pure)
-  - [ ] 2.1 Implement `match_rule` and `first_match`
+- [x] 2. Matching, ledger and proposal limits (pure)
+  - [x] 2.1 Implement `match_rule` and `first_match`
     - Write `tests/unit/test_approvals_matching.py` first: one test per condition, each starting from a context and rule that match and changing exactly one thing, asserting the returned code: 4.2.1 paused, 4.2.2 status `suspended`, `revoked` and `now == expires_at`, 4.2.3 kind other than `code_change` and `None`, 4.2.4 incident service `None` and a different service, 4.2.5 different signature, different category (and the same signature with different case does not match), 4.2.6 severity 2 (never), severity 3 with a rule of 4, severity 4 with a rule of 3 (matches), 4.2.7 `usage.hour == max_per_hour`, 4.2.8 `usage.incident_opening == max_per_incident`, 4.2.9 no files, more than `max_files`, `file_problem` set, 4.2.10 `estimated_lines` `None` and `max_lines + 1`, 4.2.11 empty and `None` verification, 4.2.12 live folder different and `None`, 4.2.13 `cooldown_active`; the first failing condition is the one returned when two fail; `first_match` returns the lowest `seq`, lists the checked rules, and returns no rule for an empty list.
-    - [ ] (L8) The thirteen tests are numbered 4.2.1 to 4.2.13 in their names, and the file docstring states that the requirement's (a) to (m) map to them in order.
+    - [x] (L8) The thirteen tests are numbered 4.2.1 to 4.2.13 in their names, and the file docstring states that the requirement's (a) to (m) map to them in order.
     - Create `approvals/matching.py` (`Condition`, `RuleUsage`, `MatchContext`, `match_rule`, `first_match`, `RULE_CONDITIONS`).
     - _Requirements: 4.1, 4.2, 4.3, 4.7_
-  - [ ] 2.2 Implement the usage ledger and the proposal limits
+  - [x] 2.2 Implement the usage ledger and the proposal limits
     - Write `tests/unit/test_approvals_ledger.py` first (fake clock values only): `usage` counts reservations in the last 3600 s and drops older ones at exactly 3600; `reserve` then `release` restores the count; the per-opening count is keyed by (incident, opening) and a new opening starts at 0; `completed` records `completed_at`; `note_opening` records the first sighting of an (incident, opening) only (a second call with a later `now` returns `False` and does not move it); `cooldown_for` implements the one formula `reopen_at(opening) - completed_at < cooldown` and nothing else (H1): completion at 0 and the reopen first seen at 1 h gives the earlier proposal id when asked at 1 h and again after the clock moved to 30 h; the reopen first seen at 25 h gives `None`; at exactly the cooldown gives `None`; a completion recorded after the reopen (negative difference) gives the id; a third opening first seen 100 h later gives `None`; opening 1, a user-approved proposal (no use), a use without `completed_at` and no use all give `None`; with two qualifying uses the one with the latest `completed_at` is returned; `seed` (usage rows and opening rows) and `prune` (31 days). `tests/unit/test_approvals_limits.py`: with `enforce=False` nothing is checked and nothing reserved; with `enforce=True` an active proposal of the incident (given by `active_of`) or an in-flight reservation raises `ActiveProposalExists` carrying the id; the eleventh reservation for a service in 3600 s raises `ProposalRateLimited` with `retry_after`; (L8) `seed` with ten creation times inside the last hour makes the next reservation raise `ProposalRateLimited`, and times older than 3600 s are ignored; `unassigned` is its own key; `release` frees the slot; `commit` keeps it.
-    - [ ] (H1) The cooldown cases above are the executable form of the single formula in the design; no test uses `now - completed_at`.
-    - [ ] (L8) The `seed` cases for the limits.
+    - [x] (H1) The cooldown cases above are the executable form of the single formula in the design; no test uses `now - completed_at`.
+    - [x] (L8) The `seed` cases for the limits.
     - Create `approvals/ledger.py` (`UsageLedger`, `UsageRow`, `OpeningRow`), complete `approvals/limits.py` (`ProposalLimits`, with `seed`).
     - _Requirements: 4.2, 4.9, 9.3, 9.4_
-  - [ ] 2.3 Write property tests for matching
+  - [x] 2.3 Write property tests for matching
     - Create `tests/pbt/test_approvals_matching_properties.py` (strategies build rules, contexts and usages; monotonicity compares a rule with a tightened copy).
     - **Property 1: Matching: no match when any condition fails**
     - **Property 2: Matching is monotone in the limits**
     - **Property 3: First match wins**
     - **Property 4: Never covered**
     - **Validates: Requirements 4.1, 4.2, 4.3, 4.7, 1.3**
-  - [ ] 2.4 Write property tests for the ledger
+  - [x] 2.4 Write property tests for the ledger
     - Create `tests/pbt/test_approvals_ledger_properties.py` (random sequences of reserve, release, complete, first-seen openings and clock advances; for Property 9 the strategy draws completion times, first-seen opening times and query times, and asserts both the formula and that the answer does not depend on the query time).
     - **Property 8: Per-opening counting**
     - **Property 9: Cooldown**
     - **Validates: Requirements 4.2 (h), 4.9**
-  - [ ] 2.5 Checkpoint: run `python -m pytest -q`; the new pure tests and the whole existing suite pass.
+  - [x] 2.5 Checkpoint: run `python -m pytest -q`; the new pure tests and the whole existing suite pass.
 
-- [ ] 3. Persistence and the in-memory mirror
-  - [ ] 3.1 Add the migration, the rule book and the test helper
+- [x] 3. Persistence and the in-memory mirror
+  - [x] 3.1 Add the migration, the rule book and the test helper
     - Write `tests/unit/test_approvals_schema.py` first, on a temporary file store and on `:memory:`: after `register_migrations` the tables `approval_rules`, `rule_uses`, `approval_state` and the indexes exist and versions are in 400 to 499; the CHECK constraints reject `most_urgent_severity` 2, `max_per_hour` 11, a `match_value` of 201 characters, a status outside the four; the table `incident_openings` exists with primary key (incident, opening) and `rule_uses` has no `reopen_seen_at` column (H1); a store opened without these migrations makes `rulebook.ensure_migrated(store)` raise `ApprovalsNotMigrated` (the manager-level `load` test is in 4.1, M3); `tests/unit/test_approvals_rulebook.py`: `RuleBook.load` reads all rows into frozen `Rule`s ordered by `seq`, the paused flag defaults to false and is read from `approval_state`; `replace(rule)` swaps a whole object and bumps that rule's version and the epoch; `rules(service_id=, status=)` filters; (H2) `mark_dirty` and `clear_dirty` keep a `dirty` set and `paused_dirty`; `merge(snapshot, started_epoch)` as a pure function over a table of cases: snapshot `active` against a mirror `revoked`, `expired` or `suspended` keeps the mirror status; snapshot `revoked` against a mirror `active` gives `revoked`; a rule whose version changed after `started_epoch` keeps the mirror entry whole; a dirty rule keeps the mirror entry; a new row is added; other fields come from the snapshot for an untouched rule; the paused flag: snapshot false against mirror true gives true, snapshot true against an untouched mirror false gives true, a `pause_version` changed after `started_epoch` keeps the mirror value, `paused_dirty` keeps the mirror value; a loop over every pair of statuses asserts the merged rank is never lower than the mirror rank for an untouched, clean rule; `max_per_hour` CHECK literal equals `MAX_PROPOSALS_PER_SERVICE_HOUR` (the test reads the DDL).
-    - [ ] (H2) The `merge` table of cases is the executable form of rule 5 of "Rule state ordering".
-    - [ ] (H1) The `incident_openings` assertion.
+    - [x] (H2) The `merge` table of cases is the executable form of rule 5 of "Rule state ordering".
+    - [x] (H1) The `incident_openings` assertion.
     - Create `approvals/schema.py` (`register_migrations`), `approvals/rulebook.py` (`RuleBook` with versions, epoch, dirty set and `merge`; `ensure_migrated`; literal-SQL helpers that take a `Tx`: insert, conditional status updates, load, `max_rule_seq`). The test helper `approvals_helpers.py` is created in 4.1 (M3).
     - _Requirements: 1.1, 1.7, 1.8_
-  - [ ] 3.2 Rule ids across restarts
+  - [x] 3.2 Rule ids across restarts
     - Write `tests/unit/test_approvals_ids.py` first, on a temporary file, at the rulebook level (`store.transact` with the rulebook insert helper; no manager exists yet, M3; the manager-level restart test is in 4.1): create `r1`, `r2`; reopen the store; create `r3`; delete `r3` by SQL, restart, create `r4` (never `r3`); lower the counter in SQL below the stored maximum and the next id is still above every stored number; two concurrent `store.transact` creates from `asyncio.gather` get distinct ids; the counter and the insert commit together.
     - Add the id issue to `rulebook.py` (`format_id("r", tx.counter_next("rule", floor=max_rule_seq(tx)))`).
     - Create `tests/pbt/test_approvals_rule_ids_properties.py`: **Property 17: Rule ids unique across restarts** (random create, revoke, direct row deletion, restart on a temporary file, all through the rulebook helpers).
@@ -84,71 +84,71 @@ Round 1 review ids (design, "Round 1 review responses"): H1 (one cooldown formul
     - **Property 18: Persisted rules round trip**
     - **Validates: Requirements 1.8**
 
-- [ ] 4. The manager: rule lifecycle
-  - [ ] 4.1 Create, patch and read rules
+- [x] 4. The manager: rule lifecycle
+  - [x] 4.1 Create, patch and read rules
     - Write `tests/unit/test_approvals_rules.py` first, with `make_manager` for both modes: `create_rule` stores a rule with the registry's current resolved code folder, status `active`, the acting identity as `created_by`, an audit row `rule_created` in the same transaction, and one announcement line from `rule_line`; creation fails with `RuleInvalid("service_id")` for an unknown service and for a service without a code folder (R1.5); a 21st rule for one service and a 101st in total raise `RuleLimitReached` and revoked and expired rules do not count; `patch_rule` changes only the six numeric fields, the expiry and the note, validates bounds, writes one `rule_updated` row with `field: before -> after`, refuses revoked and expired rules (`RuleConflict`) and an `expires_at` beyond `created_at + 30 days`; a patch with every value equal writes nothing; `rules(service_id=, status=)` and `rule` read the mirror; a failing store leaves the mirror unchanged on create and patch (the commit is the arbiter) and the exception is `StoreError`; cancellation test (store T6): block the writer, cancel the awaiting task, release, the mirror equals the database. Canary: a signature and a token canary never appear in an audit row or announcement.
     - Also write first (moved here from 3.1 and 3.2, M3): `ApprovalManager.load` on a store opened without the approvals migrations raises `ApprovalsNotMigrated`; create `r1` and `r2` through the manager, build a new manager on the same file, create `r3` (ids continue, `r3` is never reused after its row is deleted by SQL); two concurrent `create_rule` calls through `asyncio.gather` get distinct ids; `load` calls `registry.subscribe` exactly once with the name `approvals` (M4: there is no `attach`); (L8) `load` seeds the limits from `StateView` proposals created in the last hour: with ten such proposals the limits object reports ten reservations for the service, and a proposal 2 hours old is ignored.
-    - [ ] (M3) The three manager-level tests above (migration check, id continuity, concurrent ids).
-    - [ ] (L8) The seeding test.
+    - [x] (M3) The three manager-level tests above (migration check, id continuity, concurrent ids).
+    - [x] (L8) The seeding test.
     - Create `approvals/manager.py` (class skeleton, `load` with migration check, mirror fill, subscribe and seeding, reads, `create_rule`, `patch_rule`, the shielded-unit helper and `_rules_lock`) and `tests/unit/approvals_helpers.py` (`make_manager(mode)`, `FakeLimiter`).
     - _Requirements: 1.1, 1.5, 1.6, 1.7, 2.5, 2.7, 7.3, 7.6_
-  - [ ] 4.2 Reduce and re-enable operations
+  - [x] 4.2 Reduce and re-enable operations
     - Write `tests/unit/test_approvals_reduce.py` first: `revoke_rule` marks the mirror revoked before it awaits (a `prepare` started from a coroutine scheduled during the persist already refuses), persists, denies every `approved` proposal of that rule with `decided_by` `rule-revoked:<id>` and `decision_origin` `hub`, leaves `done` and user-approved proposals alone, is idempotent (second call: no new audit row, no announcement) and works without any token (the manager has no token parameter); (M6) `revoke_rule` of a `revoked` or `expired` rule and `pause_rule` of a `suspended`, `revoked` or `expired` rule return the unchanged rule without raising and write no audit row and no announcement (an `expired` rule stays `expired`), and only an unknown id raises `RuleNotFound`; `pause_rule` sets `suspended`, `enable_rule` sets `active` again, refuses with `RuleConflict` for a revoked rule, an expired rule (and marks it `expired`), a folder that differs from the service's current one (R6.9), a deleted service, and a rule that is `active`; `pause` sets the global flag, persists it in `approval_state` (survives restart), changes no rule status and denies nothing (R2.4); `resume` clears it; every reduce call goes through `FakeLimiter.record(key, ...)` and announces only when it returns `True`; eleven calls on one key: all eleven take effect, ten audit rows and one coalesced row come from the real `ReduceAuditLimiter` (service-level test with the real limiter); a store that fails on `transact` leaves the rule revoked or the hub paused in memory, the call returns normally, the rule id is in the dirty set, and `sweep_once` persists it once the store works (design O5).
     - Also write first (H2, interleavings with a gated store writer and `asyncio` events, no sleeps): `revoke_rule` while `enable_rule` awaits its commit: after both finish the mirror is `revoked`, `enable_rule` raised `RuleConflict`, and the database ends `revoked` (through the dirty set and one `sweep_once` when the enable's write came last); the same for `pause` while `resume` awaits (the hub ends paused, `resume` raises `RuleConflict`) and for `revoke_rule` while `patch_rule` awaits; `enable_rule` for a row that is already `revoked` in the database gets rowcount 0 and raises `RuleConflict`; a reduce operation completes while a test holds `_rules_lock` (reduce takes no lock); a widen operation whose commit finds the entry changed adds it to the dirty set and leaves the mirror as the reduce set it.
-    - [ ] (H2) The five interleaving tests above.
-    - [ ] (M6) The idempotent final-state tests above.
+    - [x] (H2) The five interleaving tests above.
+    - [x] (M6) The idempotent final-state tests above.
     - Complete `approvals/manager.py` (`revoke_rule`, `pause_rule`, `enable_rule`, `pause`, `resume`, `_deny_open_proposals`).
     - _Requirements: 2.3, 2.4, 2.5, 2.6, 6.1, 6.2, 6.3, 6.7, 6.9, 7.3_
-  - [ ] 4.3 Create a rule from a proposal
+  - [x] 4.3 Create a rule from a proposal
     - Write `tests/unit/test_approvals_from_proposal.py` first: `rule_defaults` for an `approved` proposal returns the incident's service, `match_type` `signature` with the incident's signature, and `most_urgent_severity` `min(4, max(3, severity))` for severities 3, 4 and for incident severity 2 (gives 3); it creates nothing; a `done` proposal with `verification_result` `passed` is accepted, `failed`, `not_run` and `None` give `RuleNotApplicable` (409 text names the reason), as do `pending`, `denied` and a rule-approved proposal (`approved_by_rule` set); an incident without a service and a service without a folder give `RuleInvalid("service_id")` naming which is missing; `create_rule_from_proposal` accepts overrides (`match_type` `category`, limits, `expires_at`) within the bounds, sets `source_proposal_id`, writes a `rule_created` row that names the proposal, and returns the rule with all effective values; `rule_defaults` and the create apply the same checks.
     - Add `rule_defaults`, `create_rule_from_proposal` to `manager.py`; add `RuleDefaults` to `models.py` if not present.
     - Create `tests/pbt/test_approvals_defaults_properties.py`: **Property 6: Default severity from the proposal**.
     - **Validates: Requirements 3.2**
     - _Requirements: 3.1, 3.2, 3.2a, 3.3, 3.4, 3.5_
-  - [ ] 4.4 Sweep, expiry and withdraw
+  - [x] 4.4 Sweep, expiry and withdraw
     - Write `tests/unit/test_approvals_sweep.py` first, with `FakeClock` and no real task: `sweep_once` marks a rule past `expires_at` as `expired` (audit `rule_expired`, one announcement) and denies its `approved` proposals with `rule-expired:<id>`; a rule-approved proposal `approved` for 1801 s becomes `denied` with `rule-expired:<id>` and a later `complete` for it returns `None` (REST 409 in 6.2); a manual approval never expires; a `pending` proposal older than `CHIMERICMESH_PROPOSAL_TTL_HOURS` becomes `denied` with `decided_by` `expired:ttl`, `decision_origin` `hub` (Needs from store 2: the store's `hub_transition` check already accepts it, because its `pending -> denied` prefix `expired:` covers `expired:ttl`; no store change, and this test pins that against the real store); `expire_due` does the same cheaply and does nothing when nothing is due; the repair steps: a revoked rule that still has an `approved` proposal is denied, a dirty reduce operation is persisted, a `done` proposal with a `rule_uses` row but no `completed_at` gets one; observed reopens are recorded (a higher `opening` seen for an incident with a completed use); `rule_uses` older than 31 days are deleted; a sweep step that raises does not stop the others; `withdraw` turns a `pending` proposal `denied` with `decided_by` `withdrawn:<actor>` (cut to 60 characters) and `decision_origin` `hub`, frees the incident for a new proposal when limits are on, and goes through the limiter.
     - Also write first (M5, M6, H2): `withdraw` of a proposal that is not `pending` returns the unchanged proposal, writes nothing and raises nothing (the IRC renderer says `p4 is already done, nothing to withdraw`), and only an unknown id raises; `expire_due` returns at once, without awaiting, when the sweep holds the lock; with a store whose `transact` never returns, `expire_due` returns within the injected timeout (1 s in production, a small value in the test), raises nothing, and the underlying work is not cancelled; with a store that raises `StoreError`, `expire_due` returns normally and logs once per minute; with the store down a rule-approved proposal older than 1800 s is still `approved` in the mirror (the view flags it, see 4.6) and no read raises; (H2) the sweep persists the dirty set before it reloads: a revoke whose persist failed, then a sweep with a working store whose reload read was started before the persist, ends with the rule `revoked` in the database and the mirror; the sweep's step order is persist-dirty, expire, deny, ttl, repair, reload, openings, prune (a recording fake asserts the order); (H1) first-seen openings: the sweep writes `incident_openings` for an incident whose `opening` is higher than a completed use's, `INSERT OR IGNORE` keeps the first time, and `prune` removes rows older than 31 days.
-    - [ ] (M5) The `expire_due` bounded-and-never-raises tests.
-    - [ ] (M6) The `withdraw` final-state test.
-    - [ ] (H2) The persist-before-reload test.
+    - [x] (M5) The `expire_due` bounded-and-never-raises tests.
+    - [x] (M6) The `withdraw` final-state test.
+    - [x] (H2) The persist-before-reload test.
     - Add `sweep_once`, `expire_due`, `withdraw`, `start`, `aclose` to `manager.py`.
     - _Requirements: 6.4, 6.8, 9.8, 2.3, 7.3_
-  - [ ] 4.5 Service change subscriptions
+  - [x] 4.5 Service change subscriptions
     - Write `tests/unit/test_approvals_subscribe.py` first, with a real `ServiceRegistry` on the same store: changing a service's `code_folder` suspends every `active` rule of that service in the registry's transaction (`status_reason` `code_folder_changed`, one `rule_suspended` audit row each, written by the callback through `append_tx`), and after the commit the manager reloads the mirror, denies the rules' `approved` proposals with `rule-suspended:<id>` and announces; removing the folder does the same; deleting the service suspends its rules (reason `service_deleted`) and keeps the rows; a service change that does not touch the folder changes nothing; a proposal evaluated right after the registry applied the change does not match even if `after_commit` has not run yet (condition 4.2.12 reads the live folder; delay the callback with a gate to prove it); a callback that raises (inject a failing store function) rolls the service change back with `SubscriberFailed("approvals")` (design L1) and leaves rules unchanged; `enable_rule` for a suspended rule after a folder change returns `RuleConflict` and a new rule can be created; the callbacks use only `tx` (a test replaces `Store.transact` and `AuditLog.append` with functions that fail if called from the writer thread, and the callback still succeeds); a skipped `after_commit` is repaired by the next `sweep_once` (mirror reload).
-    - [ ] (M3) The writer-thread test above is the executable form of "callbacks use only `tx`".
+    - [x] (M3) The writer-thread test above is the executable form of "callbacks use only `tx`".
     - Also write first (H2, L1): a gated `after_commit` reload whose read started before a `revoke_rule` and finished after it does not move the rule back to `active`, and a reload that started before an `enable_rule` committed does not undo it; the exception name asserted for a raising callback is `SubscriberFailed` (L1: the test imports it from `services` and fails loudly if services names it differently, so the name is verified when services lands).
-    - [ ] (H2) The gated reload tests.
-    - [ ] (L1) The `SubscriberFailed` name check.
+    - [x] (H2) The gated reload tests.
+    - [x] (L1) The `SubscriberFailed` name check.
     - Add `on_code_folder_changed`, `on_service_deleted`, `on_after_commit` and call `registry.subscribe(..., name="approvals")` inside `ApprovalManager.load` (there is no `attach`, M4).
     - _Requirements: 6.9_
-  - [ ] 4.6 Approval views and status (M4, M5, L9)
+  - [x] 4.6 Approval views and status (M4, M5, L9)
     - Write `tests/unit/test_approvals_views.py` first, calling the manager directly with proposals built from the store's `Proposal` and a fake clock: `approval_of` is `None` for a `pending` and a `denied` proposal that nobody approved; for a user-approved proposal it is `{by: "user", rule_id: None, rule_status_now: None, approved_at: <decided_at>, expired: False}`; for a rule-approved proposal (`approved_by_rule` set) it is `{by: "rule", rule_id, rule_status_now, approved_at: <rule_uses.approved_at>, expired}`; a user who typed `rule:r1` as `decided_by` on a user approval (`approved_by_rule` is `None`) still gets `by: "user"`, and `by: "rule"` follows the column only; `rule_status_now` follows revoke and pause and shows `expired` when `expires_at` has passed even before the sweep; `expired` is `True` for a rule approval whose proposal is still `approved` and older than 1800 s (false at exactly 1800 s, true at 1801 s), and `True` when its rule is `revoked`, `suspended` or `expired`, and always `False` for a user approval; (L9) after the `rule_uses` row is pruned `approved_at` is `None` and `approval_of` does not raise; `proposal_view(prop)` equals `prop.to_full_dict()` plus the `approval` key; `status()` returns `paused`, `paused_by`, `paused_at`, counts of `active` and `suspended` rules, the bounds equal to the design constants (`max_per_hour` 1 to 10, `max_per_incident` 1 to 3, `max_files` 1 to 20, `max_lines` 1 to 500, default expiry 7 days, maximum 30 days), `cooldown_seconds` and `proposal_ttl_hours`; `rules()` is ordered by id number and filters by `service_id` and `status`; `rule("rX")` is `None` for an unknown id.
-    - [ ] (M4) Every read named in the design's manager listing has a direct test here.
-    - [ ] (L9) The pruned-row test.
+    - [x] (M4) Every read named in the design's manager listing has a direct test here.
+    - [x] (L9) The pruned-row test.
     - Add `approval_of`, `proposal_view`, `status` and the `expired` computation to `approvals/manager.py`; tests in `tests/unit/test_approvals_views.py`.
     - _Requirements: 4.6, 7.4, 7.5, 6.4_
 
-- [ ] 5. The hub seam
-  - [ ] 5.1 Implement `prepare`, `confirm`, `abort` and `line_for`
+- [x] 5. The hub seam
+  - [x] 5.1 Implement `prepare`, `confirm`, `abort` and `line_for`
     - Write `tests/unit/test_approvals_prepare.py` first, calling `manager.prepare(ctx)` directly (no hub): a context that matches a rule gives `kind` `auto` with the rule id, `remaining_hour` and `remaining_incident`; the same context with one file outside the folder gives `pending` with one `RuleCheck` whose `failed` is `files`; `estimated_lines` over the limit gives `lines`; two rules, the first failing, the second matching, gives `auto` by the second with both in `checks`; no rules for the service gives `pending` with no checks and no audit work; paused gives `pending` (condition `paused`); an incident without a service never matches; severity 2 never matches; `kind` other than `code_change` is `ProposalInvalid`; invalid files raise `ProposalInvalid` and reserve nothing (the ledger and limits are unchanged); `enforce_limits` on: a second `prepare` for an incident with an in-flight reservation raises `ActiveProposalExists`, the 11th for a service raises `ProposalRateLimited`; with it off, neither; `abort` releases the reservation and the quota; `confirm` binds the proposal id; the cooldown uses the single formula of the design (H1; fake clock, cooldown 86400): completion at 0 and the reopen first seen by `prepare` at 1 h gives `kind` `cooldown` with `prior_proposal_id`; a second `prepare` for the same incident 30 h later (same opening) is still `cooldown`; a reopen first seen at 25 h gives `auto` (Success Criterion 8b); a reopen at exactly the cooldown gives `auto`; when `prepare` is the first to see the new opening, `plan.opening_first_seen` equals that time and `write_in_tx` (run in a store) inserts the `incident_openings` row once, and a later `prepare` for the same opening leaves the first time unchanged; an exception raised inside matching (monkeypatch `match_rule`) gives `pending` with a check whose `failed` is `error`, never `auto`; `prepare` contains no `await` (a test asserts `inspect.iscoroutinefunction(prepare)` is false, and a second test runs two `prepare` calls back to back against a rule with `max_per_hour` 1 and gets one `auto` and one `pending`); `line_for` returns the `AUTO-APPROVED` line for `auto`, the baseline line plus the cooldown note for `cooldown`, and the baseline line for `pending`.
     - Also write first (M1, L7, L10): `confirm` returns `None` for `pending` and `cooldown` plans and for an `auto` plan whose rule is still active; it returns `rule-revoked:r1`, `rule-suspended:r1` or `rule-expired:r1` when the rule changed state between `prepare` and `confirm` (a revoke, a pause of the rule, a clock past `expires_at`); `line_for` for a proposal whose status is `denied` returns the `PROPOSAL p3 denied: rule r1 was revoked` line and never the `AUTO-APPROVED` line; (L7) for a service with no `active` rule `scope.check_files` is not called (monkeypatched to raise) and the plan is `pending` with no checks, and with one active rule it is called once; (L10) with the hub paused and two active rules `prepare` writes one `auto_approval_skipped` row (`condition=paused`, no rule id), not two, and with no active rule it writes none.
-    - [ ] (H1) The cooldown cases above.
-    - [ ] (M1) The `confirm` denial texts.
-    - [ ] (L7) The no-scope-check-without-rules test.
-    - [ ] (L10) The paused audit row count.
-    - [ ] (M2) The test builds the manager from the named interfaces only (`StateView`, `ProposalWriter`, `ServiceRegistry`, `ReduceAuditLimiter`, `announce`, a clock) and never imports `chimericmesh.hub`.
+    - [x] (H1) The cooldown cases above.
+    - [x] (M1) The `confirm` denial texts.
+    - [x] (L7) The no-scope-check-without-rules test.
+    - [x] (L10) The paused audit row count.
+    - [x] (M2) The test builds the manager from the named interfaces only (`StateView`, `ProposalWriter`, `ServiceRegistry`, `ReduceAuditLimiter`, `announce`, a clock) and never imports `chimericmesh.hub`.
     - Add `prepare`, `confirm`, `abort`, `line_for`, `shares_store`, `ApprovalPlan.write_in_tx` and the audit rows (`proposal_auto_approved`, `auto_approval_skipped`, `autofix_cooldown`) to `manager.py` and `models.py`.
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9, 7.1, 7.2, 9.2, 9.3, 9.4_
-  - [ ] 5.2 Wire `Hub.create_proposal` to the seam, in both modes
+  - [x] 5.2 Wire `Hub.create_proposal` to the seam, in both modes
     - Write `tests/unit/test_approvals_create.py` first, parametrized over `mode in ("bare", "store")` with a fake clock: with no approver (`Hub()` that no `create_app` wired) `create_proposal` behaves as before and `approver is None` (the 205-proposal test of `test_irc_commands.py` is unaffected); with a matching rule the create response has `status` `approved`, `decided_by` `rule:r1`, `approved_by_rule` `r1`, `decision_origin` `hub`; an audit row `proposal_auto_approved` exists with the actor `rule:r1`, the proposal, incident, service, files and remaining quota (R7.1); exactly one line is announced and it is the `AUTO-APPROVED` line, not the `PROPOSAL ... reply !approve` line; a non-matching proposal stays `pending`, announces the baseline line, and writes one `auto_approval_skipped` row per checked rule with the failing code; `ActiveProposalExists` and `ProposalRateLimited` surface with `enforce_limits=True` and not otherwise; `create_proposal` still returns `None` for an unknown incident; a client-supplied `status`, `decided_by` or `approved_by_rule` in `extra` raises `ValueError` (store seam) and over REST is ignored (6.2); store-backed only: the proposal row, the `approved` transition, the `rule_uses` row, `use_count` and the audit rows are in one transaction (inject a failure into `write_in_tx`: no proposal row, no `p<n>` consumed beyond the rolled back counter, reservation released, the rule's usage unchanged); concurrency (property 7 example): five `asyncio.gather` creates against `max_per_hour` 3 and a store with a 50 ms write delay give three `approved`, two `pending`; cancellation: block the writer, cancel the awaiting task, release, the mirror, ledger and announcement are consistent and the line was announced once (store T6); the cooldown announcement is one line with the earlier-fix note and an `autofix_cooldown` row.
     - Also write first (M1, M4): store mode, writer gated: `revoke_rule` runs while a matching `create_proposal` is blocked in the writer; after release the new proposal is `denied` with `decided_by` `rule-revoked:r1` and `decision_origin` `hub`, the one announced line is the denied line (not `AUTO-APPROVED`), and the rule's `use_count` and `rule_uses` row exist (the use was spent); the reverse order (revoke after the proposal is mirrored) is denied by `_deny_open_proposals`; bare mode: `persist` writes the `rule_uses` row, `use_count` and the audit rows in one transaction of the private store, a failing private store makes `persist` log once and not raise, and the in-memory result and usage stay in force; `shares_store(hub.store)` is `False` for a bare hub and `True` for a store-backed hub.
-    - [ ] (M1) The revoke-during-create test, both orders.
-    - [ ] (M4) The `persist` and `shares_store` tests.
-    - [ ] (M2) Both modes pass the same assertions.
-    - [ ] (M3) The unit test above that cancels the caller; the in-memory `create_proposal` holds no lock and `prepare` is the await-free block.
+    - [x] (M1) The revoke-during-create test, both orders.
+    - [x] (M4) The `persist` and `shares_store` tests.
+    - [x] (M2) Both modes pass the same assertions.
+    - [x] (M3) The unit test above that cancels the caller; the in-memory `create_proposal` holds no lock and `prepare` is the await-free block.
     - Edit `src/chimericmesh/hub.py`: `enforce_limits`, `approver`, `approvals`, the `CreateContext` build, `_create_unit` (store-backed closure and bare path, the `confirm` denial call), exceptions imported from `approvals.errors`, `extra` keys `kind`, `files`, `estimated_lines`, `verification` accepted by the store seam. Create `approvals/__init__.py` exports for the names used.
     - _Requirements: 4.5, 4.6, 7.1, 7.2, 9.3, 9.4, 9.5, Success Criteria 1 to 3_
-  - [ ] 5.3 Completion checks
+  - [x] 5.3 Completion checks
     - Write `tests/unit/test_approvals_complete.py` first, both modes: `complete` with `files_changed` inside scope, `lines_changed` within `max_lines`, `files` count within `max_files` and `verification_result` `passed` on a rule-approved proposal completes it, writes `completion_checked`, sets `completed_at` in `rule_uses` and leaves the rule `active`; a changed file outside the folder, a protected path, more files than `max_files`, more lines than `max_lines`, or `failed` completes the proposal but suspends the rule with `rule_suspended` (reason code), announces once, and denies the rule's other `approved` proposals with `rule-suspended:<id>` (Success Criterion 6); a completion without `files_changed` completes, writes `completion_unverified` and leaves the rule active; a user-approved proposal is not checked; the note keeps the 300-character cap and `result_note` column; `complete` for a proposal the sweep denied (`approved` older than 30 minutes, fake clock) returns `None` (REST 409); `before_complete` makes an expired approval visible without waiting for the sweep; (M5) with the store failing (no sweep, no `before_complete` success) a rule-approved proposal still `approved` after 1801 s makes `validate_completion` raise `ProposalExpired` and `Hub.complete` return `None` (REST 409), and one at 1800 s completes; invalid `files_changed`, `lines_changed` or `verification_result` give `ProposalInvalid`.
     - Edit `hub.py` (`complete(pid, note, *, extra=None)` calls `before_complete`, `validate_completion`, the commit, `after_complete` inside the shielded unit) and `manager.py` (`before_complete`, `validate_completion`, `after_complete`).
     - _Requirements: 6.4, 6.5, 6.6, 9.6_
@@ -195,8 +195,8 @@ Round 1 review ids (design, "Round 1 review responses"): H1 (one cooldown formul
     - [ ] (L7) The prefix list line.
     - _Requirements: 4.8, 5.4_
 
-- [ ] 9. Property tests across the manager
-  - [ ] 9.1 Write the required manager-level property tests
+- [x] 9. Property tests across the manager
+  - [x] 9.1 Write the required manager-level property tests
     - Create `tests/pbt/test_approvals_manager_properties.py` (temporary file stores, fake clock, `asyncio.run` inside plain tests, `deadline=None`; Hypothesis state machines are allowed but example sequences are enough).
     - **Property 7: Hourly quota under concurrency** (store write delay injected, random interleavings through `asyncio.gather` with random `sleep(0)` counts)
     - **Property 10: Revocation is immediate and total** (includes a create that is blocked in the writer when the revoke starts, M1)
@@ -207,25 +207,52 @@ Round 1 review ids (design, "Round 1 review responses"): H1 (one cooldown formul
     - **Property 22: Audit hygiene** (token and signature canaries, CR/LF/NUL in action text)
     - **Property 24: A reduce is never undone by a widen or a reload** (random `sleep(0)` counts and store write delays between `enable_rule`, `resume`, `patch_rule`, gated reloads and `revoke_rule`, `pause_rule`, `pause`)
     - **Validates: Requirements 4.2 (g), 4.4, 4.8, 2.3, 2.4, 2.6, 6.1, 6.2, 6.3, 6.5, 6.6, 7.6**
-    - [ ] (M3) Property 7 is the executable form of the atomicity requirement.
-    - [ ] (H2) Property 24 is the executable form of "Rule state ordering".
-    - [ ] (M1) Property 10 covers the in-flight create.
-  - [ ]* 9.2 Write the optional property tests
+    - [x] (M3) Property 7 is the executable form of the atomicity requirement.
+    - [x] (H2) Property 24 is the executable form of "Rule state ordering".
+    - [x] (M1) Property 10 covers the in-flight create.
+  - [x]* 9.2 Write the optional property tests
     - Create `tests/pbt/test_approvals_optional_properties.py`.
     - **Property 14: Pause blocks all auto-approval**
     - **Property 19: Proposal creation limits** (with `enforce_limits` on and off)
     - **Property 23: Approval derives from the column**
     - **Validates: Requirements 2.4, 9.3, 9.4, 4.6, 7.5**
 
-- [ ] 10. Integration and final checkpoint
-  - [ ] 10.1 Integration through the app, in both modes
+- [x] 10. Integration and final checkpoint (automated part; live smoke test pending)
+  - [x] 10.1 Integration through the app, in both modes
     - Write `tests/unit/test_approvals_integration.py` (`httpx.ASGITransport`, fake clock through `Hub(clock=...)`, `CHIMERICMESH_REOPEN_AFTER_SECONDS` 300, parametrized over `("bare", "store")` where the criterion allows) covering Success Criteria 1 to 9: (1) manual approve of `p1`, complete with `passed`, `POST /api/proposals/p1/rule` with the token gives `r1`; resolve, advance the clock past the reopen window, send the same bug again from the same host: the incident reopens (opening 2) and the new proposal with files inside the folder and `estimated_lines` 20 is `approved` with `decided_by` `rule:r1` in the create response, with an audit row and one IRC line; the same signature from a second host of the same service also matches; (2) one file outside the folder, and `estimated_lines` 101, stay `pending` with the failed condition in the audit row; (3) a fourth matching proposal within the hour stays `pending`; (4) revoking `r1` denies its approved proposals with `rule-revoked:r1`, the next proposal stays `pending`, and a code folder change through `PATCH /api/services/{id}` suspends `r1` the same way; (5) no token: `POST /api/rules` 401, the MCP tool list has no rule tool, revoke and pause succeed, `resume` and re-enable give 401, eleven pauses in a minute all take effect with ten rows plus one coalesced row, `POST /api/proposals/p2/rule` for a `done` proposal with `failed` gives 409; (6) a rule-approved completion with a changed file outside the folder suspends the rule; (8) the cooldown: reopen 1 hour after an auto-approved completion gives a `pending` proposal, an `autofix_cooldown` row and one announcement; reopen 25 hours after is auto-approved, and a proposal created 30 hours after a reopen that came 1 hour after the completion is still `pending` (H1); (9) the dependency test passes. Success Criterion 7 is covered by tasks 1.5, 2.3, 2.4, 3.2, 4.3, 9.1.
-    - [ ] (M2) The same module runs against a plain `Hub()` with `create_app(hub)` and against the store-backed hub with a temporary database.
+    - [x] (M2) The same module runs against a plain `Hub()` with `create_app(hub)` and against the store-backed hub with a temporary database.
     - Create `tests/unit/test_approvals_modes.py` if the parametrized cases do not fit in one file (at most two files here).
     - _Requirements: all; Success Criteria 1 to 6, 8, 9_
-  - [ ] 10.2 Final checkpoint
+  - [x] 10.2 Final checkpoint (automated part and live smoke test, both passed 2026-11-22; see the walk below)
     - Run `python -m pytest -q`. The full existing suite and all new tests must pass. Confirm by `git diff --stat tests/` that the only existing test file changed is `tests/unit/test_web_terminal.py` (one test) and `tests/unit/test_dependency_direction.py` (rows added), and by `git diff --stat src/` that `examples/legacy_app/upstream.py` is untouched.
     - Walk Success Criteria 1 to 9 against the tests that cover them and note any gap in this file.
+
+    ### Success Criteria walk (10.2, 2026-11-22, head after a95a024)
+    I = `tests/unit/test_approvals_integration.py` (each `sc` test runs in `bare` and `store` mode). P = `tests/pbt/`.
+
+    | SC | Proven by | Status |
+    |---|---|---|
+    | 1 | I::test_sc1_a_reopened_bug_is_auto_approved_by_the_rule_with_audit_and_one_line (rule r1 from p1, reopen with fake clock, `rule:r1`, audit row, one IRC line, second host); test_approvals_from_proposal.py | tests |
+    | 1 (real IRC line) | the `AUTO-APPROVED` line as seen by a real IRC client | live smoke PASS: `AUTO-APPROVED p2 by rule r1 (service proxy): raise upstream timeout again. Revoke with !revoke r1` over scripts/irc_client.py, no "reply !approve" |
+    | 2 | I::test_sc2_out_of_scope_or_too_large_stays_pending_with_the_condition (`condition=files`, `condition=lines`); test_approvals_matching.py | tests |
+    | 3 | I::test_sc3_the_hourly_limit_stops_the_fourth; P::test_approvals_manager_properties::test_property_7 | tests |
+    | 4 | I::test_sc4_revoke_denies_and_a_folder_change_suspends; P::test_property_10 | tests |
+    | 5 | I::test_sc5_no_token_no_widening_and_the_reduce_operations_always_work (401 on create, enable, resume; revoke and pause succeed; 409 for a failed fix); I::test_sc5_eleven_pauses_all_take_effect_with_ten_rows_and_the_mcp_list_has_no_rule_tool (MCP tool list); test_approvals_reduce.py::test_eleven_calls_all_take_effect_with_ten_rows_and_one_coalesced_row (the coalesced row); test_approvals_static.py::test_mcp_tool_names_mention_no_rules_or_approvals | tests |
+    | 6 | I::test_sc6_a_completion_outside_the_folder_suspends_the_rule; test_approvals_complete.py; P::test_property_16 | tests |
+    | 7 | P::test_property_1 (no match when a condition fails), 2 (monotone), 5 (bounds, `max_per_hour` cap), 6 (severity default), 7 (quota under concurrency), 8 (per opening), 12 (reserved prefixes), 15 (file scope), 17 (rule ids across restarts), 20 (IRC line safety); also 3, 4, 9, 10, 11, 13, 16, 22, 24 and the optional 14, 18, 19, 21, 23 | tests |
+    | 8 | I::test_sc8_the_cooldown_one_line_and_one_row_and_the_late_proposal_still_waits; I::test_sc8b_a_reopen_after_the_cooldown_is_auto_approved; P::test_property_9 | tests |
+    | 9 | I::test_sc9_the_dependency_rows_hold; tests/unit/test_dependency_direction.py | tests |
+    | 1 and 8 with real time | reopen after the real `CHIMERICMESH_REOPEN_AFTER_SECONDS` window, short environment windows | live smoke PASS: p2 auto-approved on opening 2 after a real 5 s reopen window; p3 on opening 3 stayed pending with one `autofix_cooldown` audit row |
+    | 4 (live) | revoke against a running hub, from the dashboard and from an IRC client (`!rules`, `!revoke`, `!pause`) | live smoke PASS: `!revoke r1` in the dashboard terminal denied rule-approved p4 (`rule-revoked:r1`, origin hub); `!revoke` on IRC replied `r1 is already revoked`; `!rules` replied `no active rules` |
+
+    Result: 9 of 9 criteria are proven by automated tests; 3 live checks remain for the user (the `AUTO-APPROVED` line over a real IRC client, reopen with real time, revoke against a running hub), plus the README review and the demo rehearsal (the `upstream.py` defect restore is owned by `agent-loop` and `dashboard`).
+
+    Live smoke test (2026-11-22, hub on alternate ports 18000/15514/15515/16667/12323, temp home, enforcement on, real legacy_app copy as code folder): all 12 checks PASS. Evidence in `.agents/tasks/auto-approval-impl/smoke.md` and `smoke-logs/` (git-ignored).
+
+    Gaps and notes:
+    - The 10.2 file check (`git diff --stat tests/`): existing test files changed are `test_web_terminal.py` (one test), `test_dependency_direction.py` (rows added) and `test_store_app.py` (two tests close their app, blockers B9). The third is beyond the two the task names. `examples/legacy_app/upstream.py` is untouched by this branch.
+    - The integration test sees ten audit rows for eleven pause/resume cycles at the app level; the coalesced eleventh row is written when the limiter's window closes, and is proven at manager level (`test_approvals_reduce.py`).
+    - Repeated global pause while already paused is idempotent: it writes no row (by design, `pause` returns early).
     - Manual checks for the user (not agent work): IRC client (`!rules`, `!revoke`, `!pause`, the `AUTO-APPROVED` line), README review, demo rehearsal of Success Criteria 1 and 8 with short environment windows after the `upstream.py` defect is restored (L6, owned by `agent-loop` and `dashboard`).
     - _Requirements: all; Success Criterion 9_
 
@@ -287,3 +314,8 @@ Human-in-the-loop work, separate from build time:
 | Demo rehearsal of Success Criteria 1 and 8 with short windows (restore the `upstream.py` defect first) | 20 to 30 min |
 | Merge approval after store, services and connectors are merged | 10 min |
 | **Total human time** | **about 75 to 95 min** |
+
+## Implementation notes (2026-11-21)
+
+Deviations B1 to B8 (2026-11-21; B4 degrade instead of raising, B5 limits only on the production path, B6 one more existing test edited, B7 nick rule, B8 reduce_key) and the clock change are recorded in design.md (Implementation deviations) and in the blockers file of the build. Test runs of the whole suite on the build machine took 28 to 49 minutes; the suite was run on snapshots of each committed task.
+

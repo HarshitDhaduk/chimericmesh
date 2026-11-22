@@ -32,6 +32,7 @@ FILE_GROUPS: dict[str, str] = {
     "services/": "services",
     "connectors/": "connectors",
     "discovery/": "discovery",
+    "approvals/": "auto-approval",
     "notify.py": "wiring",
     "replay.py": "wiring",
     "replay_irc.py": "wiring",
@@ -68,6 +69,7 @@ THIRD_PARTY_FILES: dict[str, set[str]] = {
     "services/deps.py": {"fastapi", "starlette", "pydantic"},
     "services/routes.py": {"fastapi", "starlette", "pydantic"},
     "discovery/routes.py": {"fastapi", "starlette", "pydantic"},
+    "approvals/routes.py": {"fastapi", "starlette", "pydantic"},
 }
 
 
@@ -477,3 +479,28 @@ def test_discovery_allowed_files_pass_the_scan(tmp_path):
     (pkg / "discovery" / "routes.py").write_text("import fastapi\nimport pydantic\n")
     (pkg / "discovery" / "accept.py").write_text("from chimericmesh.services.models import X\n")
     assert _violations(pkg) + _discovery_rule_violations(pkg) == []
+
+
+# ---- auto-approval rows (auto-approval task 1.1) -------------------------------------------------
+def test_approvals_package_has_a_group_row():
+    assert group_of("approvals/__init__.py") == "auto-approval"
+    assert group_of("approvals/manager.py") == "auto-approval"
+    assert MAY_IMPORT["auto-approval"] == {"core", "store", "services", "auto-approval"}
+    assert THIRD_PARTY_FILES["approvals/routes.py"] == {"fastapi", "starlette", "pydantic"}
+
+
+def test_approvals_init_loads_no_web_layer():
+    init = SRC / "approvals" / "__init__.py"
+    imported = {".".join(parts) for top, parts in imports_of(init) if top == PKG and parts}
+    assert not [m for m in imported if m.endswith("approvals.routes")]
+    assert not [top for top, _ in imports_of(init) if top in {"fastapi", "starlette", "pydantic"}]
+    text = init.read_text(encoding="utf-8")
+    assert "from .routes" not in text and "import routes" not in text
+
+
+def test_approvals_files_only_import_web_stack_in_routes():
+    for path in all_files():
+        rel = path.relative_to(SRC).as_posix()
+        if rel.startswith("approvals/") and rel != "approvals/routes.py":
+            tops = {top for top, _ in imports_of(path)}
+            assert not tops & {"fastapi", "starlette", "pydantic"}, rel

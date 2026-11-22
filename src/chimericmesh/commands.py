@@ -14,10 +14,13 @@ import logging
 import re
 from dataclasses import dataclass
 
+from .approvals import irc as approvals_irc
 from .events import SEVERITY_NAMES
 from .hub import Hub
 from .services.access import OperatorVerdict
+from .services.limiter import reduce_key as make_reduce_key
 from .store.errors import StoreError
+from .store.proposals import is_reserved_decider
 
 log = logging.getLogger("chimericmesh.commands")
 
@@ -36,7 +39,12 @@ _NEEDS_PASS = "operator commands need the admin token as the server password (PA
 HELP_LINES = [
     "commands: !help !status !incidents !explain <id> !proposals",
     "operators only: !resolve <id> [note] !approve <pid> !deny <pid>",
+    approvals_irc.HELP_LINE,
 ]
+# Every command name the dispatcher knows. Nothing here creates, edits or re-enables a rule (R8.2).
+KNOWN_COMMANDS = frozenset({"help", "status", "incidents", "explain", "proposals", "resolve", "approve", "deny",
+                            *approvals_irc.NAMES})
+_RESERVED_NICK = "sorry, that nick is reserved"
 
 
 @dataclass(frozen=True)
@@ -67,15 +75,19 @@ def _line(text: str) -> str:
 
 
 async def handle_command(hub: Hub, nick: str, channel: str, cmd: Command, *,
-                         verdict: OperatorVerdict | None = None) -> list[str]:
+                         verdict: OperatorVerdict | None = None, reduce_key: str | None = None,
+                         actor: str | None = None) -> list[str]:
     """Execute a command and post its replies to the channel. Returns the reply lines.
 
     ``verdict`` decides ``!resolve``, ``!approve`` and ``!deny``. ``None`` keeps the baseline rule
     (``hub.is_operator``) while ``hub.enforce_access`` is off, and refuses (fail closed) while it is on.
+    ``reduce_key`` is the limiter key of ``!revoke``, ``!pause`` and ``!withdraw`` (default: the nick) and
+    ``actor`` the identity written to the audit row (default: the nick). None of these three asks for a verdict.
     """
     hub.commands_run += 1
+    key = reduce_key if reduce_key is not None else make_reduce_key("irc", nick)
     try:
-        lines = await _run(hub, nick, cmd, verdict)
+        lines = await _run(hub, nick, cmd, verdict, key, actor or nick)
     except StoreError:
         log.error("store unavailable while running !%s", cmd.name)
         lines = ["store unavailable, try again"]
@@ -101,7 +113,8 @@ def _refusal(hub: Hub, nick: str, name: str, verdict: OperatorVerdict | None) ->
     return _NOT_OPERATOR.format(nick=_clean(nick, 30), name=name)
 
 
-async def _run(hub: Hub, nick: str, cmd: Command, verdict: OperatorVerdict | None = None) -> list[str]:
+async def _run(hub: Hub, nick: str, cmd: Command, verdict: OperatorVerdict | None = None,
+               key: str = "", actor: str = "") -> list[str]:
     name, args = cmd.name, cmd.args
     if name == "help":
         return list(HELP_LINES)
@@ -120,7 +133,37 @@ async def _run(hub: Hub, nick: str, cmd: Command, verdict: OperatorVerdict | Non
         if name == "resolve":
             return await _resolve(hub, nick, args)
         return await _decide(hub, nick, name == "approve", args)
+    if name in approvals_irc.NAMES and hub.approvals is not None:
+        return await _approvals_command(hub, name, args, key or make_reduce_key("irc", nick), actor or nick)
     return [f"unknown command !{_clean(name, 32)}, try !help"]
+
+
+async def _approvals_command(hub: Hub, name: str, args: tuple[str, ...], key: str, actor: str) -> list[str]:
+    """``!rules``, ``!revoke``, ``!pause``, ``!withdraw``: any registered nick, no token (R2.3, R8.1)."""
+    manager = hub.approvals
+    who = _clean(actor, 60)
+    if name == "rules":
+        return approvals_irc.rules_lines(manager.rules(status="active"))
+    if name == "pause":
+        was = manager.paused
+        await manager.pause(actor=who, key=key)
+        return [approvals_irc.pause_reply(was)]
+    if name == "revoke":
+        if not args:
+            return [approvals_irc.USAGE_REVOKE]
+        rule = manager.rule(args[0].lower())
+        if rule is None:
+            return [approvals_irc.no_rule(args[0])]
+        await manager.revoke_rule(rule.id, actor=who, key=key)
+        return [approvals_irc.revoke_reply(rule.id, rule.status)]
+    if not args:
+        return [approvals_irc.USAGE_WITHDRAW]
+    prop = hub.get_proposal(args[0].lower())
+    if prop is None:
+        return [approvals_irc.no_proposal(args[0])]
+    before = prop.status
+    await manager.withdraw(prop.id, actor=who, key=key)
+    return [approvals_irc.withdraw_reply(prop.id, before)]
 
 
 def _status(hub: Hub) -> str:
@@ -167,6 +210,8 @@ async def _resolve(hub: Hub, nick: str, args: tuple[str, ...]) -> list[str]:
 
 async def _decide(hub: Hub, nick: str, approve: bool, args: tuple[str, ...]) -> list[str]:
     verb = "approve" if approve else "deny"
+    if is_reserved_decider(nick):  # R4.8: these prefixes belong to the hub's own rule logic
+        return [_RESERVED_NICK]
     if not args:
         return [f"usage: !{verb} <proposal id>"]
     pid = args[0].lower()

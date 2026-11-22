@@ -200,6 +200,26 @@ Includes Hypothesis property tests for parser totality, IRC injection safety, an
 `tests/unit/test_kiro_assets.py` checks both files statically (JSON validity, tool names against the MCP server, consistency with `.kiro/settings/mcp.json`). It does not show that Kiro loads them.
 - PBT: `tests/pbt/`
 
+## Standing approval rules
+
+A standing rule lets the hub approve a fix without asking each time. The hub decides, never the agent: the agent has no tool to create, edit, widen or resume a rule, and "approved by a rule" is read from the `approved_by_rule` column of the proposal, never from the decider text.
+
+**What a rule covers.** One service (it must have a code folder), plus either one incident signature or one category (`memory`, `disk`, `network`, `security`, `crash`, `unknown`), and a most-urgent severity (3 or 4; severity 0 to 2 is never covered). A proposal is approved by the rule only when every condition holds: the hub is not paused, the rule is active and not expired, the proposal says `kind` `code_change`, the incident belongs to the rule's service and matches, the hourly and per-incident limits have room, it declares 1 to `max_files` files that all lie inside the service's code folder with a source-file extension (no `.git`, `.kiro`, `.github`, `.env`, keys; no `.json`, `.yaml`, `.ini`, `.conf`, `.toml`), declares `estimated_lines` up to `max_lines`, names a `verification`, and the service's code folder is still the one the rule was made for.
+
+**Limits (hub-side).** At most 10 proposals per service per hour (all proposals, not only rule approvals), `max_per_hour` 1 to 10 (default 3), `max_per_incident` 1 to 3 (default 1) per opening of an incident, `max_files` 1 to 20 (default 5), `max_lines` 1 to 500 (default 100), expiry at most 30 days (default 7). One rule approval is valid for 30 minutes; after that it is denied by the hub (`rule-expired:<id>`). A pending proposal older than `CHIMERICMESH_PROPOSAL_TTL_HOURS` (default 24) is denied (`expired:ttl`). 20 rules per service and 100 in total.
+
+**Cooldown.** If an incident reopens within `CHIMERICMESH_AUTOFIX_COOLDOWN_SECONDS` (default 86400, 0 to 2592000) of an auto-fixed proposal being completed, the next proposal for it needs your approval. The hub announces it with the normal `PROPOSAL ... reply !approve` line plus a note and writes an `autofix_cooldown` audit row. The reopen time is the moment the hub first saw the new opening, which may be up to 60 seconds late.
+
+**Creating a rule.** Approve a proposal as usual, let the fix pass its verification, then `GET /api/proposals/<id>/rule-defaults` shows the suggested rule and `POST /api/proposals/<id>/rule` (admin token, optional overrides in the body) creates it. `POST /api/rules` creates one directly. Create, widen (`PATCH /api/rules/<id>`), re-enable (`POST /api/rules/<id>/enable`) and resume (`POST /api/rules/resume`) need the token. Only a proposal approved by a person and completed with `verification_result` `passed` can seed a rule.
+
+**Emergency stop, no token.** Pause, revoke and withdraw need no token, are never refused, are rate limited in the audit trail (ten rows a minute per caller, then one coalesced row) and are announced: `!rules`, `!revoke <rule id>`, `!pause` and `!withdraw <proposal id>` on IRC or the dashboard terminal for any registered nick, and `POST /api/rules/<id>/revoke`, `POST /api/rules/<id>/pause`, `POST /api/rules/pause`, `POST /api/proposals/<id>/withdraw` over REST. Revoking or suspending a rule denies its approved proposals at once (`rule-revoked:<id>`, `rule-suspended:<id>`). Changing or removing a service's code folder, or deleting the service, suspends its rules the same way. `!pause` stops all auto-approval without changing any rule; only `POST /api/rules/resume` (token) ends it. Every automatic decision is announced as `AUTO-APPROVED p3 by rule r1 (service api-gw): <action>. Revoke with !revoke r1` (nobody has to reply) and written to the audit log (`GET /api/audit`).
+
+**Completion check.** When a rule-approved fix is completed with `files_changed`, `lines_changed` or `verification_result`, the hub compares them with the rule. A file outside the code folder or on the protected list, too many files, too many lines or a failed verification completes the proposal but suspends the rule (`rule_suspended` row, one announcement). A completion without details is recorded as unverified and leaves the rule active.
+
+**Reserved decider names.** The prefixes `rule:`, `rule-`, `withdrawn:`, `expired:` and `expired-` (any case) are used only by the hub's own rule logic. They are refused as the `by` of `POST /api/proposals/<id>/decide` and as IRC nicks.
+
+**Honest limits.** The hub checks the files a proposal and a completion declare; the hub does not stop file writes outside the code folder, because it never executes anything. The agent runs as the same OS user as the hub and could read the token file, so Kiro's shell permission prompt is the real gate for that. In short: pause, revoke and withdraw need no token; create, widen, re-enable and resume need the token.
+
 ## Security notes
 
 Intended for localhost. Changes that widen what can happen (approving, denying, editing services) need the admin token; see "Access control". Log text is rendered as text only, and outbound IRC is stripped of control characters.

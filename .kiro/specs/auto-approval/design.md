@@ -845,3 +845,17 @@ Human-in-the-loop work (separate, not agent time):
 | Browser check of the rule UI | counted in `dashboard` |
 | Merge approval after the store, services and connectors are merged | 10 min |
 | **Total human time** | **about 75 to 95 min** |
+
+## Implementation deviations (recorded 2026-11-21)
+
+- B1: a file outside the code folder, an absolute path or a path with '..' in a proposal for a service with a code folder is rejected with 422 (the design's input table) and never reaches matching; Success Criterion 2 is met by protected and non-source paths staying pending with condition 'files'.
+- B2: 'kind' is stored as the caller sent it; no default of code_change.
+- B3: Hub.hub_transition has an announce=False keyword used by the create unit when the confirm re-check denies a new proposal.
+- Hub proposals use the hub clock for created/decided times (was time.time(); same default).
+
+- B4: create_app with a store lacking the approvals migrations logs one warning and runs without rules (fail closed) instead of raising.
+- B5: enforce_limits is True only for create_app() with neither hub nor store (the production path); create_app(store=...) and create_app(hub) leave it as the hub has it.
+- B6: test_store_app::test_rest_validation expects the new key set (same reason as test_web_terminal's).
+- B7: the IRC NICK rejection of reserved decider prefixes follows enforce_access; the !approve/!deny refusal does not.
+- B8: reduce_key keeps rest and irc identical (services test pins it).
+
