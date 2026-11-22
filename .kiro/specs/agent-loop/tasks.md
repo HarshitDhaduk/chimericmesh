@@ -106,14 +106,14 @@ Design-review round 1 ids (`R1-H1`, `R1-M1` to `R1-M7`, `R1-L1` to `R1-L10`; des
     - **Property 9: Long poll bounds**
     - **Validates: Requirements 4.2, 4.3 (a), 4.5, 4.6**
 
-- [ ] 6. Permissions snippet
-  - [ ] 6.1 Implement `build_snippet`
+- [x] 6. Permissions snippet
+  - [x] 6.1 Implement `build_snippet`
     - Write `tests/unit/test_agent_snippet.py` first: a folder inside the workspace gives an `fs_write` allow with the relative glob `examples/legacy_app/**` (forward slashes, no drive letter, quoted with `json.dumps`) and an `fs_write` deny line for every `PROTECTED_PATTERNS` entry; a folder outside the workspace, a folder equal to the workspace, an unknown workspace and a folder with `*`, `?`, `[`, `{` in its relative path give no allow line and a comment saying the fix runs but Kiro prompts for each write; the first two lines name `Mode: AUTONOMOUS` and say prompt mode is the default; the text says plainly that the user-scoped `~/.kiro/settings/permissions.yaml` applies to every session and agent, and that the workspace-scoped file (hash to be looked up) is preferred; the trade-off sentence (in-folder edits no longer prompt, including for `pending` proposals; the gate rests on the prompt text, `verify_proposal` and the audit trail) is present; a commented shell example for `python -m pytest -q` and for a valid custom command; `validate_test_command` rejects `*`, quotes, `;`, `&`, `|`, `$`, backticks, `-c`, `curl`, `wget`, `nc`, `powershell`; the text never contains `allow-all`, `trust-all-tools`, a shell match of `*`; a commented allow for the single file `.chimericmesh-active-proposal` (O12); output has no control character other than newline; the text names the workspace root it used (`# Workspace root used: ...`); it carries the unverified-schema comment and the warning that relative deny globs in the user-scoped file may apply in every workspace (R1-L8); `find_workspace_root` (injected `exists`): a valid `CHIMERICMESH_WORKSPACE_ROOT` wins, an invalid one is ignored, cwd `<repo>/src` gives `<repo>` when `<repo>/.kiro` exists, no `.kiro` anywhere gives cwd, and with root `<repo>` the demo folder `<repo>/examples/legacy_app` produces the allow line `examples/legacy_app/**` (R1-M3).
-    - [ ] (R1-M3) The walk-up test with cwd `src`.
-    - [ ] (R1-L8) The caveat comment and its test.
+    - [x] (R1-M3) The walk-up test with cwd `src`.
+    - [x] (R1-L8) The caveat comment and its test.
     - Create `agent/snippet.py` (`build_snippet`, `validate_test_command`, `find_workspace_root`).
     - _Requirements: 5.4, 5.5, 5.6, 5.7, 5.8_
-  - [ ] 6.2 Write the property test for the snippet
+  - [x] 6.2 Write the property test for the snippet
     - Create `tests/pbt/test_agent_snippet_properties.py` (arbitrary folder and workspace strings including spaces, quotes, `#`, glob characters, Windows paths, long text).
     - **Property 10: Snippet safety**
     - **Validates: Requirements 5.4, 5.5, 5.8**
