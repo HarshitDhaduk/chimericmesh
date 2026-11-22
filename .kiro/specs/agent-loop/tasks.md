@@ -64,24 +64,24 @@ Design-review round 1 ids (`R1-H1`, `R1-M1` to `R1-M7`, `R1-L1` to `R1-L10`; des
     - **Property 3: Code search is contained and bounded**
     - **Validates: Requirements 1.4**
 
-- [ ] 4. Verify
-  - [ ] 4.1 Implement `evaluate_verify`
+- [x] 4. Verify
+  - [x] 4.1 Implement `evaluate_verify`
     - Write `tests/unit/test_agent_verify.py` first, one test per sub-criterion, each starting from inputs that give `ok` and changing one thing: 3.1a status `pending`, `denied`, `done`; 3.1b user approval with `approved_by_rule` `None` passes whatever `decided_by` says; a rule approval fails for rule `revoked`, `suspended`, `expired`, past `expires_at`, unknown rule, `paused` true, rule bound to another code folder, `approved_at` 1801 s old (and 1800 s passes), and `approvals_available` false; a proposal with `decided_by` text `rule:r1` but `approved_by_rule` `None` is a user approval; 3.1c 0 files, 21 files, a 301-character entry, a non-string entry, **a relative entry** (`src/x.py`, `x.py`, `./x.py`) gives `file <n> must be an absolute path` for a user approval and for a rule approval, and a workspace-relative `src/chimericmesh/hub.py` with code folder `<root>/examples/legacy_app` gives `ok: false` (R1-H1); 3.1b an `approval` of `None` or without a numeric `approved_at` for a rule approval gives `rule approval time is unknown`, and the same for a user approval is not a failure; the rule folder differing from the code folder only by case (on a Windows-style `normcase` injected) or a trailing separator passes, a different folder fails (R1-L4, R1-L5); 3.1d a file not declared, a declared file outside scope (protected, extension), the same file as absolute and relative gives one key; 3.1e no declared files means no comparison; 3.1f a file outside the code folder fails, no code folder gives `ok` true with the note `no code folder, path scope not checked`; one reason per failed check in the order a to f; reasons never contain the file name, the action or the rule's signature (canary strings); an input of mixed garbage never raises.
-    - [ ] (L8) Test names carry 3.1a to 3.1f, and the file docstring maps the requirement's (a) to (f) to them in order.
-    - [ ] (R1-H1) The absolute-path cases above; property 5's oracle has its own absolute-path rule (task 4.2).
-    - [ ] (R1-L4) The missing approval time case. (R1-L5) The `samefolder` cases.
+    - [x] (L8) Test names carry 3.1a to 3.1f, and the file docstring maps the requirement's (a) to (f) to them in order.
+    - [x] (R1-H1) The absolute-path cases above; property 5's oracle has its own absolute-path rule (task 4.2).
+    - [x] (R1-L4) The missing approval time case. (R1-L5) The `samefolder` cases.
     - Create `agent/verify.py` (`VerifyInputs`, `VerifyResult`, `normalize_file`, `samefolder`, `evaluate_verify`), using `approvals.scope.check_file` and `services.paths.path_in_code_folder`.
     - _Requirements: 3.1, 3.2_
-  - [ ] 4.2 Write the property test for verify
+  - [x] 4.2 Write the property test for verify
     - Create `tests/pbt/test_agent_verify_properties.py` (generated `VerifyInputs` and file lists, an independently written oracle with its own absolute-path rule, relative entries included in the generated files, canary strings in file names and proposal text).
     - **Property 5: Verify is exactly the conjunction**
     - **Validates: Requirements 3.1, 3.2**
-  - [ ]* 4.4 Protected-name check for user approvals (open item O13 accepted 2026-11-18 as the design states it; buildable now, the R3.1(e) wording change waits for the next requirements revision)
+  - [x]* 4.4 Protected-name check for user approvals (open item O13 accepted 2026-11-18 as the design states it; buildable now, the R3.1(e) wording change waits for the next requirements revision)
     - Write the tests first in `tests/unit/test_agent_verify.py`: a user approval without declared files and `.env`, `a/.env.local`, `k.pem`, `.git/x`, `.kiro/x.py` inside the code folder gives `ok: false` with `file <n> is a protected file`; an ordinary source file still gives `ok: true`; a user approval with declared files behaves as before (the declared-list and scope checks).
-    - Edit `agent/verify.py` (3.1e runs the `PROTECTED_PATTERNS` part only, never the extension rule). Until this is built and accepted, 11.1 states in the README that the hook does not protect these names and the profile `fs_write` denies do.
-    - [ ] (R1-L6) Decision recorded as open item O13 (accepted 2026-11-18). The residual risk stays documented in the README line of 11.1 until this task is built.
+    - Built 2026-11-22 (chunk A). Edit `agent/verify.py` (3.1e runs the `PROTECTED_PATTERNS` part only, never the extension rule). Until this is built and accepted, 11.1 states in the README that the hook does not protect these names and the profile `fs_write` denies do.
+    - [x] (R1-L6) Decision recorded as open item O13 (accepted 2026-11-18). The residual risk stays documented in the README line of 11.1 until this task is built.
     - _Requirements: 3.1 (e) (needs a requirement revision)_
-  - [ ]* 4.3 Write the optional monotonicity property
+  - [x]* 4.3 Write the optional monotonicity property
     - Add to `tests/pbt/test_agent_verify_properties.py`.
     - **Property 6: Verify is monotone in the files**
     - **Validates: Requirements 3.1 (c), (d)**
