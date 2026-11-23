@@ -55,7 +55,7 @@ def test_watch_loop_order(watch_text):
              "complete_proposal", "resolve_incident")
     last = -1
     for name in order:
-        at = text.find(name)
+        at = text.find(name, last + 1)      # in order as a subsequence: the intro may name a tool earlier
         assert at > last, f"{name} is missing or out of order"
         last = at
 

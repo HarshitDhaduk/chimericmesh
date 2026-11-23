@@ -123,10 +123,19 @@ def test_workspace_root_is_named(repo):
     assert json.dumps(str(repo)) in line
     unknown = build_snippet(service(str(repo / "examples")), workspace_root=None)
     assert "# Workspace root used: (unknown)" in unknown
-def test_unverified_schema_comment_and_relative_deny_caveat(repo):
+def test_docs_link_and_relative_deny_caveat(repo):
     text = build_snippet(service(str(repo / "examples")), workspace_root=str(repo))
-    assert "https://kiro.dev/docs/permissions/" in text and "verify before pasting" in text
+    assert "https://kiro.dev/docs/permissions/" in text and "verify before pasting" in text.lower()
     assert "relative deny" in text and "every workspace" in text
+def test_schema_and_match_comment_follows_the_saved_kiro_docs(repo):
+    text = build_snippet(service(str(repo / "examples")), workspace_root=str(repo))
+    assert "capability, match, effect and exclude" in text
+    assert "* stays inside one path component" in text and "** crosses" in text and "matches its children" in text
+    assert "only * is a wildcard" in text and "; && || |" in text and "cmd.exe" in text
+    assert "not done yet" not in text and "prefix or exact" not in text
+    fields = {m.group(1) for m in re.finditer(r"^\s*(?:#\s{2})?-?\s*(capability|match|effect|exclude|[a-z_]+):", text, re.M)}
+    assert fields <= {"rules", "capability", "match", "effect", "exclude"}
+
 def test_check_live_note_is_present(repo):
     assert "check live" in build_snippet(service(str(repo / "examples")), workspace_root=str(repo)).lower()
 # ---- find_workspace_root ------------------------------------------------------------------------
