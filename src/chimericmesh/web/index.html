@@ -211,6 +211,7 @@
           <span class="spacer"></span>
           <button class="ghost small" type="button" id="termClear">Clear</button>
         </div>
+        <div class="meta" id="termStatus" role="status" aria-live="polite"></div>
         <div class="meta" id="identity" style="margin-top:8px"></div>
         <div class="meta">Press / to focus, Tab to complete, ↑↓ for history.</div>
       </section>
@@ -515,7 +516,6 @@ function actionButton(id, label, handler, cls) {
 // The admin token is kept for this tab only (sessionStorage, or memory when storage is off), read only by
 // authHeaders, sent only on the PRIVILEGED routes, and never shown, logged, put in a URL or in localStorage.
 const TOKEN_KEY = 'cm.token';
-const TOKEN_ROUTES = /^\/api\/(terminal|proposals\/[^/]+\/decide)$/;
 const TOKEN_PROMPT_TEXT = 'Protected actions (approve, deny, add or edit a service, scan, rules) need the admin token. Paste the contents of the token file.';
 let memToken = null;
 function storedToken() {
@@ -530,7 +530,6 @@ function clearToken() {
   memToken = null;
   try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* storage unavailable */ }
 }
-const readToken = () => storedToken() || '';
 function authHeaders(method, path) {
   const token = storedToken();
   if (!token || !(needsToken(method, path) || sendsTokenIfPresent(method, path))) return {};
@@ -567,23 +566,9 @@ async function request(method, path, body) {
   if (r.status === 204) return null;
   try { return await r.json(); } catch (e) { return null; }
 }
-// Interim helpers of the Overview (services task 7.10); task 4.3 moves the terminal onto request().
-function askForToken() {
-  handle401('/api/terminal', 401);
-  openUnlock();
-}
-const api = async (path, opts) => {
-  const r = await fetch(path, opts);
-  if (r.status === 401 && TOKEN_ROUTES.test(path)) { askForToken(); throw new Error('token required'); }
-  if (!r.ok) throw new Error(r.status);
-  return r.json();
-};
-const post = (path, body) => {
-  const headers = { 'content-type': 'application/json' };
-  const token = readToken();
-  if (token && TOKEN_ROUTES.test(path)) Object.assign(headers, authHeaders('POST', path));
-  return api(path, { method: 'POST', headers, body: JSON.stringify(body || {}) });
-};
+// The Overview's short names for request(): a read and a JSON post. Errors are ApiError (message = status).
+const api = (path) => request('GET', path);
+const post = (path, body) => request('POST', path, body || {});
 
 /* ==== STATE ==== */
 const COMMANDS = ['!help', '!status', '!incidents', '!explain', '!proposals', '!resolve', '!approve', '!deny'];
@@ -648,7 +633,7 @@ function openPropose(i, card, actions, btn) {
       f.remove(); msg.remove(); btn.focus();
       await Promise.allSettled([loadProposals(), fetchChat(), loadWorkflow()]);
     } catch (err) {
-      msg.textContent = err.message === '404' ? 'Incident no longer exists (404).' : (/^\d+$/.test(err.message) ? `Rejected by the mesh (status ${err.message}).` : 'Could not reach the mesh.');
+      msg.textContent = err.status === 0 ? 'Could not reach the mesh.' : err.message === '404' ? 'Incident no longer exists (404).' : (/^\d+$/.test(err.message) ? `Rejected by the mesh (status ${err.message}).` : 'Could not reach the mesh.');
       ok.disabled = false;
     }
   };
@@ -859,8 +844,14 @@ async function runCommand(text) {
   if (state.history[state.history.length - 1] !== text) state.history.push(text);
   if (state.history.length > 50) state.history.shift();
   state.histIdx = state.history.length;
-  try { await post('/api/terminal', { text }); }
-  catch (e) { if (e.message !== 'token required') unreachable(); return; }
+  $('termStatus').textContent = '';
+  try { await request('POST', '/api/terminal', { text }); }
+  catch (e) {
+    // Only !approve and !deny need the token on this route (R6.5); request() already cleared a rejected token.
+    if (e.status === 401 && /^!(approve|deny)\b/.test(text)) { $('termStatus').textContent = 'unlock first'; openUnlock(); }
+    else if (!e.authText) unreachable();
+    return;
+  }
   await Promise.allSettled([fetchChat(), loadProposals(), loadIncidents(), loadWorkflow()]);
 }
 

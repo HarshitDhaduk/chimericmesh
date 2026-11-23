@@ -318,3 +318,24 @@ def test_hash_is_read_only_for_routing_and_the_self_test():
         assert "parseRoute(here.hash)" in line or "here.hash === '#selftest'" in line or "here.hash = " in line, line
         assert "oken" not in line, line
     assert not re.search(r"\b(location|here)\.(search|href)\b", code)
+
+
+# ---- task 4.3: the interim prompt is gone and the terminal goes through request() ------------------------
+
+def test_interim_prompt_code_is_removed():
+    code = ds.strip_comments(ds.script_text())
+    for name in ("TOKEN_ROUTES", "askForToken", "chimericmesh.adminToken"):
+        assert name not in code, name
+    assert len(re.findall(r'id="tokenForm"', ds.load_page())) == 1  # one Unlock control
+    assert len(re.findall(r"\bfetch\s*\(", code)) == 1  # only request() calls fetch
+
+
+def test_terminal_posts_through_request_and_reports_401_for_approve_and_deny():
+    fns = ds.functions(ds.script_text())
+    run = fns["runCommand"]
+    assert "request('POST', '/api/terminal'" in run
+    assert re.search(r"status === 401", run)
+    assert re.search(r"/\^!\(approve\|deny\)\\b/", run)
+    assert "'unlock first'" in run and "termStatus" in run
+    attrs = {a.get("id"): a for t, a in ds.html_parser().tags if a.get("id")}
+    assert attrs["termStatus"].get("role") == "status"
