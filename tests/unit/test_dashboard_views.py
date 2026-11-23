@@ -110,3 +110,41 @@ def test_services_css_is_one_column_on_small_screens():
     page = ds.load_page()
     assert "grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr))" in page
     assert re.search(r"\.svc-card[^{]*\{[^}]*overflow-wrap: anywhere", page)
+
+
+# ---- 5.2 add and edit form -----------------------------------------------------------------------------
+
+def test_form_fields_have_labels():
+    form = code("renderServiceForm")
+    for label in ("'Id'", "'Name'", "'Hosts (comma separated)'", "'App names (comma separated)'", "'Code folder'"):
+        assert label in form, label
+    assert "field(" in form and "uiConfig.protocols" in form and "uiConfig.formats" in code("sourceRow")
+    f = code("field")
+    assert "htmlFor" in f and "el('label'" in f
+    row = code("sourceRow")
+    for piece in ("'Path'", "'Format'", "'Enabled'", "'Remove'"):
+        assert piece in row, piece
+    assert "if (create)" in form  # the id field exists on create only
+
+
+def test_save_runs_the_steps_in_order_and_stops_at_the_first_failure():
+    save = code("saveService")
+    i_create = save.index("request('POST', '/api/services'")
+    i_patch = save.index("request('PATCH', `/api/services/${")
+    i_diff = save.index("diffSources(")
+    assert i_create < i_diff and i_patch < i_diff
+    for step in ("request('POST', `/api/services/${", "request('PATCH', `/api/services/${", "request('DELETE', `/api/services/${"):
+        assert step in save, step
+    assert "errorText(" in save and "textContent" in save
+    assert "return;" in save  # stops at the first failure
+    assert "mode = 'edit'" in save  # a created service keeps the form in edit mode
+    assert "servicePatch(" in save
+    assert "actionButton('svc-save'" in code("renderServiceForm")
+
+
+def test_form_helpers_have_cases():
+    names = case_names()
+    for fn in ("diffSources", "buildAcceptBody", "servicePatch", "splitList"):
+        assert names.count(fn) >= 2, fn
+    text = cases_text()
+    assert "code_folder: null" in text  # a cleared code folder is sent as null

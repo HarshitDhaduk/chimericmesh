@@ -94,6 +94,14 @@
   .pill.st-active { color: var(--ghost); }
   .pill.st-idle { color: var(--amber); }
   .pill.st-never, .pill.st-unknown { color: var(--dim); }
+  form.svc-form { display: grid; gap: 10px; margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; }
+  form.svc-form h3, form.svc-form h4 { margin: 0; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .field label { color: var(--dim); font-size: .85rem; }
+  fieldset { border: 1px solid var(--line); border-radius: 4px; display: flex; flex-wrap: wrap; gap: 12px; }
+  .table-wrap { overflow-x: auto; }
+  table.sources { border-collapse: collapse; width: 100%; }
+  table.sources td { padding: 4px; vertical-align: bottom; }
 
   /* guide */
   .guide-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
@@ -414,6 +422,53 @@ function sortServices(list) {
     return na < nb ? -1 : na > nb ? 1 : 0;
   });
 }
+function splitList(text) { return String(text === null || text === undefined ? '' : text).split(',').map((x) => x.trim()).filter((x) => x); }
+// The create body: code_folder only when given (the server treats a missing key as "none").
+function serviceCreateBody(form) {
+  const body = { id: form.id, name: form.name, hosts: form.hosts, app_names: form.app_names, protocols: form.protocols };
+  if (form.code_folder) body.code_folder = form.code_folder;
+  return body;
+}
+// The PATCH body: changed fields only; a cleared code folder is sent as null (services maps it to "clear").
+function servicePatch(original, form) {
+  const out = {};
+  if (form.name !== original.name) out.name = form.name;
+  for (const k of ['hosts', 'app_names', 'protocols']) {
+    if (JSON.stringify(form[k]) !== JSON.stringify(original[k] || [])) out[k] = form[k];
+  }
+  const was = original.code_folder || '';
+  if (form.code_folder !== was) out.code_folder = form.code_folder === '' ? null : form.code_folder;
+  return out;
+}
+// Log-source operations for the form. The path of a source cannot change, so a new path is remove + add.
+function diffSources(oldList, newList) {
+  const old = new Map((oldList || []).map((s) => [s.id, s]));
+  const add = [], update = [], remove = [], kept = new Set();
+  (newList || []).forEach((row, index) => {
+    const prev = row.id ? old.get(row.id) : undefined;
+    if (prev && prev.path === row.path) {
+      kept.add(row.id);
+      const patch = {};
+      if (row.format !== prev.format) patch.format = row.format;
+      if (Boolean(row.enabled) !== Boolean(prev.enabled)) patch.enabled = Boolean(row.enabled);
+      if (Object.keys(patch).length) update.push({ id: row.id, patch });
+    } else if (row.path) add.push({ index, path: row.path, format: row.format, enabled: Boolean(row.enabled) });
+  });
+  for (const s of oldList || []) if (!kept.has(s.id)) remove.push(s.id);
+  return { add, update, remove };
+}
+// Discovery accept body: exactly id, name, log_paths, plus code_folder and app_names only when non-empty.
+function buildAcceptBody(form) {
+  const body = {
+    id: form.id, name: form.name,
+    log_paths: (form.rows || []).filter((r) => r.checked && !r.watched_by).map((r) => ({ path: r.path, format: r.format })),
+  };
+  const cf = String(form.code_folder || '').trim();
+  if (cf) body.code_folder = cf;
+  const apps = Array.isArray(form.app_names) ? form.app_names.filter((a) => a) : [];
+  if (apps.length) body.app_names = apps;
+  return body;
+}
 /* PURE:end */
 
 /* ==== SELFTEST ==== */
@@ -522,10 +577,25 @@ const SELFTEST_CASES = [
   { name: 'sortServices', args: [[{ name: 'b', open_incidents: 0, error_rate: 1 }, { name: 'c', open_incidents: 0, error_rate: 5 }]], expect: [{ name: 'c', open_incidents: 0, error_rate: 5 }, { name: 'b', open_incidents: 0, error_rate: 1 }] },
   { name: 'sortServices', args: [[{ name: 'Unassigned', builtin: true, open_incidents: 0, error_rate: 0 }, { name: 'z', open_incidents: 0, error_rate: 0 }]], expect: [{ name: 'z', open_incidents: 0, error_rate: 0 }, { name: 'Unassigned', builtin: true, open_incidents: 0, error_rate: 0 }] },
   { name: 'sortServices', args: [[{ name: 'b', open_incidents: 0, error_rate: 0 }, { name: 'a', open_incidents: 0, error_rate: 0 }]], expect: [{ name: 'a', open_incidents: 0, error_rate: 0 }, { name: 'b', open_incidents: 0, error_rate: 0 }] },
+  { name: 'splitList', args: [' a, ,b ,'], expect: ['a', 'b'] },
+  { name: 'splitList', args: [null], expect: [] },
+  { name: 'serviceCreateBody', args: [{ id: 'web', name: 'Web', hosts: ['h'], app_names: [], protocols: ['file'], code_folder: '' }], expect: { id: 'web', name: 'Web', hosts: ['h'], app_names: [], protocols: ['file'] } },
+  { name: 'serviceCreateBody', args: [{ id: 'web', name: 'Web', hosts: [], app_names: [], protocols: [], code_folder: 'C:/src' }], expect: { id: 'web', name: 'Web', hosts: [], app_names: [], protocols: [], code_folder: 'C:/src' } },
+  { name: 'servicePatch', args: [{ name: 'a', hosts: ['h'], app_names: [], protocols: [], code_folder: '/c' }, { name: 'a', hosts: ['h'], app_names: [], protocols: [], code_folder: '' }], expect: { code_folder: null } },
+  { name: 'servicePatch', args: [{ name: 'a', hosts: ['h'], app_names: [], protocols: [], code_folder: null }, { name: 'b', hosts: ['h', 'i'], app_names: [], protocols: [], code_folder: '' }], expect: { name: 'b', hosts: ['h', 'i'] } },
+  { name: 'servicePatch', args: [{ name: 'a', hosts: [], app_names: [], protocols: [], code_folder: null }, { name: 'a', hosts: [], app_names: [], protocols: [], code_folder: '' }], expect: {} },
+  { name: 'diffSources', args: [[], [{ id: '', path: '/l', format: 'ncsa', enabled: true }]], expect: { add: [{ index: 0, path: '/l', format: 'ncsa', enabled: true }], update: [], remove: [] } },
+  { name: 'diffSources', args: [[{ id: 's1', path: '/l', format: 'ncsa', enabled: true }], [{ id: 's1', path: '/l', format: 'w3c', enabled: false }]], expect: { add: [], update: [{ id: 's1', patch: { format: 'w3c', enabled: false } }], remove: [] } },
+  { name: 'diffSources', args: [[{ id: 's1', path: '/l', format: 'ncsa', enabled: true }], []], expect: { add: [], update: [], remove: ['s1'] } },
+  { name: 'diffSources', args: [[{ id: 's1', path: '/l', format: 'ncsa', enabled: true }], [{ id: 's1', path: '/l', format: 'ncsa', enabled: true }]], expect: { add: [], update: [], remove: [] } },
+  { name: 'diffSources', args: [[{ id: 's1', path: '/l', format: 'ncsa', enabled: true }], [{ id: 's1', path: '/m', format: 'ncsa', enabled: true }]], expect: { add: [{ index: 0, path: '/m', format: 'ncsa', enabled: true }], update: [], remove: ['s1'] } },
+  { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', code_folder: ' ', app_names: [], rows: [{ checked: true, path: '/x', format: 'ncsa', watched_by: null }, { checked: false, path: '/y', format: 'w3c' }] }], expect: { id: 'a', name: 'A', log_paths: [{ path: '/x', format: 'ncsa' }] } },
+  { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', code_folder: '/src', app_names: ['p'], rows: [{ checked: true, path: '/x', format: 'ncsa', watched_by: 'web' }] }], expect: { id: 'a', name: 'A', log_paths: [], code_folder: '/src', app_names: ['p'] } },
 ];
 function runSelfTest() {
   const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure,
-    matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk, sortServices };
+    matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk, sortServices,
+    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody };
   const failures = [];
   for (const c of SELFTEST_CASES) {
     let got;
@@ -541,6 +611,14 @@ function runSelfTest() {
 /* ==== DOM helpers ==== */
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
+// A visible label bound to its input (R8.1).
+function field(labelText, input) {
+  const wrap = el('div', 'field');
+  const lab = el('label', '', labelText);
+  lab.htmlFor = input.id;
+  wrap.append(lab, input);
+  return wrap;
+}
 function setStatus(text) { $('status').textContent = text || ''; }
 let toastTimer = null;
 function toast(msg) {
@@ -1127,8 +1205,143 @@ async function loadServices() {
     renderServices();
   } catch (e) { setStatus(errorText(e.status, e.body)); }
 }
-// The add and edit form (task 5.2).
-function renderServiceForm(s) { setStatus(s ? 'Editing a service arrives with the service form.' : 'Adding a service arrives with the service form.'); }
+/* ---------- add and edit form ---------- */
+function textInput(id, value, max) {
+  const i = el('input');
+  i.type = 'text'; i.id = id; i.value = value || ''; i.maxLength = max; i.autocomplete = 'off'; i.spellcheck = false;
+  return i;
+}
+const SRC_ROWS = new WeakMap(); // table row -> its inputs and source id
+let srcRowSeq = 0;
+function sourceRow(src) {
+  const n = ++srcRowSeq;
+  const tr = el('tr');
+  const path = textInput(`svcFSrc${n}Path`, src ? src.path : '', 1024);
+  if (src) path.disabled = true; // the path of a source cannot change: remove the row and add a new one
+  const fmt = el('select');
+  fmt.id = `svcFSrc${n}Fmt`;
+  const formats = STATE.uiConfig.formats.slice();
+  if (src && !formats.includes(src.format)) formats.push(src.format);
+  for (const f of formats) { const o = el('option', '', f); o.value = f; fmt.append(o); }
+  fmt.value = src ? src.format : formats[0];
+  const on = el('input');
+  on.type = 'checkbox'; on.id = `svcFSrc${n}On`; on.checked = src ? Boolean(src.enabled) : true;
+  const rm = el('button', 'ghost small warn', 'Remove');
+  rm.type = 'button';
+  rm.onclick = () => { tr.remove(); };
+  for (const cell of [field('Path', path), field('Format', fmt), field('Enabled', on), rm]) { const td = el('td'); td.append(cell); tr.append(td); }
+  SRC_ROWS.set(tr, { id: src ? src.id : '', path, fmt, on });
+  return tr;
+}
+function renderServiceForm(s) {
+  const create = !s;
+  STATE.svcForm = { mode: create ? 'create' : 'edit', original: s || null };
+  const box = $('svcFormBox');
+  box.replaceChildren();
+  const f = el('form', 'svc-form');
+  f.setAttribute('aria-label', create ? 'Add service' : 'Edit service');
+  f.append(el('h3', '', create ? 'Add service' : `Edit ${s.name}`));
+  if (create) f.append(field('Id', textInput('svcFId', '', 40)));
+  f.append(field('Name', textInput('svcFName', s ? s.name : '', 200)));
+  f.append(field('Hosts (comma separated)', textInput('svcFHosts', s ? (s.hosts || []).join(', ') : '', 4000)));
+  f.append(field('App names (comma separated)', textInput('svcFApps', s ? (s.app_names || []).join(', ') : '', 4000)));
+  const protos = el('fieldset');
+  protos.append(el('legend', '', 'Protocols'));
+  STATE.uiConfig.protocols.forEach((p, i) => {
+    const c = el('input');
+    c.type = 'checkbox'; c.id = `svcFProto${i}`; c.value = p; c.checked = Boolean(s && (s.protocols || []).includes(p));
+    protos.append(field(p, c));
+  });
+  f.append(protos);
+  f.append(field('Code folder', textInput('svcFCode', s ? s.code_folder || '' : '', 1024)));
+  f.append(el('h4', '', 'Log files'));
+  const wrap = el('div', 'table-wrap');
+  const table = el('table', 'sources');
+  const tbody = el('tbody');
+  tbody.id = 'svcFSources';
+  for (const ls of (s && s.log_sources) || []) tbody.append(sourceRow(ls));
+  table.append(tbody); wrap.append(table); f.append(wrap);
+  const addRow = el('button', 'ghost small', 'Add log file');
+  addRow.type = 'button';
+  addRow.onclick = () => { const tr = sourceRow(null); tbody.append(tr); SRC_ROWS.get(tr).path.focus(); };
+  const save = actionButton('svc-save', 'Save', () => saveService(), '');
+  const cancel = el('button', 'ghost', 'Cancel');
+  cancel.type = 'button';
+  cancel.onclick = () => { box.replaceChildren(); STATE.svcForm = null; $('svcAdd').focus(); };
+  const actions = el('div', 'actions');
+  actions.append(addRow, save, cancel);
+  const msg = el('div', 'meta');
+  msg.id = 'svcFMsg';
+  msg.setAttribute('role', 'status');
+  f.onsubmit = (ev) => { ev.preventDefault(); if (!save.disabled) saveService(); };
+  f.append(actions, msg);
+  box.append(f);
+  (create ? $('svcFId') : $('svcFName')).focus();
+}
+function readServiceForm() {
+  const idIn = $('svcFId');
+  return {
+    id: idIn ? idIn.value.trim() : '',
+    name: $('svcFName').value.trim(),
+    hosts: splitList($('svcFHosts').value),
+    app_names: splitList($('svcFApps').value),
+    protocols: STATE.uiConfig.protocols.filter((p, i) => { const c = $(`svcFProto${i}`); return Boolean(c && c.checked); }),
+    code_folder: $('svcFCode').value.trim(),
+    rows: Array.from($('svcFSources').children).map((tr) => {
+      const r = SRC_ROWS.get(tr);
+      return { id: r.id, path: r.path.value.trim(), format: r.fmt.value, enabled: r.on.checked, tr };
+    }),
+  };
+}
+// Sequential save: the service, then the log-source operations (POST, PATCH, DELETE). The first failure stops
+// the run and shows the server's text; what was already saved stays, and the form keeps editing it.
+async function saveService() {
+  const st = STATE.svcForm;
+  if (!st) return;
+  const msg = $('svcFMsg');
+  msg.textContent = 'Saving...';
+  const form = readServiceForm();
+  const fail = (e) => { msg.textContent = errorText(e.status, e.body); };
+  if (st.mode === 'create') {
+    try { st.original = await request('POST', '/api/services', serviceCreateBody(form)); }
+    catch (e) { fail(e); return; }
+    st.mode = 'edit';
+    if (!Array.isArray(st.original.log_sources)) st.original.log_sources = [];
+    $('svcFId').disabled = true;
+  } else {
+    const patch = servicePatch(st.original, form);
+    if (Object.keys(patch).length) {
+      try { Object.assign(st.original, await request('PATCH', `/api/services/${encodeURIComponent(st.original.id)}`, patch)); }
+      catch (e) { fail(e); return; }
+    }
+  }
+  const sid = encodeURIComponent(st.original.id);
+  const sources = st.original.log_sources || [];
+  const diff = diffSources(sources, form.rows);
+  for (const a of diff.add) {
+    let created;
+    try { created = await request('POST', `/api/services/${sid}/log-sources`, { path: a.path, format: a.format, enabled: a.enabled }); }
+    catch (e) { fail(e); return; }
+    const row = SRC_ROWS.get(form.rows[a.index].tr);
+    row.id = created.id; row.path.disabled = true;
+    sources.push(created);
+  }
+  for (const u of diff.update) {
+    try { Object.assign(sources.find((x) => x.id === u.id), await request('PATCH', `/api/services/${sid}/log-sources/${encodeURIComponent(u.id)}`, u.patch)); }
+    catch (e) { fail(e); return; }
+  }
+  for (const id of diff.remove) {
+    try { await request('DELETE', `/api/services/${sid}/log-sources/${encodeURIComponent(id)}`); }
+    catch (e) { fail(e); return; }
+    sources.splice(sources.findIndex((x) => x.id === id), 1);
+  }
+  msg.textContent = 'Saved.';
+  STATE.svcForm = null;
+  $('svcFormBox').replaceChildren();
+  setStatus(`Service ${st.original.id} saved`);
+  lastSvcKey = null;
+  loadServices();
+}
 ENTER.services = () => { lastSvcKey = null; loadServices(); };
 
 /* ---------- service detail ---------- */
