@@ -887,6 +887,9 @@ async function request(method, path, body, as) {
   if (body !== undefined) { headers['content-type'] = 'application/json'; opts.body = JSON.stringify(body); }
   let r;
   try { r = await fetch(path, opts); } catch (e) { throw new ApiError(0, { detail: 'Could not reach the mesh' }, null); }
+  const dateHeader = r.headers.get('Date'); // the hub's clock, for rule expiry (never the browser's)
+  const stamp = dateHeader ? Date.parse(dateHeader) : NaN;
+  if (Number.isFinite(stamp)) STATE.serverDate = Math.floor(stamp / 1000);
   if (!r.ok) {
     const err = await errorFromResponse(r);
     if (r.status === 401 || r.status === 403 || r.status === 429) err.authText = handle401(path, r.status, err.retryAfter);
@@ -1891,6 +1894,7 @@ function liveVisibility() {
 }
 
 /* ---------- rule form and rule from a proposal ---------- */
+const RULE_CATEGORIES = ['memory', 'disk', 'network', 'security', 'crash', 'unknown'];
 const RULE_FALLBACK = {
   most_urgent_severity: { min: 3, max: 4, default: 3 },
   max_per_hour: { min: 1, max: 10, default: 3 },
@@ -1915,6 +1919,8 @@ function numberInput(id, b, value) {
 // confirm button to `actions`, so the lock registry sees the right action id.
 function renderRuleForm(defaults, mode) {
   const n = ++ruleFormSeq;
+  const create = mode === 'create';
+  const edit = mode === 'edit';
   const bounds = STATE.approvalStatus && STATE.approvalStatus.bounds;
   const sb = boundOf(bounds, 'most_urgent_severity', RULE_FALLBACK.most_urgent_severity);
   const hb = boundOf(bounds, 'max_per_hour', RULE_FALLBACK.max_per_hour);
@@ -1926,39 +1932,67 @@ function renderRuleForm(defaults, mode) {
   const d = defaults || {};
   const pick = (key, b) => (typeof d[key] === 'number' ? d[key] : b.default);
   const f = el('form', 'rule-form');
-  f.append(el('h4', '', mode === 'proposal' ? 'Always approve fixes like this' : mode === 'edit' ? 'Edit rule' : 'New rule'));
-  const facts = el('dl', 'facts');
-  facts.append(el('dt', '', 'Service'), el('dd', '', String(d.service_id || '')), el('dt', '', 'Matches'), el('dd', '', `${d.match_type || ''} ${d.match_value || ''}`));
-  f.append(facts);
+  f.append(el('h4', '', mode === 'proposal' ? 'Always approve fixes like this' : edit ? 'Edit rule' : 'New rule'));
+  let svc = null, mtype = null, valText = null, valCat = null, first = null;
+  if (create) {
+    const eligible = (Array.isArray(STATE.services) ? STATE.services : []).filter((s) => !s.builtin && s.code_folder);
+    svc = el('select');
+    svc.id = `ruleF${n}Svc`;
+    for (const s of eligible) { const o = el('option', '', `${s.name} (${s.id})`); o.value = s.id; svc.append(o); }
+    mtype = el('select');
+    mtype.id = `ruleF${n}Type`;
+    for (const t of ['signature', 'category']) { const o = el('option', '', t); o.value = t; mtype.append(o); }
+    valText = textInput(`ruleF${n}Value`, '', 200);
+    valCat = el('select');
+    valCat.id = `ruleF${n}Cat`;
+    const cats = bounds && Array.isArray(bounds.categories) ? bounds.categories.filter((c) => typeof c === 'string') : RULE_CATEGORIES;
+    for (const c of cats) { const o = el('option', '', c); o.value = c; valCat.append(o); }
+    const textField = field('Signature text', valText);
+    const catField = field('Category', valCat);
+    catField.hidden = true;
+    mtype.onchange = () => { const isCat = mtype.value === 'category'; textField.hidden = isCat; catField.hidden = !isCat; };
+    f.append(field('Service (with a code folder)', svc), field('Match on', mtype), textField, catField);
+    if (!eligible.length) f.append(el('p', 'meta', 'No service has a code folder yet. Set one in the service form first.'));
+    first = svc;
+  } else {
+    const facts = el('dl', 'facts');
+    facts.append(el('dt', '', 'Service'), el('dd', '', String(d.service_id || '')), el('dt', '', 'Matches'), el('dd', '', `${d.match_type || ''} ${d.match_value || ''}`));
+    f.append(facts);
+  }
+  const match = () => (create
+    ? { service_id: svc.value, match_type: mtype.value, match_value: mtype.value === 'category' ? valCat.value : valText.value.trim() }
+    : { service_id: d.service_id, match_type: d.match_type, match_value: d.match_value });
   const sev = numberInput(`ruleF${n}Sev`, sb, pick('most_urgent_severity', sb));
   const per = numberInput(`ruleF${n}Hour`, hb, pick('max_per_hour', hb));
   const inc = numberInput(`ruleF${n}Inc`, ib, pick('max_per_incident', ib));
   const files = numberInput(`ruleF${n}Files`, fb, pick('max_files', fb));
   const lines = numberInput(`ruleF${n}Lines`, lb, pick('max_lines', lb));
-  const days = numberInput(`ruleF${n}Days`, dayBound, dayBound.default);
+  const days = edit ? null : numberInput(`ruleF${n}Days`, dayBound, dayBound.default);
   const note = textInput(`ruleF${n}Note`, d.note || '', 200);
   const grid = el('div', 'grid-n');
   grid.append(field('Severity floor (0 most urgent)', sev), field('Max per hour', per), field('Max per incident', inc),
-    field('Max files', files), field('Max lines', lines), field('Expires in (days)', days));
+    field('Max files', files), field('Max lines', lines));
+  if (days) grid.append(field('Expires in (days)', days));
   f.append(grid, field('Note (optional)', note));
   const words = el('p', 'meta');
-  const read = () => ({
+  const read = () => Object.assign(match(), {
     most_urgent_severity: clampInt(sev.value, sb.min, sb.max), max_per_hour: clampInt(per.value, hb.min, hb.max),
     max_per_incident: clampInt(inc.value, ib.min, ib.max), max_files: clampInt(files.value, fb.min, fb.max),
-    max_lines: clampInt(lines.value, lb.min, lb.max), days: clampInt(days.value, dayBound.min, dayBound.max), note: note.value.trim(),
+    max_lines: clampInt(lines.value, lb.min, lb.max), days: days ? clampInt(days.value, dayBound.min, dayBound.max) : null, note: note.value.trim(),
   });
   const describe = () => {
     const v = read();
-    words.textContent = `This rule approves fixes for service ${d.service_id || '?'} that match ${d.match_type || '?'} "${d.match_value || '?'}", for incidents at ${sevFloorText(v.most_urgent_severity)}, at most ${v.max_per_hour} per hour and ${v.max_per_incident} per incident, up to ${v.max_files} files and ${v.max_lines} lines each, for ${v.days} day(s).`;
+    words.textContent = `This rule approves fixes for service ${v.service_id || '?'} that match ${v.match_type || '?'} "${v.match_value || '?'}", for incidents at ${sevFloorText(v.most_urgent_severity)}, at most ${v.max_per_hour} per hour and ${v.max_per_incident} per incident, up to ${v.max_files} files and ${v.max_lines} lines each${v.days ? `, for ${v.days} day(s)` : ''}.`;
   };
   f.addEventListener('input', describe);
+  f.addEventListener('change', describe);
   describe();
   f.append(words);
   const actions = el('div', 'actions');
   const msg = el('div', 'meta');
   msg.setAttribute('role', 'status');
   f.append(actions, msg);
-  return { form: f, read, actions, msg, first: sev };
+  return { form: f, read, actions, msg, first: first || sev };
 }
 async function openRuleFromProposal(p, host, note) {
   const open = host.querySelector('form.rule-form');
@@ -2014,6 +2048,8 @@ function ruleRow(r, now) {
   tr.append(td);
   if (r.status === 'active') box.append(keyed(actionButton('rule-pause', 'Pause', () => pauseRule(r)), `${r.id}:pause`));
   if (r.status === 'active' || r.status === 'suspended') box.append(keyed(actionButton('rule-revoke', 'Revoke', () => revokeRule(r), 'ghost small warn'), `${r.id}:revoke`));
+  if (r.status === 'suspended') box.append(keyed(actionButton('rule-enable', 'Re-enable', () => enableRule(r)), `${r.id}:enable`));
+  if (r.status === 'active' || r.status === 'suspended') box.append(keyed(actionButton('rule-edit', 'Edit', () => openRuleForm(r)), `${r.id}:edit`));
   return tr;
 }
 let lastRulesKey = null;
@@ -2021,7 +2057,9 @@ function renderRules() {
   const list = Array.isArray(STATE.rules) ? STATE.rules : [];
   const now = Date.now() / 1000;
   const tools = $('rulesTools');
-  if (!tools.firstElementChild) tools.append(actionButton('rules-pause-all', 'Pause all', pauseAll, 'ghost small warn'));
+  if (!tools.firstElementChild) {
+    tools.append(actionButton('rule-create', 'New rule', () => openRuleForm(null)), actionButton('rules-pause-all', 'Pause all', pauseAll, 'ghost small warn'));
+  }
   const key = JSON.stringify([list, Math.floor(now / 30)]);
   if (key === lastRulesKey) return;
   lastRulesKey = key;
@@ -2086,6 +2124,69 @@ async function revokeRule(r) {
 async function pauseAll() {
   if (!window.confirm('Pause every rule? Nothing is auto-approved until you resume (resuming needs the admin token).')) return;
   await reduceCall('/api/rules/pause', 'Auto-approval paused');
+}
+// The hub's own clock (seconds): approvals/status `now` when it has one, else the Date header of the last answer.
+function serverNowSeconds() {
+  const st = STATE.approvalStatus;
+  if (st && typeof st.now === 'number') return st.now;
+  return typeof STATE.serverDate === 'number' ? STATE.serverDate : null;
+}
+// Days to an absolute expires_at from the hub's clock (the default is 7 days from its now); null when unknown.
+function createExpiry(days) {
+  const now = serverNowSeconds();
+  return now === null ? null : expiryFromDays(now + 7 * 86400, days);
+}
+// Opened only by a click on New rule or Edit; nothing here runs on load.
+async function openRuleForm(rule) {
+  const box = $('ruleFormBox');
+  box.replaceChildren();
+  await ensureApprovalStatus();
+  if (!rule) { try { STATE.services = await request('GET', '/api/services'); } catch (e) { /* the form says no service qualifies */ } }
+  const rf = renderRuleForm(rule, rule ? 'edit' : 'create');
+  const save = rule
+    ? actionButton('rule-edit', 'Save changes', () => saveRule(rule, rf), '')
+    : actionButton('rule-create', 'Create rule', () => saveRule(null, rf), '');
+  const cancel = el('button', 'ghost', 'Cancel');
+  cancel.type = 'button';
+  cancel.onclick = () => { box.replaceChildren(); };
+  rf.form.onsubmit = (ev) => { ev.preventDefault(); if (!save.disabled) saveRule(rule, rf); };
+  rf.actions.append(save, cancel);
+  box.append(rf.form);
+  rf.first.focus();
+}
+async function saveRule(rule, rf) {
+  if (rf.busy) return; // a double click must not send the request twice
+  rf.busy = true;
+  rf.msg.textContent = 'Saving...';
+  try {
+    const v = rf.read();
+    if (rule) {
+      const patch = ruleOverrides(rule, v);
+      if (!Object.keys(patch).length) { rf.msg.textContent = 'Nothing changed.'; return; }
+      await request('PATCH', `/api/rules/${encodeURIComponent(rule.id)}`, patch);
+    } else {
+      const body = {
+        service_id: v.service_id, match_type: v.match_type, match_value: v.match_value,
+        most_urgent_severity: v.most_urgent_severity, max_per_hour: v.max_per_hour, max_per_incident: v.max_per_incident,
+        max_files: v.max_files, max_lines: v.max_lines,
+      };
+      const when = createExpiry(v.days);
+      if (v.days !== 7 && when !== null) body.expires_at = when;
+      if (v.note) body.note = v.note;
+      await request('POST', '/api/rules', body);
+    }
+    $('ruleFormBox').replaceChildren();
+    rulesMsg('Rule saved.');
+    setStatus('Rule saved');
+    await loadRules();
+  } catch (e) { rf.msg.textContent = e.authText || errorText(e.status, e.body); }
+  finally { rf.busy = false; }
+}
+async function enableRule(r) {
+  try { await request('POST', `/api/rules/${encodeURIComponent(r.id)}/enable`); }
+  catch (e) { rulesMsg(e.authText || errorText(e.status, e.body)); return; }
+  rulesMsg(`Rule ${r.id} re-enabled`);
+  await loadRules();
 }
 async function resumeRules() {
   try { await request('POST', '/api/rules/resume'); }

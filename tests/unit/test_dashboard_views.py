@@ -550,3 +550,45 @@ def test_paused_banner_text_actor_and_time():
     assert "!s || !s.paused" in banner and "b.hidden = true" in banner
     assert 'id="pausedBanner"' in ds.load_page()
     assert "loadApprovalStatus()" in ds.strip_comments(ds.section("INIT"))
+
+# ---- 8.2 rule forms and the widen controls ----------------------------------------------------------------
+def test_new_rule_form_has_service_match_and_limits():
+    form = code("renderRuleForm")
+    assert "mode === 'create'" in form
+    assert re.search(r"filter\(\(s\) => !s\.builtin && s\.code_folder\)", form)
+    assert "['signature', 'category']" in form
+    assert "RULE_CATEGORIES" in form and "bounds.categories" in form
+    assert "valText" in form and "valCat" in form
+    assert "'Service (with a code folder)'" in form and "'Match on'" in form
+    script = ds.strip_comments(ds.script_text())
+    assert re.search(r"const RULE_CATEGORIES = \['memory', 'disk', 'network', 'security', 'crash', 'unknown'\];", script)
+def test_save_posts_the_full_body_with_a_server_clock_expiry():
+    save = code("saveRule")
+    assert "request('POST', '/api/rules', body)" in save and "request('PATCH', `/api/rules/${encodeURIComponent(rule.id)}`, patch)" in save
+    assert "ruleOverrides(rule, v)" in save  # edit sends changed fields only
+    assert "createExpiry(v.days)" in save and "errorText(" in save and "textContent" in save
+    exp = code("createExpiry")
+    assert "expiryFromDays(now + 7 * 86400, days)" in exp and "Date.now" not in exp
+    now = code("serverNowSeconds")
+    assert "st.now" in now and "STATE.serverDate" in now and "Date.now" not in now
+    req = code("request")
+    assert "headers.get('Date')" in req and "STATE.serverDate" in req
+    assert "actionButton('rule-create'" in code("openRuleForm") and "actionButton('rule-edit'" in code("openRuleForm")
+def test_edit_form_has_no_expiry_field():
+    form = code("renderRuleForm")
+    assert "const days = edit ? null :" in form and "days: days ?" in form
+def test_row_controls_for_widening_are_registered_actions():
+    row = code("ruleRow")
+    assert re.search(r"r\.status === 'suspended'\) [^\n]*actionButton\('rule-enable'", row)
+    assert re.search(r"r\.status === 'suspended'\) [^\n]*actionButton\('rule-edit'", row)
+    assert "actionButton('rule-create', 'New rule'" in code("renderRules")
+    en = code("enableRule")
+    assert "request('POST', `/api/rules/${encodeURIComponent(r.id)}/enable`)" in en
+    assert "e.authText || errorText(" in en and "rulesMsg(" in en
+def test_rule_forms_are_never_opened_or_submitted_automatically():
+    script = ds.strip_comments(ds.script_text())
+    init = ds.strip_comments(ds.section("INIT"))
+    sched = ds.strip_comments(ds.section("SCHEDULER"))
+    for name in ("openRuleForm", "saveRule", "enableRule"):
+        assert name not in init and name not in sched, name
+    assert len(re.findall(r"\bsaveRule\(", script)) == 4  # the definition, two click handlers (create, edit), the form submit
