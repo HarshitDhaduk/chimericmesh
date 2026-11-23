@@ -57,6 +57,7 @@ from .services.limiter import reduce_key as make_reduce_key
 from .services.registry import ServiceRegistry
 from .services.routes import build_router
 from .services.token import TokenStore, resolve_token_path
+from .services.validate import KNOWN_PROTOCOLS
 from .store import MigrationRegistry, Store, StoreError
 from .store.config import MEMORY, resolve_db_path, resolve_home
 from .store.proposals import is_reserved_decider
@@ -366,6 +367,14 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
     async def index():
         return FileResponse(WEB_DIR / "index.html",
                             headers={"X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
+
+    @app.get("/api/ui-config")
+    async def ui_config():
+        # What the page needs to lock its controls and fill its forms. Read-only; never the token itself.
+        enforcing = bool(access.enforce)
+        token_path = access.token_path if enforcing else None
+        return {"enforce_access": enforcing, "token_file": None if token_path is None else str(token_path),
+                "formats": list(FORMAT_NAMES), "protocols": list(KNOWN_PROTOCOLS)}
 
     @app.get("/api/stats")
     async def stats():

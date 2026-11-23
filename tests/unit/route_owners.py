@@ -38,7 +38,7 @@ _own("baseline",
      ("POST", "/api/incidents/{incident_id}/resolve"), ("POST", "/api/ingest"), ("POST", "/api/irc/say"),
      ("GET", "/api/stats"), ("POST", "/api/terminal"), ("GET", "/api/workflow"))
 _own("dashboard",                                       # no MCP tool (dashboard H2)
-     ("GET", "/api/services/{service_id}/stream"))
+     ("GET", "/api/services/{service_id}/stream"), ("GET", "/api/ui-config"))
 _own("framework", ("GET", "/docs"), ("HEAD", "/docs"), ("GET", "/docs/oauth2-redirect"),
      ("HEAD", "/docs/oauth2-redirect"), ("GET", "/openapi.json"), ("HEAD", "/openapi.json"),
      ("GET", "/redoc"), ("HEAD", "/redoc"))
