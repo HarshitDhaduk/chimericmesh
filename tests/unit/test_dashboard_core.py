@@ -29,7 +29,7 @@ def cases_text() -> str:
 
 
 def case_names() -> list[str]:
-    return re.findall(r"name:\s*'([A-Za-z]+)'", cases_text())
+    return re.findall(r"^\s*\{ name: '([A-Za-z]+)'", cases_text(), re.M)
 
 
 # ---- structure ------------------------------------------------------------------------------------

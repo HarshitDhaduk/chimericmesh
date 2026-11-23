@@ -85,6 +85,15 @@
   dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
   dl.facts dt { color: var(--dim); }
   dl.facts dd { margin: 0; overflow-wrap: anywhere; }
+  .svc-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); margin-top: 14px; }
+  .svc-card { border: 1px solid var(--line); border-radius: 6px; padding: 12px; background: #0f0d17; min-width: 0; overflow-wrap: anywhere; }
+  .svc-card h3 { margin: 0; font-size: 1rem; }
+  .svc-card .top { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  .svc-card ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+  .svc-card .err { color: var(--blood); font-size: .8rem; }
+  .pill.st-active { color: var(--ghost); }
+  .pill.st-idle { color: var(--amber); }
+  .pill.st-never, .pill.st-unknown { color: var(--dim); }
 
   /* guide */
   .guide-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
@@ -232,7 +241,16 @@
     </div>
   </div>
   </div>
-  <div id="view-services" data-view="services" hidden></div>
+  <div id="view-services" data-view="services" hidden>
+    <section aria-labelledby="svc-h">
+      <div class="guide-head">
+        <h2 id="svc-h">Services</h2>
+        <button class="ghost small" type="button" id="svcAdd">Add service</button>
+      </div>
+      <div id="svcFormBox"></div>
+      <div id="svcList" class="svc-grid"></div>
+    </section>
+  </div>
   <div id="view-service" data-view="service" hidden>
     <section id="svcDetail" aria-labelledby="svcName">
       <h2 id="svcName">Service</h2>
@@ -386,6 +404,16 @@ const UI_FALLBACK = {
   formats: ['syslog-text', 'ncsa', 'w3c', 'xferlog', 'plain'],
   protocols: ['syslog-udp', 'syslog-tcp', 'telnet', 'irc', 'file'],
 };
+// Open incidents first, then the error rate (highest first), the built-in card last on a tie, then the name.
+function sortServices(list) {
+  const key = (s) => [Number(s.open_incidents) > 0 ? 0 : 1, -(Number(s.error_rate) || 0), s.builtin ? 1 : 0];
+  return list.slice().sort((a, b) => {
+    const x = key(a), y = key(b);
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] - y[i];
+    const na = String(a.name), nb = String(b.name);
+    return na < nb ? -1 : na > nb ? 1 : 0;
+  });
+}
 /* PURE:end */
 
 /* ==== SELFTEST ==== */
@@ -490,10 +518,14 @@ const SELFTEST_CASES = [
   { name: 'tokenShapeOk', args: ['a b'], expect: false },
   { name: 'tokenShapeOk', args: [''], expect: false },
   { name: 'tokenShapeOk', args: ['x'.repeat(201)], expect: false },
+  { name: 'sortServices', args: [[{ name: 'b', open_incidents: 0, error_rate: 1 }, { name: 'a', open_incidents: 2, error_rate: 0 }]], expect: [{ name: 'a', open_incidents: 2, error_rate: 0 }, { name: 'b', open_incidents: 0, error_rate: 1 }] },
+  { name: 'sortServices', args: [[{ name: 'b', open_incidents: 0, error_rate: 1 }, { name: 'c', open_incidents: 0, error_rate: 5 }]], expect: [{ name: 'c', open_incidents: 0, error_rate: 5 }, { name: 'b', open_incidents: 0, error_rate: 1 }] },
+  { name: 'sortServices', args: [[{ name: 'Unassigned', builtin: true, open_incidents: 0, error_rate: 0 }, { name: 'z', open_incidents: 0, error_rate: 0 }]], expect: [{ name: 'z', open_incidents: 0, error_rate: 0 }, { name: 'Unassigned', builtin: true, open_incidents: 0, error_rate: 0 }] },
+  { name: 'sortServices', args: [[{ name: 'b', open_incidents: 0, error_rate: 0 }, { name: 'a', open_incidents: 0, error_rate: 0 }]], expect: [{ name: 'a', open_incidents: 0, error_rate: 0 }, { name: 'b', open_incidents: 0, error_rate: 0 }] },
 ];
 function runSelfTest() {
   const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure,
-    matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk };
+    matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk, sortServices };
   const failures = [];
   for (const c of SELFTEST_CASES) {
     let got;
@@ -606,6 +638,7 @@ const firstOpen = () => state.incidents.find((i) => !i.resolved);
 const SCHED = [
   { id: 'overview-refresh', every: 2500, last: 0, view: 'overview', run: () => refresh() },
   { id: 'overview-chat', every: 1000, last: 0, view: 'overview', run: () => fetchChat() },
+  { id: 'services-list', every: 5000, last: 0, view: 'services', run: () => loadServices() },
   { id: 'service-detail', every: 5000, last: 0, view: 'service', run: () => loadServiceDetail() },
 ];
 function tick() {
@@ -1028,6 +1061,76 @@ function showRoute() {
   if (ENTER[r.view]) ENTER[r.view](r);
 }
 
+/* ---------- services list ---------- */
+const STATE_CLASS = { active: 'st-active', idle: 'st-idle', never_seen: 'st-never' };
+function focusKeyButton(label, key, handler, cls) {
+  const b = el('button', cls === undefined ? 'ghost small' : cls, label);
+  b.type = 'button';
+  b.dataset.focusKey = key;
+  b.onclick = handler;
+  return b;
+}
+function serviceCard(s, now) {
+  const c = el('article', 'svc-card');
+  const top = el('div', 'top');
+  top.append(el('h3', '', String(s.name)), el('span', `pill ${STATE_CLASS[s.state] || 'st-unknown'}`, stateLabel('service', s.state)));
+  c.append(top, el('div', 'meta', `id ${s.id}`));
+  if (s.builtin) c.append(el('div', 'meta', 'built in'));
+  c.append(el('div', 'meta', `last seen ${relTime(s.last_seen, now)} · ${Number(s.error_rate) || 0} errors/min · ${Number(s.open_incidents) || 0} open incidents`));
+  const sources = Array.isArray(s.log_sources) ? s.log_sources : [];
+  if (sources.length) {
+    const ul = el('ul');
+    for (const ls of sources) {
+      const li = el('li');
+      li.append(el('div', '', String(ls.path)));
+      li.append(el('div', 'meta', `${ls.format} · ${stateLabel('source', ls.status)} · ${Number(ls.lines_dropped) || 0} lines dropped`));
+      if (ls.last_error) li.append(el('div', 'err', capText(ls.last_error, 300)));
+      ul.append(li);
+    }
+    c.append(ul);
+  }
+  const actions = el('div', 'actions');
+  actions.append(focusKeyButton('Open', `${s.id}:open`, () => { here.hash = `#/services/${encodeURIComponent(s.id)}`; }));
+  if (!s.builtin) actions.append(focusKeyButton('Edit', `${s.id}:edit`, () => renderServiceForm(s)));
+  c.append(actions);
+  return c;
+}
+let lastSvcKey = null;
+function renderServices() {
+  const list = sortServices(Array.isArray(STATE.services) ? STATE.services : []);
+  const now = Date.now() / 1000;
+  const key = JSON.stringify([list, Math.floor(now / 30)]);
+  if (key === lastSvcKey) return;
+  lastSvcKey = key;
+  const box = $('svcList');
+  const f = document.activeElement;
+  const focusKey = f && box.contains(f) ? f.dataset.focusKey : null;
+  box.replaceChildren();
+  if (!list.some((s) => !s.builtin)) {
+    const empty = el('div', 'svc-card');
+    empty.append(el('p', 'empty', 'No services yet. Run discovery or add one.'));
+    const a = el('div', 'actions');
+    a.append(focusKeyButton('Discover local apps', 'empty:discover', () => { here.hash = '#/discovery'; }, ''));
+    a.append(focusKeyButton('Add service', 'empty:add', () => renderServiceForm(null), 'ghost'));
+    empty.append(a);
+    box.append(empty);
+  }
+  for (const s of list) box.append(serviceCard(s, now));
+  if (focusKey) {
+    const n = Array.from(box.querySelectorAll('[data-focus-key]')).find((x) => x.dataset.focusKey === focusKey);
+    if (n) n.focus();
+  }
+}
+async function loadServices() {
+  try {
+    STATE.services = await request('GET', '/api/services');
+    renderServices();
+  } catch (e) { setStatus(errorText(e.status, e.body)); }
+}
+// The add and edit form (task 5.2).
+function renderServiceForm(s) { setStatus(s ? 'Editing a service arrives with the service form.' : 'Adding a service arrives with the service form.'); }
+ENTER.services = () => { lastSvcKey = null; loadServices(); };
+
 /* ---------- service detail ---------- */
 function setSlotsHidden(hidden) { document.querySelectorAll('#view-service [data-slot]').forEach((n) => { n.hidden = hidden; }); }
 function showServiceGone() {
@@ -1078,6 +1181,7 @@ function init() {
   document.querySelectorAll('nav [data-nav]').forEach((b) => { b.onclick = () => { here.hash = b.dataset.nav === 'overview' ? '#/' : `#/${b.dataset.nav}`; }; });
   window.addEventListener('hashchange', showRoute);
   wireUnlock();
+  $('svcAdd').onclick = () => renderServiceForm(null);
   applyLock();
   loadUiConfig();
   showRoute();

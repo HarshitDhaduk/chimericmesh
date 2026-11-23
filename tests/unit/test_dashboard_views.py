@@ -66,3 +66,47 @@ def test_detail_fetches_the_service_with_an_encoded_id_and_handles_404_without_a
 def test_detail_scheduler_task_runs_only_on_the_detail_view():
     rows = {r["id"]: r for r in sched_rows()}
     assert rows["service-detail"]["view"] == "service" and rows["service-detail"]["every"] == "5000"
+
+
+# ---- 5.1 services list ---------------------------------------------------------------------------------
+
+def test_services_list_task_and_route():
+    rows = {r["id"]: r for r in sched_rows()}
+    assert rows["services-list"] == {"id": "services-list", "every": "5000", "view": "services"}
+    assert "request('GET', '/api/services')" in code("loadServices")
+
+
+def test_card_renderer_writes_the_fields_as_text():
+    card = code("serviceCard")
+    for piece in ("stateLabel('service'", "relTime(", "error_rate", "open_incidents", "stateLabel('source'",
+                  "lines_dropped", "last_error", "el("):
+        assert piece in card, piece
+    assert "'built in'" in card
+    assert re.search(r"if \(!s\.builtin\)", card), "the built-in card has no Edit control"
+
+
+def test_empty_state_text_and_buttons():
+    script = ds.strip_comments(ds.script_text())
+    assert script.count("No services yet. Run discovery or add one.") == 1
+    empty = code("renderServices")
+    assert "'Discover local apps'" in empty and "'Add service'" in empty
+
+
+def test_sort_and_labels_have_cases():
+    names = case_names()
+    assert names.count("sortServices") >= 3
+    text = cases_text()
+    for label in ("active", "idle", "never seen", "running", "missing", "unreadable", "error", "stopped", "unknown"):
+        assert f"expect: '{label}'" in text, label
+
+
+def test_services_code_calls_no_discovery_route():
+    for name in ("loadServices", "renderServices", "serviceCard", "renderServiceForm", "saveService",
+                 "loadServiceDetail", "renderServiceHeader"):
+        assert "/api/discovery" not in fns().get(name, ""), name  # existence is checked by the 5.0 to 5.2 tests
+
+
+def test_services_css_is_one_column_on_small_screens():
+    page = ds.load_page()
+    assert "grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr))" in page
+    assert re.search(r"\.svc-card[^{]*\{[^}]*overflow-wrap: anywhere", page)
