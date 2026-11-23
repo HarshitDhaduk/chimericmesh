@@ -465,3 +465,33 @@ def test_pure_rule_helpers_have_the_documented_cases():
     text = cases_text()
     assert "name: 'expiryFromDays', args: [1000000, NaN], expect: null" in text
     assert "name: 'expiryFromDays', args: [1000000, 2.5], expect: null" in text
+
+# ---- 7.4 terminal, guide and identity line keep working ---------------------------------------------------
+GOLDEN_FUNCTIONS = ["renderGuide", "doIt", "runCommand", "fetchChat", "complete", "renderIdentity", "renderIncidents",
+                    "renderEvents", "renderStats"]
+def test_the_existing_overview_functions_and_markup_are_still_there():
+    names = set(fns())
+    assert set(GOLDEN_FUNCTIONS) <= names, sorted(set(GOLDEN_FUNCTIONS) - names)
+    script = ds.strip_comments(ds.script_text())
+    assert "api('/api/workflow')" in code("loadWorkflow")
+    assert "'/api/demo/storm'" in script and "'/api/ingest'" in script
+    assert "`/api/chat?after=${state.chatCursor}&limit=200`" in code("fetchChat")
+    ids = attrs_by_id()
+    for ident in ("storm", "sendForm", "termForm", "chips", "guide", "guideSteps", "termInput", "transcript", "identity"):
+        assert ident in ids, ident
+    chips = re.findall(r'data-cmd="(![a-z]+)"', ds.load_page())
+    assert chips == ["!help", "!status", "!incidents", "!proposals"]
+    assert "history" in code("runCommand") and "state.history" in script
+    assert ds.load_page().count('id="guideSteps"') == 1
+def test_the_guide_code_is_byte_identical_to_the_baseline():
+    for name, expected in ds.BASELINE_HASHES.items():
+        assert ds.function_hash(name) == expected, name
+def test_identity_line_shows_the_lock_state_not_the_operator_flag():
+    ident = code("renderIdentity")
+    assert "operator" not in ident
+    assert "'unlocked'" in ident and "'locked (unlock to approve)'" in ident and "STATE.lock" in ident
+    assert "renderIdentity()" in code("applyLock")
+def test_terminal_401_for_approve_and_deny_says_unlock_first():
+    run = code("runCommand")
+    assert "e.status === 401 && /^!(approve|deny)\\b/.test(text)" in run and "'unlock first'" in run
+    assert "request('POST', '/api/terminal'" in run

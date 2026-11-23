@@ -1256,9 +1256,8 @@ document.addEventListener('keydown', (ev) => {
 
 function renderIdentity() {
   const you = state.workflow && state.workflow.you;
-  $('identity').textContent = you
-    ? (you.operator ? `You are ${you.nick} (operator)` : `You are ${you.nick} (read-only: set CHIMERICMESH_OPERATORS to allow approvals)`)
-    : '';
+  const access = STATE.lock && STATE.lock.locked ? 'locked (unlock to approve)' : 'unlocked';
+  $('identity').textContent = you ? `You are ${you.nick} · ${access}` : '';
 }
 
 /* ---------- data loading ---------- */
@@ -1310,6 +1309,7 @@ function applyLock() {
   $('lockBtn').hidden = !has;
   document.querySelectorAll('[data-action]').forEach(lockButton);
   updatePropNote();
+  renderIdentity();
 }
 function openUnlock() {
   $('tokenNote').textContent = TOKEN_PROMPT_TEXT;
