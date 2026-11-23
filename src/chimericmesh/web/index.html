@@ -72,7 +72,14 @@
   input, select { font: inherit; background: #08070d; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 8px; }
   input[type=text] { flex: 1; min-width: 0; }
   .sr { position: absolute; left: -9999px; }
-  .hidden { display: none !important; }
+  .hidden, [hidden] { display: none !important; }
+  [data-view] { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+  nav { display: flex; gap: 8px; flex-wrap: wrap; }
+  nav button[aria-current="page"] { background: rgba(124,255,178,.18); }
+  .hdr-right { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  #status { max-width: 40ch; overflow-wrap: anywhere; }
+  .banner { margin: 0; padding: 10px clamp(16px, 4vw, 48px); background: #2a1d08; color: var(--amber); border-bottom: 1px solid var(--amber); }
+  #selftest { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ghost); }
 
   /* guide */
   .guide-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
@@ -129,9 +136,20 @@
     <h1><span>CHIMERIC</span>MESH <span class="pulse" aria-hidden="true">☠</span></h1>
     <div class="tag">Syslog · IRC · Telnet, stitched to AI agents through MCP</div>
   </div>
-  <button id="storm" type="button">Summon a failure storm</button>
+  <nav aria-label="Views">
+    <button class="ghost" type="button" data-nav="overview">Overview</button>
+    <button class="ghost" type="button" data-nav="services">Services</button>
+    <button class="ghost" type="button" data-nav="discovery">Discovery</button>
+    <button class="ghost" type="button" data-nav="rules">Rules</button>
+  </nav>
+  <div class="hdr-right">
+    <div id="status" class="meta" role="status" aria-live="polite"></div>
+    <button id="storm" type="button">Summon a failure storm</button>
+  </div>
 </header>
+<div id="pausedBanner" class="banner" role="status" hidden></div>
 <main>
+  <div id="view-overview" data-view="overview">
   <section class="stats" aria-label="Statistics" id="stats"></section>
 
   <section id="guide" aria-labelledby="guide-h" class="hidden">
@@ -200,11 +218,204 @@
       </section>
     </div>
   </div>
+  </div>
+  <div id="view-services" data-view="services" hidden></div>
+  <div id="view-discovery" data-view="discovery" hidden></div>
+  <div id="view-rules" data-view="rules" hidden></div>
+  <pre id="selftest" hidden></pre>
 </main>
 <div id="toast" role="status" aria-live="polite"></div>
 <script>
+/* ==== PURE ==== */
+/* PURE:begin */
+// Pure functions: no browser global, no request, no storage, no clock. Self-tested by #selftest.
+const SEV_NAMES = ['emerg', 'alert', 'crit', 'err', 'warning', 'notice', 'info', 'debug'];
+const SCHED_SLACK_MS = 100; // a 1 s tick can land a few ms early
+function sevName(n) { const i = Number(n); return Number.isInteger(i) && i >= 0 && i <= 7 ? SEV_NAMES[i] : 'unknown'; }
+function capText(s, n) { const t = s === null || s === undefined ? '' : String(s); return t.length <= n ? t : `${t.slice(0, n)}…`; }
+function relTime(ts, now) {
+  if (ts === null || ts === undefined) return 'never';
+  const d = now - ts;
+  if (!(d >= 5)) return 'just now';
+  if (d < 60) return `${Math.floor(d)} s ago`;
+  if (d < 3600) return `${Math.floor(d / 60)} min ago`;
+  if (d < 86400) return `${Math.floor(d / 3600)} h ago`;
+  return `${Math.floor(d / 86400)} d ago`;
+}
+function countdown(ts, now) {
+  const d = ts - now;
+  if (!(d > 0)) return 'expired';
+  if (d >= 86400) return `${Math.floor(d / 86400)} d ${Math.floor((d % 86400) / 3600)} h`;
+  if (d >= 3600) return `${Math.floor(d / 3600)} h ${Math.floor((d % 3600) / 60)} min`;
+  return `${Math.max(1, Math.floor(d / 60))} min`;
+}
+const STATE_LABELS = {
+  service: { active: 'active', idle: 'idle', never_seen: 'never seen' },
+  source: { running: 'running', missing: 'missing', unreadable: 'unreadable', error: 'error', stopped: 'stopped', unknown: 'unknown' },
+  rule: { active: 'active', suspended: 'suspended', revoked: 'revoked', expired: 'expired' },
+  proposal: { pending: 'pending', approved: 'approved', denied: 'denied', done: 'done', withdrawn: 'withdrawn' },
+};
+function stateLabel(kind, value) {
+  const table = STATE_LABELS[kind] || {};
+  return Object.prototype.hasOwnProperty.call(table, value) ? table[value] : 'unknown';
+}
+function nextBackoff(n) { const k = Number.isInteger(n) && n > 0 ? n : 0; return Math.min(30, 2 ** Math.min(k, 5)); }
+function errorText(status, body) {
+  const detail = body && typeof body === 'object' ? body.detail : undefined;
+  let text = '';
+  if (typeof detail === 'string' && detail) text = detail;
+  else if (Array.isArray(detail) && detail.length) {
+    text = detail.map((d) => {
+      const loc = Array.isArray(d && d.loc) ? d.loc.filter((p) => p !== 'body' && p !== 'query' && p !== 'path').join('.') : '';
+      const msg = d && typeof d.msg === 'string' ? d.msg : 'invalid';
+      return loc ? `${loc}: ${msg}` : msg;
+    }).join('; ');
+  }
+  if (!text) return `HTTP ${status}`;
+  const field = body && typeof body.field === 'string' && body.field ? body.field : '';
+  return field ? `${field}: ${text}` : text;
+}
+function parseRoute(hash) {
+  const h = String(hash || '');
+  const m = /^#\/services\/([^/?#]+)$/.exec(h);
+  if (m) {
+    let id = '';
+    try { id = decodeURIComponent(m[1]); } catch (e) { id = ''; }
+    return /^[a-z0-9][a-z0-9-]{0,39}$/.test(id) ? { view: 'service', id } : { view: 'services' };
+  }
+  if (h === '#/services') return { view: 'services' };
+  if (h === '#/discovery') return { view: 'discovery' };
+  if (h === '#/rules') return { view: 'rules' };
+  return { view: 'overview' };
+}
+function dueTasks(tasks, now, view, visible) {
+  if (!visible) return [];
+  return tasks.filter((t) => (t.view === '*' || t.view === view) && now - t.last + SCHED_SLACK_MS >= t.every).map((t) => t.id);
+}
+function isNewer(id, lastId) { return typeof id === 'number' && Number.isFinite(id) && id > lastId; }
+function lockState(uiConfig, hasToken) {
+  const flag = uiConfig ? uiConfig.enforce_access : null;
+  if (flag === true) return { locked: !hasToken, mode: 'enforced' };
+  if (flag === false) return { locked: false, mode: 'off' };
+  return { locked: false, mode: 'unknown' };
+}
+function afterAuthFailure(status, hadToken, retryAfter) {
+  if (status === 401) return hadToken ? { clearToken: true, text: 'token rejected' } : { clearToken: false, text: 'unlock first' };
+  if (status === 403) return { clearToken: false, text: 'blocked by the hub: open this page at the address the hub printed' };
+  if (status === 429) return { clearToken: false, text: Number(retryAfter) > 0 ? `too many requests, try again in ${Math.floor(Number(retryAfter))} s` : 'too many requests, try again later' };
+  return { clearToken: false, text: '' };
+}
+/* PURE:end */
+
+/* ==== SELFTEST ==== */
+const SELFTEST_CASES = [
+  { name: 'sevName', args: [3], expect: 'err' },
+  { name: 'sevName', args: [7], expect: 'debug' },
+  { name: 'sevName', args: [8], expect: 'unknown' },
+  { name: 'sevName', args: ['x'], expect: 'unknown' },
+  { name: 'capText', args: ['abc', 3], expect: 'abc' },
+  { name: 'capText', args: ['abcd', 3], expect: 'abc…' },
+  { name: 'capText', args: [null, 5], expect: '' },
+  { name: 'capText', args: [12345, 3], expect: '123…' },
+  { name: 'relTime', args: [null, 100], expect: 'never' },
+  { name: 'relTime', args: [100, 100], expect: 'just now' },
+  { name: 'relTime', args: [150, 100], expect: 'just now' },
+  { name: 'relTime', args: [9988, 10000], expect: '12 s ago' },
+  { name: 'relTime', args: [9820, 10000], expect: '3 min ago' },
+  { name: 'relTime', args: [2800, 10000], expect: '2 h ago' },
+  { name: 'relTime', args: [827200, 1000000], expect: '2 d ago' },
+  { name: 'countdown', args: [100, 100], expect: 'expired' },
+  { name: 'countdown', args: [90, 100], expect: 'expired' },
+  { name: 'countdown', args: [2800, 100], expect: '45 min' },
+  { name: 'countdown', args: [100 + 20, 100], expect: '1 min' },
+  { name: 'countdown', args: [100 + 3900, 100], expect: '1 h 5 min' },
+  { name: 'countdown', args: [100 + 183600, 100], expect: '2 d 3 h' },
+  { name: 'stateLabel', args: ['service', 'never_seen'], expect: 'never seen' },
+  { name: 'stateLabel', args: ['service', 'active'], expect: 'active' },
+  { name: 'stateLabel', args: ['service', 'idle'], expect: 'idle' },
+  { name: 'stateLabel', args: ['source', 'running'], expect: 'running' },
+  { name: 'stateLabel', args: ['source', 'missing'], expect: 'missing' },
+  { name: 'stateLabel', args: ['source', 'unreadable'], expect: 'unreadable' },
+  { name: 'stateLabel', args: ['source', 'error'], expect: 'error' },
+  { name: 'stateLabel', args: ['source', 'stopped'], expect: 'stopped' },
+  { name: 'stateLabel', args: ['source', 'unknown'], expect: 'unknown' },
+  { name: 'stateLabel', args: ['source', 'zzz'], expect: 'unknown' },
+  { name: 'stateLabel', args: ['source', 'constructor'], expect: 'unknown' },
+  { name: 'stateLabel', args: ['rule', 'suspended'], expect: 'suspended' },
+  { name: 'stateLabel', args: ['proposal', 'pending'], expect: 'pending' },
+  { name: 'nextBackoff', args: [0], expect: 1 },
+  { name: 'nextBackoff', args: [1], expect: 2 },
+  { name: 'nextBackoff', args: [2], expect: 4 },
+  { name: 'nextBackoff', args: [3], expect: 8 },
+  { name: 'nextBackoff', args: [4], expect: 16 },
+  { name: 'nextBackoff', args: [5], expect: 30 },
+  { name: 'nextBackoff', args: [6], expect: 30 },
+  { name: 'nextBackoff', args: [7], expect: 30 },
+  { name: 'nextBackoff', args: [8], expect: 30 },
+  { name: 'nextBackoff', args: ['x'], expect: 1 },
+  { name: 'errorText', args: [422, { detail: 'bad path', field: 'log_paths' }], expect: 'log_paths: bad path' },
+  { name: 'errorText', args: [400, { detail: 'nope' }], expect: 'nope' },
+  { name: 'errorText', args: [422, { detail: [{ loc: ['body', 'name'], msg: 'required' }, { loc: [], msg: 'bad' }] }], expect: 'name: required; bad' },
+  { name: 'errorText', args: [500, null], expect: 'HTTP 500' },
+  { name: 'errorText', args: [404, { detail: { a: 1 } }], expect: 'HTTP 404' },
+  { name: 'errorText', args: [503, {}], expect: 'HTTP 503' },
+  { name: 'parseRoute', args: [''], expect: { view: 'overview' } },
+  { name: 'parseRoute', args: ['#/'], expect: { view: 'overview' } },
+  { name: 'parseRoute', args: ['#/nope'], expect: { view: 'overview' } },
+  { name: 'parseRoute', args: ['#/services'], expect: { view: 'services' } },
+  { name: 'parseRoute', args: ['#/services/web'], expect: { view: 'service', id: 'web' } },
+  { name: 'parseRoute', args: ['#/services/Bad_Id'], expect: { view: 'services' } },
+  { name: 'parseRoute', args: ['#/services/web/x'], expect: { view: 'overview' } },
+  { name: 'parseRoute', args: ['#/discovery'], expect: { view: 'discovery' } },
+  { name: 'parseRoute', args: ['#/rules'], expect: { view: 'rules' } },
+  { name: 'dueTasks', args: [[{ id: 'a', every: 3000, last: 0, view: 'overview' }, { id: 'b', every: 1000, last: 0, view: '*' }, { id: 'c', every: 1000, last: 0, view: 'services' }], 3000, 'overview', true], expect: ['a', 'b'] },
+  { name: 'dueTasks', args: [[{ id: 'a', every: 3000, last: 0, view: 'overview' }], 3000, 'overview', false], expect: [] },
+  { name: 'dueTasks', args: [[{ id: 'a', every: 3000, last: 0, view: 'overview' }, { id: 'c', every: 1000, last: 0, view: 'services' }], 1000, 'services', true], expect: ['c'] },
+  { name: 'dueTasks', args: [[{ id: 'b', every: 5000, last: 0, view: '*' }], 5000, 'rules', true], expect: ['b'] },
+  { name: 'dueTasks', args: [[{ id: 'a', every: 3000, last: 1000, view: 'overview' }], 2500, 'overview', true], expect: [] },
+  { name: 'isNewer', args: [5, 4], expect: true },
+  { name: 'isNewer', args: [4, 4], expect: false },
+  { name: 'isNewer', args: [3, 4], expect: false },
+  { name: 'isNewer', args: ['9', 4], expect: false },
+  { name: 'lockState', args: [{ enforce_access: true }, false], expect: { locked: true, mode: 'enforced' } },
+  { name: 'lockState', args: [{ enforce_access: true }, true], expect: { locked: false, mode: 'enforced' } },
+  { name: 'lockState', args: [{ enforce_access: false }, false], expect: { locked: false, mode: 'off' } },
+  { name: 'lockState', args: [{ enforce_access: null }, false], expect: { locked: false, mode: 'unknown' } },
+  { name: 'lockState', args: [null, false], expect: { locked: false, mode: 'unknown' } },
+  { name: 'afterAuthFailure', args: [401, true], expect: { clearToken: true, text: 'token rejected' } },
+  { name: 'afterAuthFailure', args: [401, false], expect: { clearToken: false, text: 'unlock first' } },
+  { name: 'afterAuthFailure', args: [403, true], expect: { clearToken: false, text: 'blocked by the hub: open this page at the address the hub printed' } },
+  { name: 'afterAuthFailure', args: [429, false, 7], expect: { clearToken: false, text: 'too many requests, try again in 7 s' } },
+  { name: 'afterAuthFailure', args: [429, false], expect: { clearToken: false, text: 'too many requests, try again later' } },
+  { name: 'afterAuthFailure', args: [500, false], expect: { clearToken: false, text: '' } },
+];
+function runSelfTest() {
+  const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure };
+  const failures = [];
+  for (const c of SELFTEST_CASES) {
+    let got;
+    try { got = fns[c.name](...c.args); } catch (e) { got = `threw: ${e.message}`; }
+    if (JSON.stringify(got) !== JSON.stringify(c.expect)) failures.push(`${c.name}(${JSON.stringify(c.args)}) gave ${JSON.stringify(got)}, expected ${JSON.stringify(c.expect)}`);
+  }
+  const box = document.getElementById('selftest');
+  box.hidden = false;
+  box.textContent = failures.length ? `SELFTEST FAIL (${failures.length} of ${SELFTEST_CASES.length})\n${failures.join('\n')}` : `SELFTEST PASS (${SELFTEST_CASES.length} cases)`;
+  return failures.length === 0;
+}
+
+/* ==== DOM helpers ==== */
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
+function setStatus(text) { $('status').textContent = text || ''; }
+let toastTimer = null;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.textContent = ''; }, 5000);
+}
+const unreachable = () => toast('Could not reach the mesh');
+const here = window.location; // the page's own address; only its hash is read (routes) or set (navigation)
+
+/* ==== API ==== */
 // Interim admin token (the dashboard module owns the final design): kept for this tab only, sent only
 // to the two routes that need it, never shown, logged or put in the transcript.
 const TOKEN_KEY = 'chimericmesh.adminToken';
@@ -231,18 +442,37 @@ const post = (path, body) => {
   if (token && TOKEN_ROUTES.test(path)) headers['X-Admin-Token'] = token;
   return api(path, { method: 'POST', headers, body: JSON.stringify(body || {}) });
 };
-const SEV = ['emerg','alert','crit','err','warning','notice','info','debug'];
-const COMMANDS = ['!help', '!status', '!incidents', '!explain', '!proposals', '!resolve', '!approve', '!deny'];
 
-const state = { incidents: [], proposals: [], workflow: null, chatCursor: 0, history: [], histIdx: 0 };
-let toastTimer = null;
-function toast(msg) {
-  const t = $('toast'); t.textContent = msg;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.textContent = ''; }, 5000);
-}
-const unreachable = () => toast('Could not reach the mesh');
+/* ==== STATE ==== */
+const COMMANDS = ['!help', '!status', '!incidents', '!explain', '!proposals', '!resolve', '!approve', '!deny'];
+const STATE = { route: { view: 'overview' }, incidents: [], proposals: [], workflow: null, chatCursor: 0, history: [], histIdx: 0 };
+const state = STATE;
+const SEV = SEV_NAMES;
 const firstOpen = () => state.incidents.find((i) => !i.resolved);
 
+/* ==== SCHEDULER ==== */
+// One 1 s timer runs the tasks whose period has elapsed, only for a visible tab and the active view
+// (a task with view '*' runs on every view). A 2.5 s task therefore runs every 3 s in practice.
+const SCHED = [
+  { id: 'overview-refresh', every: 2500, last: 0, view: 'overview', run: () => refresh() },
+  { id: 'overview-chat', every: 1000, last: 0, view: 'overview', run: () => fetchChat() },
+];
+function tick() {
+  const now = Date.now();
+  const due = dueTasks(SCHED.map((t) => ({ id: t.id, every: t.every, last: t.last, view: t.view })), now, STATE.route.view, document.visibilityState === 'visible');
+  for (const t of SCHED) {
+    if (!due.includes(t.id)) continue;
+    t.last = now;
+    try { Promise.resolve(t.run()).catch(() => { /* the next tick retries */ }); } catch (e) { /* the next tick retries */ }
+  }
+}
+function startScheduler() {
+  const now = Date.now();
+  for (const t of SCHED) t.last = now;
+  setInterval(tick, 1000);
+}
+
+/* ==== VIEWS ==== */
 /* ---------- stats ---------- */
 function renderStats(s) {
   const box = $('stats'); box.replaceChildren();
@@ -589,10 +819,30 @@ $('sendForm').onsubmit = async (ev) => {
   refresh();
 };
 
-refresh(); fetchChat();
-setInterval(refresh, 2500);
-setInterval(() => { if (document.visibilityState === 'visible') fetchChat(); }, 1000);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { fetchChat(); refresh(); } });
+/* ---------- navigation ---------- */
+const ENTER = {}; // view name -> function(route), filled by the view code below and in later tasks
+function showRoute() {
+  const r = parseRoute(here.hash);
+  STATE.route = r;
+  document.querySelectorAll('main > [data-view]').forEach((n) => { n.hidden = n.dataset.view !== r.view; });
+  const active = r.view === 'service' ? 'services' : r.view;
+  document.querySelectorAll('nav [data-nav]').forEach((b) => {
+    if (b.dataset.nav === active) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+  if (ENTER[r.view]) ENTER[r.view](r);
+}
+
+/* ==== INIT ==== */
+function init() {
+  if (here.hash === '#selftest') { runSelfTest(); return; } // no request of any kind in this mode
+  document.querySelectorAll('nav [data-nav]').forEach((b) => { b.onclick = () => { here.hash = b.dataset.nav === 'overview' ? '#/' : `#/${b.dataset.nav}`; }; });
+  window.addEventListener('hashchange', showRoute);
+  showRoute();
+  refresh(); fetchChat();
+  startScheduler();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (STATE.route.view === 'overview') { fetchChat(); refresh(); } } });
+}
+init();
 </script>
 </body>
 </html>
