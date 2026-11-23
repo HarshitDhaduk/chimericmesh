@@ -495,3 +495,58 @@ def test_terminal_401_for_approve_and_deny_says_unlock_first():
     run = code("runCommand")
     assert "e.status === 401 && /^!(approve|deny)\\b/.test(text)" in run and "'unlock first'" in run
     assert "request('POST', '/api/terminal'" in run
+
+# ---- 8.1 rules table, reduce actions, paused banner ------------------------------------------------------
+def rules_markup() -> str:
+    return segment('id="view-rules"', "<pre id=\"selftest\"")
+def test_rules_view_lists_rules_every_five_seconds():
+    rows = {r["id"]: r for r in sched_rows()}
+    assert rows["rules-list"] == {"id": "rules-list", "every": "5000", "view": "rules"}
+    assert "request('GET', '/api/rules')" in code("loadRules")
+    assert "loadRules()" in ds.strip_comments(ds.script_text()) and "typeof loadRules" not in ds.strip_comments(ds.script_text())
+def test_approval_status_task_runs_on_every_view_and_writes_the_state():
+    rows = {r["id"]: r for r in sched_rows()}
+    assert rows["approvals-status"] == {"id": "approvals-status", "every": "5000", "view": "*"}
+    body = code("loadApprovalStatus")
+    assert "request('GET', '/api/approvals/status')" in body and "STATE.approvalStatus =" in body
+    assert "renderPausedBanner(" in body
+    text = cases_text()
+    assert re.search(r"name: 'dueTasks', args: \[\[\{ id: 'b', every: 5000, last: 0, view: '\*' \}\], 5000, 'services', true\], expect: \['b'\]", text)
+    assert re.search(r"name: 'dueTasks', args: \[\[\{ id: 'b', every: 5000, last: 0, view: '\*' \}\], 5000, 'overview', true\]", text)
+def test_rules_table_has_the_columns_of_the_requirement():
+    seg = rules_markup()
+    for head in ("Id", "Service", "Matches", "Severity floor", "Expires", "Limits", "Uses (hour / total)", "Status",
+                 "Source proposal"):
+        assert f'<th scope="col">{head}</th>' in seg, head
+    assert seg.count("overflow-x") == 0 and 'class="table-wrap"' in seg
+    row = code("ruleRow")
+    for piece in ("r.match_type", "r.match_value", "sevFloorText(r.most_urgent_severity)", "countdown(r.expires_at",
+                  "r.max_per_hour", "r.max_per_incident", "r.max_files", "r.max_lines", "r.uses_last_hour", "r.use_count",
+                  "stateLabel('rule', r.status)", "r.source_proposal_id"):
+        assert piece in row, piece
+    assert re.search(r"r\.status === 'suspended' && r\.status_reason", row)
+def test_pause_and_revoke_are_token_free_and_confirm_once():
+    row = code("ruleRow")
+    assert re.search(r"r\.status === 'active'[^\n]*actionButton\('rule-pause'", row)
+    assert re.search(r"\(r\.status === 'active' \|\| r\.status === 'suspended'\)[^\n]*actionButton\('rule-revoke'", row)
+    for name, path in (("pauseRule", "pause"), ("revokeRule", "revoke")):
+        body = code(name)
+        assert body.count("window.confirm(") == 1, name
+        assert f"/api/rules/${{encodeURIComponent(r.id)}}/{path}`" in body, name
+        assert body.index("window.confirm(") < body.index("reduceCall(")
+    pa = code("pauseAll")
+    assert pa.count("window.confirm(") == 1 and "'/api/rules/pause'" in pa
+    red = code("reduceCall")
+    assert "request('POST', path)" in red and "e.authText" in red  # 429 shows Retry-After through authText
+    assert "X-Admin-Token" not in red
+def test_pause_all_is_always_rendered_and_resume_needs_the_token():
+    rules = code("renderRules")
+    assert "actionButton('rules-pause-all', 'Pause all'" in rules
+    assert "actionButton('rules-resume'" in code("renderPausedBanner")
+    assert "'/api/rules/resume'" in code("resumeRules")
+def test_paused_banner_text_actor_and_time():
+    banner = code("renderPausedBanner")
+    assert "Auto-approval is paused" in banner and "paused_by" in banner and "paused_at" in banner
+    assert "!s || !s.paused" in banner and "b.hidden = true" in banner
+    assert 'id="pausedBanner"' in ds.load_page()
+    assert "loadApprovalStatus()" in ds.strip_comments(ds.section("INIT"))

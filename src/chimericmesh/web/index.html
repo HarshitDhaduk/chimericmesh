@@ -100,6 +100,9 @@
   .field label { color: var(--dim); font-size: .85rem; }
   fieldset { border: 1px solid var(--line); border-radius: 4px; display: flex; flex-wrap: wrap; gap: 12px; }
   .table-wrap { overflow-x: auto; }
+  table.rules { border-collapse: collapse; width: 100%; font-size: .85rem; }
+  table.rules th, table.rules td { text-align: left; padding: 6px 8px; border-bottom: 1px dashed #221f33; vertical-align: top; overflow-wrap: anywhere; }
+  table.rules th { color: var(--dim); font-weight: 400; }
   .row.live { grid-template-columns: 70px 70px minmax(0, 1fr); }
   .row.live .cell { min-width: 0; }
   .row.live .m { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -350,7 +353,26 @@
       <div id="discList" class="svc-grid"></div>
     </section>
   </div>
-  <div id="view-rules" data-view="rules" hidden></div>
+  <div id="view-rules" data-view="rules" hidden>
+    <section aria-labelledby="rules-h">
+      <div class="guide-head">
+        <h2 id="rules-h">Approval rules</h2>
+        <span class="actions" id="rulesTools"></span>
+      </div>
+      <div class="meta" id="rulesMsg" role="status" aria-live="polite"></div>
+      <div id="ruleFormBox"></div>
+      <div class="table-wrap">
+        <table class="rules" aria-label="Approval rules">
+          <thead><tr>
+            <th scope="col">Id</th><th scope="col">Service</th><th scope="col">Matches</th><th scope="col">Severity floor</th>
+            <th scope="col">Expires</th><th scope="col">Limits</th><th scope="col">Uses (hour / total)</th>
+            <th scope="col">Status</th><th scope="col">Source proposal</th><th scope="col">Actions</th>
+          </tr></thead>
+          <tbody id="rulesBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
   <pre id="selftest" hidden></pre>
 </main>
 <div id="toast" role="status" aria-live="polite"></div>
@@ -662,6 +684,8 @@ const SELFTEST_CASES = [
   { name: 'dueTasks', args: [[{ id: 'a', every: 3000, last: 0, view: 'overview' }], 3000, 'overview', false], expect: [] },
   { name: 'dueTasks', args: [[{ id: 'a', every: 3000, last: 0, view: 'overview' }, { id: 'c', every: 1000, last: 0, view: 'services' }], 1000, 'services', true], expect: ['c'] },
   { name: 'dueTasks', args: [[{ id: 'b', every: 5000, last: 0, view: '*' }], 5000, 'rules', true], expect: ['b'] },
+  { name: 'dueTasks', args: [[{ id: 'b', every: 5000, last: 0, view: '*' }], 5000, 'services', true], expect: ['b'] },
+  { name: 'dueTasks', args: [[{ id: 'b', every: 5000, last: 0, view: '*' }], 5000, 'overview', true], expect: ['b'] },
   { name: 'dueTasks', args: [[{ id: 'a', every: 3000, last: 1000, view: 'overview' }], 2500, 'overview', true], expect: [] },
   { name: 'rowMatches', args: [{ severity: 3, message: 'Disk full' }, 7, ''], expect: true },
   { name: 'rowMatches', args: [{ severity: 5, message: 'x' }, 3, ''], expect: false },
@@ -892,6 +916,8 @@ const SCHED = [
   { id: 'services-list', every: 5000, last: 0, view: 'services', run: () => loadServices() },
   { id: 'service-detail', every: 5000, last: 0, view: 'service', run: () => loadServiceDetail() },
   { id: 'service-lists', every: 5000, last: 0, view: 'service', run: () => loadServiceLists() },
+  { id: 'approvals-status', every: 5000, last: 0, view: '*', run: () => loadApprovalStatus() },
+  { id: 'rules-list', every: 5000, last: 0, view: 'rules', run: () => loadRules() },
   { id: 'scan-poll', every: 1000, last: 0, view: 'discovery', run: () => (scanRunning() ? pollScan() : null) },
 ];
 function tick() {
@@ -1960,11 +1986,114 @@ async function confirmRuleFromProposal(p, defaults, rf) {
     const r = await request('POST', `/api/proposals/${encodeURIComponent(p.id)}/rule`, ruleOverrides(defaults, rf.read()));
     rf.form.remove();
     setStatus(`Rule ${r && r.id ? r.id : ''} created`);
-    if (typeof loadRules === 'function') await loadRules();
+    await loadRules();
     await refreshProposalViews();
   } catch (e) { rf.msg.textContent = e.authText || errorText(e.status, e.body); }
   finally { rf.busy = false; }
 }
+
+/* ---------- rules, pause banner ---------- */
+function rulesMsg(text) { $('rulesMsg').textContent = text || ''; }
+function keyed(b, key) { b.dataset.focusKey = key; return b; }
+function ruleRow(r, now) {
+  const tr = el('tr');
+  const cell = (text) => { const td = el('td', '', text); tr.append(td); return td; };
+  cell(String(r.id));
+  cell(String(r.service_id));
+  cell(`${r.match_type}: ${r.match_value}`);
+  cell(sevFloorText(r.most_urgent_severity));
+  cell(countdown(r.expires_at, now));
+  cell(`${r.max_per_hour}/hour · ${r.max_per_incident}/incident · ${r.max_files} files · ${r.max_lines} lines`);
+  cell(`${r.uses_last_hour} / ${r.use_count}`);
+  const st = cell(stateLabel('rule', r.status));
+  if (r.status === 'suspended' && r.status_reason) st.append(el('div', 'meta', String(r.status_reason)));
+  cell(r.source_proposal_id ? String(r.source_proposal_id) : '');
+  const td = el('td');
+  const box = el('div', 'actions');
+  td.append(box);
+  tr.append(td);
+  if (r.status === 'active') box.append(keyed(actionButton('rule-pause', 'Pause', () => pauseRule(r)), `${r.id}:pause`));
+  if (r.status === 'active' || r.status === 'suspended') box.append(keyed(actionButton('rule-revoke', 'Revoke', () => revokeRule(r), 'ghost small warn'), `${r.id}:revoke`));
+  return tr;
+}
+let lastRulesKey = null;
+function renderRules() {
+  const list = Array.isArray(STATE.rules) ? STATE.rules : [];
+  const now = Date.now() / 1000;
+  const tools = $('rulesTools');
+  if (!tools.firstElementChild) tools.append(actionButton('rules-pause-all', 'Pause all', pauseAll, 'ghost small warn'));
+  const key = JSON.stringify([list, Math.floor(now / 30)]);
+  if (key === lastRulesKey) return;
+  lastRulesKey = key;
+  const body = $('rulesBody');
+  const f = document.activeElement;
+  const focusKey = f && body.contains(f) ? f.dataset.focusKey : null;
+  body.replaceChildren();
+  if (!list.length) {
+    const tr = el('tr');
+    const td = el('td', 'empty', 'No rules yet. Approve a fix, then choose "Always approve fixes like this".');
+    td.colSpan = 10;
+    tr.append(td);
+    body.append(tr);
+  }
+  for (const r of list) body.append(ruleRow(r, now));
+  if (focusKey) {
+    const n = Array.from(body.querySelectorAll('[data-focus-key]')).find((x) => x.dataset.focusKey === focusKey);
+    if (n) n.focus();
+  }
+}
+async function loadRules() {
+  try {
+    STATE.rules = await request('GET', '/api/rules');
+    renderRules();
+  } catch (e) { setStatus(e.authText || errorText(e.status, e.body)); }
+}
+async function loadApprovalStatus() {
+  try { STATE.approvalStatus = await request('GET', '/api/approvals/status'); }
+  catch (e) { return; }
+  renderPausedBanner();
+}
+// The banner is on every view while auto-approval is paused; Resume widens, so it needs the token.
+function renderPausedBanner() {
+  const s = STATE.approvalStatus;
+  const b = $('pausedBanner');
+  if (!s || !s.paused) { b.hidden = true; b.replaceChildren(); STATE.bannerKey = ''; return; }
+  const key = `${s.paused_by}|${s.paused_at}`;
+  if (key === STATE.bannerKey && !b.hidden) return;
+  STATE.bannerKey = key;
+  b.replaceChildren();
+  const when = typeof s.paused_at === 'number' ? ` at ${fmtTime(s.paused_at)}` : '';
+  b.append(el('span', '', `Auto-approval is paused. No rule approves anything. Paused by ${s.paused_by || 'unknown'}${when}. `));
+  b.append(actionButton('rules-resume', 'Resume', resumeRules));
+  b.hidden = false;
+}
+// Reduce actions: no token, one confirmation first. A 429 shows the hub's Retry-After through authText.
+async function reduceCall(path, okText) {
+  try { await request('POST', path); }
+  catch (e) { rulesMsg(e.authText || errorText(e.status, e.body)); return; }
+  rulesMsg(okText);
+  setStatus(okText);
+  await Promise.allSettled([loadRules(), loadApprovalStatus()]);
+}
+async function pauseRule(r) {
+  if (!window.confirm(`Pause rule ${r.id}? It stops approving until it is re-enabled (re-enabling needs the admin token).`)) return;
+  await reduceCall(`/api/rules/${encodeURIComponent(r.id)}/pause`, `Rule ${r.id} paused`);
+}
+async function revokeRule(r) {
+  if (!window.confirm(`Revoke rule ${r.id}? A revoked rule cannot be used again.`)) return;
+  await reduceCall(`/api/rules/${encodeURIComponent(r.id)}/revoke`, `Rule ${r.id} revoked`);
+}
+async function pauseAll() {
+  if (!window.confirm('Pause every rule? Nothing is auto-approved until you resume (resuming needs the admin token).')) return;
+  await reduceCall('/api/rules/pause', 'Auto-approval paused');
+}
+async function resumeRules() {
+  try { await request('POST', '/api/rules/resume'); }
+  catch (e) { setStatus(e.authText || errorText(e.status, e.body)); return; }
+  setStatus('Auto-approval resumed');
+  await Promise.allSettled([loadRules(), loadApprovalStatus()]);
+}
+ENTER.rules = () => { loadRules(); loadApprovalStatus(); };
 
 /* ---------- discovery: scan start and polling ---------- */
 // Nothing here runs on load: the scan starts only from the click handler of the button (R4.5).
@@ -2158,6 +2287,7 @@ function init() {
   $('svcAdd').onclick = () => renderServiceForm(null);
   applyLock();
   loadUiConfig();
+  loadApprovalStatus();
   showRoute();
   refresh(); fetchChat();
   startScheduler();
