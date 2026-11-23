@@ -82,6 +82,9 @@
   #selftest { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ghost); }
   form.unlock { padding: 12px clamp(16px, 4vw, 48px); border-bottom: 1px solid var(--line); background: var(--panel); }
   form.unlock .meta { overflow-wrap: anywhere; }
+  dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
+  dl.facts dt { color: var(--dim); }
+  dl.facts dd { margin: 0; overflow-wrap: anywhere; }
 
   /* guide */
   .guide-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
@@ -230,6 +233,26 @@
   </div>
   </div>
   <div id="view-services" data-view="services" hidden></div>
+  <div id="view-service" data-view="service" hidden>
+    <section id="svcDetail" aria-labelledby="svcName">
+      <h2 id="svcName">Service</h2>
+      <dl class="facts">
+        <dt>Id</dt><dd id="svcId"></dd>
+        <dt>State</dt><dd id="svcState"></dd>
+        <dt>Last seen</dt><dd id="svcSeen"></dd>
+        <dt>Errors per minute</dt><dd id="svcRate"></dd>
+        <dt>Open incidents</dt><dd id="svcOpen"></dd>
+      </dl>
+    </section>
+    <div data-slot="permissions"></div>
+    <div data-slot="live-log"></div>
+    <div data-slot="incidents"></div>
+    <div data-slot="proposals"></div>
+    <section id="svcGone" hidden>
+      <p>This service no longer exists.</p>
+      <button class="ghost" type="button" id="svcBack">Back to services</button>
+    </section>
+  </div><!-- /view-service -->
   <div id="view-discovery" data-view="discovery" hidden></div>
   <div id="view-rules" data-view="rules" hidden></div>
   <pre id="selftest" hidden></pre>
@@ -583,6 +606,7 @@ const firstOpen = () => state.incidents.find((i) => !i.resolved);
 const SCHED = [
   { id: 'overview-refresh', every: 2500, last: 0, view: 'overview', run: () => refresh() },
   { id: 'overview-chat', every: 1000, last: 0, view: 'overview', run: () => fetchChat() },
+  { id: 'service-detail', every: 5000, last: 0, view: 'service', run: () => loadServiceDetail() },
 ];
 function tick() {
   const now = Date.now();
@@ -1003,6 +1027,50 @@ function showRoute() {
   });
   if (ENTER[r.view]) ENTER[r.view](r);
 }
+
+/* ---------- service detail ---------- */
+function setSlotsHidden(hidden) { document.querySelectorAll('#view-service [data-slot]').forEach((n) => { n.hidden = hidden; }); }
+function showServiceGone() {
+  $('svcDetail').hidden = true;
+  setSlotsHidden(true);
+  $('svcGone').hidden = false;
+  $('svcBack').focus();
+}
+function renderServiceHeader(s) {
+  $('svcDetail').hidden = false;
+  $('svcGone').hidden = true;
+  setSlotsHidden(false);
+  $('svcName').textContent = String(s.name);
+  $('svcId').textContent = String(s.id);
+  $('svcState').textContent = stateLabel('service', s.state);
+  $('svcSeen').textContent = relTime(s.last_seen, Date.now() / 1000);
+  $('svcRate').textContent = String(s.error_rate);
+  $('svcOpen').textContent = String(s.open_incidents);
+}
+async function loadServiceDetail() {
+  const d = STATE.serviceDetail;
+  if (!d) return;
+  try {
+    const s = await request('GET', `/api/services/${encodeURIComponent(d.id)}`);
+    if (STATE.serviceDetail !== d) return;
+    d.status = s;
+    renderServiceHeader(s);
+  } catch (e) {
+    if (STATE.serviceDetail !== d) return;
+    if (e.status === 404) showServiceGone();
+    else setStatus(errorText(e.status, e.body));
+  }
+}
+function openServiceDetail(id) {
+  STATE.serviceDetail = { id, status: null };
+  $('svcName').textContent = id;
+  for (const k of ['svcId', 'svcState', 'svcSeen', 'svcRate', 'svcOpen']) $(k).textContent = '';
+  $('svcGone').hidden = true;
+  $('svcDetail').hidden = false;
+  setSlotsHidden(false);
+  loadServiceDetail();
+}
+ENTER.service = (r) => openServiceDetail(r.id);
 
 /* ==== INIT ==== */
 function init() {
