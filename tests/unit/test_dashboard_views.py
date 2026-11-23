@@ -148,3 +148,29 @@ def test_form_helpers_have_cases():
         assert names.count(fn) >= 2, fn
     text = cases_text()
     assert "code_folder: null" in text  # a cleared code folder is sent as null
+
+
+# ---- 5.3 permissions panel -----------------------------------------------------------------------------
+
+def test_permissions_panel_markup():
+    seg = segment('data-slot="permissions"', "</details>")
+    assert "<details" in seg and "<summary>Kiro permissions</summary>" in seg
+    assert "ChimericMesh never writes this file; paste it yourself." in seg
+    assert re.search(r'<pre id="permText"', seg) and 'id="permCopy"' in seg
+
+
+def test_permissions_text_is_fetched_on_first_open_only_and_shown_as_text():
+    panel = code("renderPermissionsPanel")
+    load = code("loadPermissions")
+    assert "'toggle'" in panel or "ontoggle" in panel
+    assert "/permissions-snippet`" in load and "'text'" in load
+    assert "textContent" in load
+    assert "e.status === 404" in load and "'not available yet'" in load and "toast(" not in load
+    init = ds.strip_comments(ds.section("INIT"))
+    assert "loadPermissions(" not in init and "permissions-snippet" not in init
+
+
+def test_copy_uses_the_clipboard_with_a_select_fallback():
+    copy = code("copyPermissions")
+    assert "navigator.clipboard.writeText(" in copy
+    assert "selectNodeContents(" in copy and "Ctrl+C" in copy

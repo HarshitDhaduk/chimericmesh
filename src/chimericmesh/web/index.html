@@ -102,6 +102,9 @@
   .table-wrap { overflow-x: auto; }
   table.sources { border-collapse: collapse; width: 100%; }
   table.sources td { padding: 4px; vertical-align: bottom; }
+  details.perm { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 20px; }
+  details.perm summary { cursor: pointer; color: var(--violet); font-weight: 700; }
+  details.perm pre { white-space: pre-wrap; max-height: 360px; overflow: auto; }
 
   /* guide */
   .guide-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
@@ -270,7 +273,16 @@
         <dt>Open incidents</dt><dd id="svcOpen"></dd>
       </dl>
     </section>
-    <div data-slot="permissions"></div>
+    <div data-slot="permissions">
+      <details id="permPanel" class="perm">
+        <summary>Kiro permissions</summary>
+        <p>ChimericMesh never writes this file; paste it yourself.</p>
+        <p class="meta">The text has two sections: prompt mode (Kiro asks before each change) and autonomous mode.</p>
+        <pre id="permText" class="sample"></pre>
+        <div class="actions"><button class="ghost small" type="button" id="permCopy">Copy</button></div>
+        <div class="meta" id="permMsg" role="status" aria-live="polite"></div>
+      </details>
+    </div>
     <div data-slot="live-log"></div>
     <div data-slot="incidents"></div>
     <div data-slot="proposals"></div>
@@ -684,7 +696,8 @@ function handle401(path, status, retryAfter) {
   applyLock();
   return out.text;
 }
-async function request(method, path, body) {
+// `as` is 'json' (default) or 'text' (the permissions snippet is plain text).
+async function request(method, path, body, as) {
   if (typeof path !== 'string' || !(path === '/' || path.startsWith('/api/'))) throw new ApiError(0, { detail: 'bad path' }, null);
   const headers = Object.assign({}, authHeaders(method, path));
   const opts = { method, headers };
@@ -697,6 +710,7 @@ async function request(method, path, body) {
     throw err;
   }
   if (r.status === 204) return null;
+  if (as === 'text') { try { return await r.text(); } catch (e) { return ''; } }
   try { return await r.json(); } catch (e) { return null; }
 }
 // The Overview's short names for request(): a read and a JSON post. Errors are ApiError (message = status).
@@ -1379,6 +1393,7 @@ async function loadServiceDetail() {
 }
 function openServiceDetail(id) {
   STATE.serviceDetail = { id, status: null };
+  resetPermissionsPanel();
   $('svcName').textContent = id;
   for (const k of ['svcId', 'svcState', 'svcSeen', 'svcRate', 'svcOpen']) $(k).textContent = '';
   $('svcGone').hidden = true;
@@ -1388,12 +1403,59 @@ function openServiceDetail(id) {
 }
 ENTER.service = (r) => openServiceDetail(r.id);
 
+/* ---------- Kiro permissions panel ---------- */
+// Fetched on the first open of the panel for this service, never on page load; shown as text only.
+function renderPermissionsPanel() {
+  const panel = $('permPanel');
+  panel.addEventListener('toggle', () => { if (panel.open) loadPermissions(); });
+  $('permCopy').onclick = copyPermissions;
+}
+function resetPermissionsPanel() {
+  STATE.permFor = null;
+  $('permPanel').open = false;
+  $('permText').textContent = '';
+  $('permMsg').textContent = '';
+}
+async function loadPermissions() {
+  const d = STATE.serviceDetail;
+  if (!d || STATE.permFor === d.id) return;
+  STATE.permFor = d.id;
+  $('permMsg').textContent = 'Loading...';
+  try {
+    const text = await request('GET', `/api/services/${encodeURIComponent(d.id)}/permissions-snippet`, undefined, 'text');
+    if (STATE.serviceDetail !== d) return;
+    $('permText').textContent = String(text);
+    $('permMsg').textContent = '';
+  } catch (e) {
+    STATE.permFor = null; // the next open tries again
+    if (STATE.serviceDetail !== d) return;
+    $('permMsg').textContent = e.status === 404 ? 'not available yet' : errorText(e.status, e.body);
+  }
+}
+function copyPermissions() {
+  const pre = $('permText');
+  const text = pre.textContent;
+  if (!text) return;
+  const fallback = () => {
+    const range = document.createRange();
+    range.selectNodeContents(pre);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    $('permMsg').textContent = 'Could not copy: the text is selected, press Ctrl+C';
+  };
+  try { navigator.clipboard.writeText(text).then(() => { $('permMsg').textContent = 'Copied'; }, fallback); }
+  catch (e) { fallback(); }
+}
+
 /* ==== INIT ==== */
 function init() {
   if (here.hash === '#selftest') { runSelfTest(); return; } // no request of any kind in this mode
   document.querySelectorAll('nav [data-nav]').forEach((b) => { b.onclick = () => { here.hash = b.dataset.nav === 'overview' ? '#/' : `#/${b.dataset.nav}`; }; });
   window.addEventListener('hashchange', showRoute);
   wireUnlock();
+  renderPermissionsPanel();
+  $('svcBack').onclick = () => { here.hash = '#/services'; };
   $('svcAdd').onclick = () => renderServiceForm(null);
   applyLock();
   loadUiConfig();

@@ -83,22 +83,22 @@ Conventions for every task: write the tests first and watch them fail, then impl
     - Run the app-level token test and the existing `test_web_terminal.py` unchanged.
     - _Requirements: 2.3, 6.5_
 
-- [ ] 5. Services overview, form and permissions panel
-  - [ ] 5.0 Build the service detail skeleton and route
+- [x] 5. Services overview, form and permissions panel
+  - [x] 5.0 Build the service detail skeleton and route
     - Write the tests first in `tests/unit/test_dashboard_views.py` (M3): `parseRoute('#/services/web')` gives `{view: 'service', id: 'web'}` (self-test case); the page has one detail container `#view-service` with a header (name, id, state, last seen, error rate, open incidents) and empty named placeholders for the permissions panel, the live log, the incidents and the proposals (`data-slot` attributes with literal values); the route handler fetches `GET /api/services/<id>` (id through `encodeURIComponent`) and on 404 shows "service no longer exists" and a button back to the list (no error toast); the detail view's scheduler tasks exist with view `service` and are not run on other views.
     - Edit `index.html`: `renderServiceDetail` skeleton and the route wiring. Later tasks (5.1 card links, 5.3, 6.2, 7.1, 7.2) fill the placeholders.
     - _Requirements: 3.1, 6.1_
-  - [ ] 5.1 Build the services list
+  - [x] 5.1 Build the services list
     - Write `tests/unit/test_dashboard_views.py` first (static): the view code calls `GET /api/services` and the scheduler task for it has `every: 5000` and view `services`; the card renderer writes name, `stateLabel`, `relTime`, `error_rate`, `open_incidents`, and per source `status` text and `lines_dropped` using `el(...)`; the built-in card gets the text "built in" and no Edit control; the empty-state text `No services yet. Run discovery or add one.` appears once with two buttons (`Discover local apps`, `Add service`); `sortServices` and `stateLabel` have self-test cases (open incidents first, then `error_rate`, `unassigned` last on ties; every state and status has a text label: `active`, `idle`, `never seen`, `running`, `missing`, `unreadable`, `error`, `stopped`, `unknown`); no `GET` or `POST` to a discovery route is issued from the services code.
     - Edit `index.html`: `renderServices`, the card CSS (single column at 360 px, `overflow-wrap: anywhere`), the scheduler task, the nav wiring.
     - Manual browser check: three services (one idle, one erroring, one never seen, plus the built-in) show the right states with the erroring one first (Success Criterion 1); the list stops refreshing in a hidden tab.
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.6, 8.2, Success Criterion 1_
-  - [ ] 5.2 Build the add and edit form
+  - [x] 5.2 Build the add and edit form
     - Add to `tests/unit/test_dashboard_views.py` first: the form has fields id (create only), name, hosts, app names, protocols (checkboxes), code folder, and a log-source table (path, format select, enabled, remove), each with a `<label for>`; the format and protocol options are built from `uiConfig.formats` and `uiConfig.protocols`; the save routine calls `POST /api/services`, then the `diffSources` operations in order, stops at the first failure and shows `errorText(...)` through `textContent`; the edit path sends `PATCH` with changed fields only and `null` for a cleared code folder; the save button is created with `actionButton('svc-save', ...)`; `diffSources` and `buildAcceptBody` (shared helper style) have cases for add, update, remove and no change.
     - Edit `index.html`: `renderServiceForm`, `saveService`, pure `diffSources`.
     - Manual browser check: create a service with one log path, see a validation message from the server verbatim (a bad path), fix it and save; edit and clear the code folder; a failing second step leaves the first step's service in edit mode.
     - _Requirements: 3.5, 2.4_
-  - [ ] 5.3 Build the Kiro permissions panel
+  - [x] 5.3 Build the Kiro permissions panel
     - Add to `tests/unit/test_dashboard_views.py` first: the detail view has a `<details>` panel titled `Kiro permissions` that fetches `/api/services/<id>/permissions-snippet` on first open, shows it with `textContent` in a `<pre>`, has a Copy button using `navigator.clipboard.writeText` with a failure branch that selects the text, and contains the fixed sentence `ChimericMesh never writes this file; paste it yourself.`; the snippet is not fetched on page load; a 404 shows "not available yet" without an error toast.
     - Edit `index.html`: `renderPermissionsPanel`, filling the `permissions` slot of the skeleton built in 5.0.
     - Manual browser check (the detail route exists since 5.0): with `agent-loop` merged, the text includes the prompt mode and autonomous mode sections; copy and paste into a permissions file (Kiro check, counted in the effort estimate). If `agent-loop` is not merged, check only the "not available yet" path.
