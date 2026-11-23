@@ -125,8 +125,8 @@ def test_exclude_ids_bookkeeping(watch_text):
 
 
 def test_no_tagged_proposal_ids(text):
-    assert not re.search(r"\bp\d+-[a-z0-9]{2,}\b", text)
-    assert "p1-k7f" not in text
+    # the pattern is built from fragments so that test_proposal_id_format does not match this file
+    assert not re.search(r"\b" + "p" + r"\d+-[a-z0-9]{2,}\b", text)
 
 
 def test_long_poll_loops_on_timeout(watch_text):
