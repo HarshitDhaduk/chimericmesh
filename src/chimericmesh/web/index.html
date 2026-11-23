@@ -155,6 +155,9 @@
   .pill.denied { color: var(--blood); }
   .pill.done { color: var(--violet); }
   .pill.auto { color: var(--violet); font-weight: 700; }
+  form.rule-form { display: grid; gap: 10px; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; }
+  form.rule-form .grid-n { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
+  form.rule-form input[type=number] { width: 100%; }
   .pill.unknown { color: var(--dim); }
 
   #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 10; background: #2a0f18; color: #ffd6de;
@@ -436,6 +439,44 @@ function approvalText(p) {
   }
   return '';
 }
+// Rule form helpers (7.3, 8.2). Numbers come from the hub's bounds when it sent them, else from the fallbacks.
+function canMakeRule(p) {
+  const a = p && p.approval;
+  return Boolean(a && a.by === 'user' && (p.status === 'approved' || (p.status === 'done' && p.verification_result === 'passed')));
+}
+function boundOf(bounds, key, fallback) {
+  const b = bounds && typeof bounds === 'object' ? bounds[key] : null;
+  const src = b && typeof b === 'object' ? b : {};
+  const num = (v, d) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+  return { min: num(src.min, fallback.min), max: num(src.max, fallback.max), default: num(src.default, fallback.default) };
+}
+function clampInt(v, lo, hi) {
+  const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+  return Math.min(hi, Math.max(lo, Math.round(n)));
+}
+function sevFloorText(n) {
+  const i = Number(n);
+  return Number.isInteger(i) && i >= 0 && i <= 7 ? `${sevName(i)} (${i}) or more urgent` : 'unknown';
+}
+// The hub takes an absolute expires_at; the form shows days. Computed from the hub's own default (7 days),
+// never from the browser clock; n is clamped to 1..29 so the 30 day cap cannot be passed.
+function expiryFromDays(serverExpiryDefault, n) {
+  if (typeof serverExpiryDefault !== 'number' || !Number.isFinite(serverExpiryDefault)) return null;
+  if (typeof n !== 'number' || !Number.isInteger(n)) return null;
+  return serverExpiryDefault + (Math.min(29, Math.max(1, n)) - 7) * 86400;
+}
+// The fields of a rule form that differ from the hub's defaults (the proposal route takes only these).
+function ruleOverrides(defaults, v) {
+  const out = {};
+  for (const k of ['most_urgent_severity', 'max_per_hour', 'max_per_incident', 'max_files', 'max_lines']) {
+    if (v[k] !== null && v[k] !== undefined && v[k] !== defaults[k]) out[k] = v[k];
+  }
+  const when = expiryFromDays(defaults.expires_at, v.days);
+  if (v.days !== 7 && when !== null) out.expires_at = when;
+  if (typeof v.note === 'string' && v.note !== (defaults.note || '')) out.note = v.note;
+  return out;
+}
 function isNewer(id, lastId) { return typeof id === 'number' && Number.isFinite(id) && id > lastId; }
 function lockState(uiConfig, hasToken) {
   const flag = uiConfig ? uiConfig.enforce_access : null;
@@ -637,6 +678,34 @@ const SELFTEST_CASES = [
   { name: 'approvalText', args: [{ approval: { by: 'rule', rule_id: 'r2', rule_status_now: 'expired' } }], expect: 'auto-approved by rule r2 (rule expired)' },
   { name: 'approvalText', args: [{ approval: { by: 'rule', rule_id: 'r3', rule_status_now: null } }], expect: 'auto-approved by rule r3 (rule status unknown)' },
   { name: 'approvalText', args: [{ approval: { by: 'x' } }], expect: '' },
+  { name: 'canMakeRule', args: [{ status: 'approved', approval: { by: 'user' } }], expect: true },
+  { name: 'canMakeRule', args: [{ status: 'done', verification_result: 'passed', approval: { by: 'user' } }], expect: true },
+  { name: 'canMakeRule', args: [{ status: 'done', verification_result: 'failed', approval: { by: 'user' } }], expect: false },
+  { name: 'canMakeRule', args: [{ status: 'approved', approval: { by: 'rule' } }], expect: false },
+  { name: 'canMakeRule', args: [{ status: 'pending', approval: null }], expect: false },
+  { name: 'canMakeRule', args: [{ status: 'approved' }], expect: false },
+  { name: 'boundOf', args: [{ max_files: { min: 1, max: 9, default: 2 } }, 'max_files', { min: 1, max: 20, default: 5 }], expect: { min: 1, max: 9, default: 2 } },
+  { name: 'boundOf', args: [{}, 'max_files', { min: 1, max: 20, default: 5 }], expect: { min: 1, max: 20, default: 5 } },
+  { name: 'boundOf', args: [null, 'x', { min: 1, max: 2, default: 1 }], expect: { min: 1, max: 2, default: 1 } },
+  { name: 'clampInt', args: ['5', 1, 10], expect: 5 },
+  { name: 'clampInt', args: [0, 1, 10], expect: 1 },
+  { name: 'clampInt', args: [99, 1, 10], expect: 10 },
+  { name: 'clampInt', args: ['x', 1, 10], expect: null },
+  { name: 'clampInt', args: ['', 1, 10], expect: null },
+  { name: 'sevFloorText', args: [3], expect: 'err (3) or more urgent' },
+  { name: 'sevFloorText', args: [4], expect: 'warning (4) or more urgent' },
+  { name: 'sevFloorText', args: [9], expect: 'unknown' },
+  { name: 'expiryFromDays', args: [1000000, 1], expect: 481600 },
+  { name: 'expiryFromDays', args: [1000000, 7], expect: 1000000 },
+  { name: 'expiryFromDays', args: [1000000, 29], expect: 2900800 },
+  { name: 'expiryFromDays', args: [1000000, 30], expect: 2900800 },
+  { name: 'expiryFromDays', args: [1000000, 0], expect: 481600 },
+  { name: 'expiryFromDays', args: [1000000, NaN], expect: null },
+  { name: 'expiryFromDays', args: [1000000, 2.5], expect: null },
+  { name: 'ruleOverrides', args: [{ most_urgent_severity: 3, max_per_hour: 3, max_per_incident: 1, max_files: 5, max_lines: 100, expires_at: 1000000, note: '' }, { most_urgent_severity: 3, max_per_hour: 3, max_per_incident: 1, max_files: 5, max_lines: 100, days: 7, note: '' }], expect: {} },
+  { name: 'ruleOverrides', args: [{ most_urgent_severity: 3, max_per_hour: 3, max_lines: 100, expires_at: 1000000 }, { most_urgent_severity: 3, max_per_hour: 3, max_lines: 50, days: 7 }], expect: { max_lines: 50 } },
+  { name: 'ruleOverrides', args: [{ max_files: 5, expires_at: 1000000 }, { max_files: 5, days: 10 }], expect: { expires_at: 1259200 } },
+  { name: 'ruleOverrides', args: [{ max_files: 5, expires_at: 1000000, note: 'a' }, { max_files: null, days: 7, note: 'b' }], expect: { note: 'b' } },
   { name: 'isNewer', args: [5, 4], expect: true },
   { name: 'isNewer', args: [4, 4], expect: false },
   { name: 'isNewer', args: [3, 4], expect: false },
@@ -697,7 +766,7 @@ const SELFTEST_CASES = [
 function runSelfTest() {
   const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure,
     matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk, sortServices,
-    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText };
+    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText, canMakeRule, boundOf, clampInt, sevFloorText, expiryFromDays, ruleOverrides };
   const failures = [];
   for (const c of SELFTEST_CASES) {
     let got;
@@ -961,6 +1030,14 @@ function renderProposalCard(p, incidentText) {
       actionButton('proposal-deny', 'Deny', () => decideProposal(p, false, msg), 'ghost small warn'),
       actionButton('proposal-withdraw', 'Withdraw', () => withdrawProposal(p, msg)));
     d.append(a);
+  }
+  if (canMakeRule(p)) {
+    const more = el('div', 'actions');
+    const b = el('button', 'ghost small', 'Always approve fixes like this');
+    b.type = 'button';
+    b.onclick = () => openRuleFromProposal(p, d, msg);
+    more.append(b);
+    d.append(more);
   }
   d.append(msg);
   return d;
@@ -1785,6 +1862,108 @@ function liveVisibility() {
   if (!L || STATE.route.view !== 'service') return;
   if (document.visibilityState === 'hidden') closeLive(false);
   else { L.fails = 0; openLive(); }
+}
+
+/* ---------- rule form and rule from a proposal ---------- */
+const RULE_FALLBACK = {
+  most_urgent_severity: { min: 3, max: 4, default: 3 },
+  max_per_hour: { min: 1, max: 10, default: 3 },
+  max_per_incident: { min: 1, max: 3, default: 1 },
+  max_files: { min: 1, max: 20, default: 5 },
+  max_lines: { min: 1, max: 500, default: 100 },
+  expires_days: { min: 1, max: 29, default: 7 },
+};
+let ruleFormSeq = 0;
+// One read of the approval status for the form's bounds, only when the page has none yet.
+async function ensureApprovalStatus() {
+  if (STATE.approvalStatus) return STATE.approvalStatus;
+  try { STATE.approvalStatus = await request('GET', '/api/approvals/status'); } catch (e) { /* the fallback numbers are used */ }
+  return STATE.approvalStatus || null;
+}
+function numberInput(id, b, value) {
+  const i = el('input');
+  i.type = 'number'; i.id = id; i.min = String(b.min); i.max = String(b.max); i.step = '1'; i.value = String(value);
+  return i;
+}
+// The shared rule form. `defaults` is the hub's rule-defaults (or null for a new rule); the caller adds its own
+// confirm button to `actions`, so the lock registry sees the right action id.
+function renderRuleForm(defaults, mode) {
+  const n = ++ruleFormSeq;
+  const bounds = STATE.approvalStatus && STATE.approvalStatus.bounds;
+  const sb = boundOf(bounds, 'most_urgent_severity', RULE_FALLBACK.most_urgent_severity);
+  const hb = boundOf(bounds, 'max_per_hour', RULE_FALLBACK.max_per_hour);
+  const ib = boundOf(bounds, 'max_per_incident', RULE_FALLBACK.max_per_incident);
+  const fb = boundOf(bounds, 'max_files', RULE_FALLBACK.max_files);
+  const lb = boundOf(bounds, 'max_lines', RULE_FALLBACK.max_lines);
+  const eb = boundOf(bounds, 'expires_days', RULE_FALLBACK.expires_days);
+  const dayBound = { min: Math.max(1, eb.min), max: Math.min(29, eb.max), default: 7 };
+  const d = defaults || {};
+  const pick = (key, b) => (typeof d[key] === 'number' ? d[key] : b.default);
+  const f = el('form', 'rule-form');
+  f.append(el('h4', '', mode === 'proposal' ? 'Always approve fixes like this' : mode === 'edit' ? 'Edit rule' : 'New rule'));
+  const facts = el('dl', 'facts');
+  facts.append(el('dt', '', 'Service'), el('dd', '', String(d.service_id || '')), el('dt', '', 'Matches'), el('dd', '', `${d.match_type || ''} ${d.match_value || ''}`));
+  f.append(facts);
+  const sev = numberInput(`ruleF${n}Sev`, sb, pick('most_urgent_severity', sb));
+  const per = numberInput(`ruleF${n}Hour`, hb, pick('max_per_hour', hb));
+  const inc = numberInput(`ruleF${n}Inc`, ib, pick('max_per_incident', ib));
+  const files = numberInput(`ruleF${n}Files`, fb, pick('max_files', fb));
+  const lines = numberInput(`ruleF${n}Lines`, lb, pick('max_lines', lb));
+  const days = numberInput(`ruleF${n}Days`, dayBound, dayBound.default);
+  const note = textInput(`ruleF${n}Note`, d.note || '', 200);
+  const grid = el('div', 'grid-n');
+  grid.append(field('Severity floor (0 most urgent)', sev), field('Max per hour', per), field('Max per incident', inc),
+    field('Max files', files), field('Max lines', lines), field('Expires in (days)', days));
+  f.append(grid, field('Note (optional)', note));
+  const words = el('p', 'meta');
+  const read = () => ({
+    most_urgent_severity: clampInt(sev.value, sb.min, sb.max), max_per_hour: clampInt(per.value, hb.min, hb.max),
+    max_per_incident: clampInt(inc.value, ib.min, ib.max), max_files: clampInt(files.value, fb.min, fb.max),
+    max_lines: clampInt(lines.value, lb.min, lb.max), days: clampInt(days.value, dayBound.min, dayBound.max), note: note.value.trim(),
+  });
+  const describe = () => {
+    const v = read();
+    words.textContent = `This rule approves fixes for service ${d.service_id || '?'} that match ${d.match_type || '?'} "${d.match_value || '?'}", for incidents at ${sevFloorText(v.most_urgent_severity)}, at most ${v.max_per_hour} per hour and ${v.max_per_incident} per incident, up to ${v.max_files} files and ${v.max_lines} lines each, for ${v.days} day(s).`;
+  };
+  f.addEventListener('input', describe);
+  describe();
+  f.append(words);
+  const actions = el('div', 'actions');
+  const msg = el('div', 'meta');
+  msg.setAttribute('role', 'status');
+  f.append(actions, msg);
+  return { form: f, read, actions, msg, first: sev };
+}
+async function openRuleFromProposal(p, host, note) {
+  const open = host.querySelector('form.rule-form');
+  if (open) { open.querySelector('input').focus(); return; }
+  note.textContent = 'Loading...';
+  let defaults;
+  try { defaults = await request('GET', `/api/proposals/${encodeURIComponent(p.id)}/rule-defaults`); }
+  catch (e) { note.textContent = e.authText || errorText(e.status, e.body); return; }
+  await ensureApprovalStatus();
+  note.textContent = '';
+  const rf = renderRuleForm(defaults, 'proposal');
+  const cancel = el('button', 'ghost', 'Cancel');
+  cancel.type = 'button';
+  cancel.onclick = () => { rf.form.remove(); };
+  rf.actions.append(actionButton('rule-from-proposal', 'Confirm rule', () => confirmRuleFromProposal(p, defaults, rf), ''), cancel);
+  host.append(rf.form);
+  rf.first.focus();
+}
+// The only place that creates a rule from a proposal: only after the user pressed Confirm.
+async function confirmRuleFromProposal(p, defaults, rf) {
+  if (rf.busy) return;
+  rf.busy = true;
+  rf.msg.textContent = 'Saving...';
+  try {
+    const r = await request('POST', `/api/proposals/${encodeURIComponent(p.id)}/rule`, ruleOverrides(defaults, rf.read()));
+    rf.form.remove();
+    setStatus(`Rule ${r && r.id ? r.id : ''} created`);
+    if (typeof loadRules === 'function') await loadRules();
+    await refreshProposalViews();
+  } catch (e) { rf.msg.textContent = e.authText || errorText(e.status, e.body); }
+  finally { rf.busy = false; }
 }
 
 /* ---------- discovery: scan start and polling ---------- */

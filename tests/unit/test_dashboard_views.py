@@ -413,3 +413,55 @@ def test_approval_text_has_cases_for_every_shape():
                   "(rule expired)", "(rule status unknown)"):
         assert piece in text, piece
     assert "approvalText" in ds.functions(pure_block())
+
+# ---- 7.3 always approve fixes like this -------------------------------------------------------------------
+def test_the_rule_button_shows_only_when_can_make_rule():
+    card = code("renderProposalCard")
+    assert re.search(r"if \(canMakeRule\(p\)\)", card)
+    assert "'Always approve fixes like this'" in card and "openRuleFromProposal(" in card
+    assert "canMakeRule" in ds.functions(pure_block())
+    assert case_names().count("canMakeRule") >= 6
+def test_opening_the_form_reads_the_defaults_and_creates_nothing():
+    script = ds.strip_comments(ds.script_text())
+    opn = code("openRuleFromProposal")
+    assert "request('GET', `/api/proposals/${encodeURIComponent(p.id)}/rule-defaults`)" in opn
+    assert "request('POST'" not in opn
+    # the only POST to .../rule is in the confirm handler
+    posts = re.findall(r"request\('POST', `/api/proposals/\$\{[^}]*\}/rule`", script)
+    assert len(posts) == 1 and "request('POST', `/api/proposals/${encodeURIComponent(p.id)}/rule`" in code("confirmRuleFromProposal")
+    assert "actionButton('rule-from-proposal'" in opn
+    assert "ensureApprovalStatus(" in opn
+def test_status_is_fetched_once_for_the_bounds_when_empty():
+    body = code("ensureApprovalStatus")
+    assert "if (STATE.approvalStatus) return STATE.approvalStatus;" in body
+    assert "request('GET', '/api/approvals/status')" in body and "STATE.approvalStatus =" in body
+def test_form_inputs_take_their_limits_from_the_bounds():
+    form = code("renderRuleForm")
+    assert "boundOf(" in form and "STATE.approvalStatus" in form and "RULE_FALLBACK" in form
+    for key in ("most_urgent_severity", "max_per_hour", "max_per_incident", "max_files", "max_lines", "expires_days"):
+        assert key in form or key in ds.strip_comments(ds.script_text()), key
+    assert "i.min = String(b.min)" in code("numberInput") and "i.max = String(b.max)" in code("numberInput")
+    assert "sevFloorText(" in form
+    assert "Date.now" not in form and "Date.now" not in code("openRuleFromProposal") and "Date.now" not in code("confirmRuleFromProposal")
+    script = ds.strip_comments(ds.script_text())
+    assert re.search(r"most_urgent_severity: \{ min: 3, max: 4, default: 3 \}", script)
+    assert re.search(r"max_per_hour: \{ min: 1, max: 10, default: 3 \}", script)
+    assert re.search(r"max_per_incident: \{ min: 1, max: 3, default: 1 \}", script)
+    assert re.search(r"max_files: \{ min: 1, max: 20, default: 5 \}", script)
+    assert re.search(r"max_lines: \{ min: 1, max: 500, default: 100 \}", script)
+def test_confirm_sends_only_changed_fields_and_uses_the_server_expiry():
+    conf = code("confirmRuleFromProposal")
+    assert "ruleOverrides(defaults" in conf and "errorText(" in conf and "textContent" in conf
+    assert "rf.form.remove()" in conf
+    assert "loadRules" in conf
+    over = ds.functions(pure_block())["ruleOverrides"]
+    assert "expiryFromDays(defaults.expires_at" in over and "Date" not in over
+    for fn in ("boundOf", "clampInt", "sevFloorText", "expiryFromDays", "ruleOverrides"):
+        assert fn in ds.functions(pure_block()), fn
+def test_pure_rule_helpers_have_the_documented_cases():
+    names = case_names()
+    assert names.count("expiryFromDays") >= 7 and names.count("clampInt") >= 5
+    assert names.count("boundOf") >= 3 and names.count("sevFloorText") >= 3 and names.count("ruleOverrides") >= 4
+    text = cases_text()
+    assert "name: 'expiryFromDays', args: [1000000, NaN], expect: null" in text
+    assert "name: 'expiryFromDays', args: [1000000, 2.5], expect: null" in text
