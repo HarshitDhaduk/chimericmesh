@@ -206,7 +206,7 @@ The custom agent **`mesh-watcher`** (`.kiro/agents/mesh-watcher.json`) keeps one
 
 Setup: trust the workspace in Kiro (an untrusted workspace does not load the profile or its MCP server), start the hub (`python -m chimericmesh`), register a service with a code folder, and select `mesh-watcher`. Tools added for the loop: `list_services`, `get_service`, `service_events`, `explain_log_window`, `find_code_for_service`, `verify_proposal` and `wait_for_work`. They only read; none takes the admin token.
 
-**Workspace root.** The hub finds the workspace root by walking up from its working directory to the nearest folder that has `.kiro/`; set `CHIMERICMESH_WORKSPACE_ROOT` (an existing absolute directory) to override it. The permissions snippet uses it to write workspace-relative paths. `files` in `propose_remediation` and `verify_proposal` are absolute paths; a relative path fails verify.
+**Workspace root.** The hub finds the workspace root by walking up from its working directory to the nearest folder that has `.kiro/`; set `CHIMERICMESH_WORKSPACE_ROOT` (an existing absolute directory) to override it. The permissions snippet uses it to write workspace-relative paths. `files` in `verify_proposal` (and in the hook) are absolute paths; a relative path fails verify. `files` in `propose_remediation` are written relative to the service's code folder, as the proposal check of the standing rules requires.
 
 ### Prompt mode (default) and autonomous mode
 

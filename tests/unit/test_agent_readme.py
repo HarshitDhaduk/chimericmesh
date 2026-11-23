@@ -66,7 +66,7 @@ def test_demo_precondition_and_proposal_list_limits(body):
 
 
 def test_workspace_root_and_absolute_files(body):
-    for phrase in ("walking up", ".kiro/", "CHIMERICMESH_WORKSPACE_ROOT", "absolute paths"):
+    for phrase in ("walking up", ".kiro/", "CHIMERICMESH_WORKSPACE_ROOT", "`files` in `verify_proposal` (and in the hook) are absolute paths",\n                   "`files` in `propose_remediation` are written relative to the service's code folder"):
         assert phrase in body, phrase
 
 
