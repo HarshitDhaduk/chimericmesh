@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Verify writes against the active proposal",
+      "trigger": "PreToolUse",
+      "description": "Optional. Blocks a write unless the hub's verify route accepts it for the proposal named in .chimericmesh-active-proposal",
+      "matcher": "^(fs_write|fs_append|str_replace)$",
+      "action": {
+        "type": "command",
+        "command": "python .kiro/hooks/mesh_verify_write.py"
+      }
+    }
+  ]
+}
