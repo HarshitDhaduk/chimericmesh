@@ -100,6 +100,7 @@
   .field label { color: var(--dim); font-size: .85rem; }
   fieldset { border: 1px solid var(--line); border-radius: 4px; display: flex; flex-wrap: wrap; gap: 12px; }
   .table-wrap { overflow-x: auto; }
+  .cand { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; border-top: 1px dashed var(--line); padding-top: 8px; }
   table.sources { border-collapse: collapse; width: 100%; }
   table.sources td { padding: 4px; vertical-align: bottom; }
   details.perm { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 20px; }
@@ -615,6 +616,8 @@ const SELFTEST_CASES = [
   { name: 'diffSources', args: [[{ id: 's1', path: '/l', format: 'ncsa', enabled: true }], [{ id: 's1', path: '/m', format: 'ncsa', enabled: true }]], expect: { add: [{ index: 0, path: '/m', format: 'ncsa', enabled: true }], update: [], remove: ['s1'] } },
   { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', code_folder: ' ', app_names: [], rows: [{ checked: true, path: '/x', format: 'ncsa', watched_by: null }, { checked: false, path: '/y', format: 'w3c' }] }], expect: { id: 'a', name: 'A', log_paths: [{ path: '/x', format: 'ncsa' }] } },
   { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', code_folder: '/src', app_names: ['p'], rows: [{ checked: true, path: '/x', format: 'ncsa', watched_by: 'web' }] }], expect: { id: 'a', name: 'A', log_paths: [], code_folder: '/src', app_names: ['p'] } },
+  { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', code_folder: '', app_names: [], rows: [{ checked: false, path: '/x', format: 'ncsa' }] }], expect: { id: 'a', name: 'A', log_paths: [] } },
+  { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', rows: [{ checked: true, path: '/x', format: 'ncsa', watched_by: null }, { checked: true, path: '/y', format: 'w3c' }] }], expect: { id: 'a', name: 'A', log_paths: [{ path: '/x', format: 'ncsa' }, { path: '/y', format: 'w3c' }] } },
 ];
 function runSelfTest() {
   const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure,
@@ -1477,12 +1480,15 @@ function renderDiscovery() {
   $('discExplainer').textContent = DISCOVERY_EXPLAINER;
   const slot = $('discScanSlot');
   if (!slot.firstElementChild) slot.append(actionButton('scan-start', 'Discover local apps', startScan, ''));
+  const dslot = $('discDismissSlot');
+  if (!dslot.firstElementChild) dslot.append(actionButton('dismissals-clear', 'Show dismissed apps again', clearDismissals));
   const sc = STATE.scan;
   $('discLimited').textContent = sc && sc.limited ? LIMITED_TEXT : '';
   if (!sc) discMsg('');
   else if (sc.state === 'running') discMsg(`Scanning... ${Math.floor((Date.now() - sc.startedAt) / 1000)} s`);
   else if (sc.state === 'failed') discMsg(`scan failed: ${capText(sc.reason || 'unknown reason', 300)}`);
   else if (sc.state === 'done') discMsg(sc.suggestions.length ? '' : 'Scan finished: no apps found.');
+  renderSuggestions(sc);
 }
 function adoptScan(id) {
   STATE.scan = { id, state: 'running', limited: false, suggestions: [], startedAt: Date.now(), polling: false };
@@ -1518,6 +1524,127 @@ async function pollScan() {
     discMsg(e.authText || errorText(e.status, e.body));
   } finally { sc.polling = false; }
   renderDiscovery();
+}
+/* ---------- discovery: suggestion review, accept and dismiss ---------- */
+const CODE_FOLDER_HELP = 'Auto-approved fixes may only change files in this folder. You can also set it later.';
+let discSeq = 0;
+function renderSuggestionCard(s) {
+  const card = el('article', 'svc-card');
+  const evidence = s.evidence || {};
+  const top = el('div', 'top');
+  top.append(el('h3', '', String(s.name)), el('span', 'pill', `confidence: ${s.confidence}`));
+  const ports = Array.isArray(evidence.ports) ? evidence.ports.join(', ') : '';
+  card.append(top, el('div', 'meta', `process ${evidence.process || 'unknown'} · pid ${evidence.pid === null || evidence.pid === undefined ? 'n/a' : evidence.pid} · ${Number(evidence.process_count) || 0} process(es) · ports ${ports || 'none'}`));
+  if (s.state === 'accepted') {
+    card.append(el('div', 'meta', `accepted as service ${s.service_id}`));
+    const a = el('div', 'actions');
+    a.append(focusKeyButton('Open service', `${s.suggestion_id}:open`, () => { here.hash = `#/services/${encodeURIComponent(s.service_id)}`; }));
+    card.append(a);
+    return card;
+  }
+  const n = ++discSeq;
+  const idIn = textInput(`discF${n}Id`, s.app_id, 40);
+  const nameIn = textInput(`discF${n}Name`, s.name, 200);
+  const codeIn = textInput(`discF${n}Code`, '', 1024);
+  const f = el('form', 'svc-form');
+  f.append(field('Id', idIn), field('Name', nameIn), field('Code folder (optional)', codeIn), el('div', 'meta', CODE_FOLDER_HELP));
+  const fs = el('fieldset');
+  fs.append(el('legend', '', 'Candidate log files'));
+  const rows = [];
+  (Array.isArray(s.candidate_log_paths) ? s.candidate_log_paths : []).forEach((c, k) => {
+    const cb = el('input');
+    cb.type = 'checkbox'; cb.id = `discF${n}Use${k}`;
+    cb.checked = Boolean(c.exists && !c.watched_by);
+    const path = textInput(`discF${n}Path${k}`, c.path, 1024);
+    const fmt = el('select');
+    fmt.id = `discF${n}Fmt${k}`;
+    const formats = STATE.uiConfig.formats.slice();
+    if (!formats.includes(c.format)) formats.push(c.format);
+    for (const x of formats) { const o = el('option', '', x); o.value = x; fmt.append(o); }
+    fmt.value = c.format;
+    const line = el('div', 'cand');
+    line.append(field('Use', cb), field('Path', path), field('Format', fmt));
+    line.append(el('div', 'meta', !c.exists ? 'not found' : c.readable === false ? 'not readable' : 'exists'));
+    if (c.watched_by) {
+      cb.checked = false;
+      cb.disabled = true;
+      line.append(el('div', 'meta', `already watched by ${c.watched_by}`));
+    }
+    fs.append(line);
+    rows.push({ cb, path, fmt, c });
+  });
+  f.append(fs);
+  const read = () => ({
+    id: idIn.value.trim(), name: nameIn.value.trim(), code_folder: codeIn.value, app_names: [],
+    rows: rows.map((r) => ({ checked: r.cb.checked, path: r.path.value.trim(), format: r.fmt.value, watched_by: r.c.watched_by || null })),
+  });
+  const msg = el('div', 'meta');
+  msg.setAttribute('role', 'status');
+  const accept = actionButton('suggestion-accept', 'Accept', () => acceptSuggestion(s, card, read, msg), '');
+  const dismiss = actionButton('suggestion-dismiss', 'Dismiss', () => dismissSuggestion(s, card, msg));
+  const actions = el('div', 'actions');
+  actions.append(accept, dismiss);
+  f.onsubmit = (ev) => { ev.preventDefault(); if (!accept.disabled) acceptSuggestion(s, card, read, msg); };
+  f.append(actions, msg);
+  card.append(f);
+  return card;
+}
+function renderSuggestions(sc) {
+  const key = sc && sc.state === 'done' ? JSON.stringify(sc.suggestions) : '';
+  if (key === STATE.shownKey) return; // never rebuild the cards while the user is typing in one
+  STATE.shownKey = key;
+  const box = $('discList');
+  box.replaceChildren();
+  if (!sc || sc.state !== 'done') return;
+  for (const s of sc.suggestions) box.append(renderSuggestionCard(s));
+}
+function noteSuggestionChange(sc) { STATE.shownKey = sc.state === 'done' ? JSON.stringify(sc.suggestions) : ''; }
+async function acceptSuggestion(s, card, read, msg) {
+  if (card.dataset.busy === 'yes') return; // a double click must not accept twice
+  card.dataset.busy = 'yes';
+  msg.textContent = 'Saving...';
+  try {
+    const r = await request('POST', `/api/discovery/suggestions/${encodeURIComponent(s.suggestion_id)}/accept`, buildAcceptBody(read()));
+    const service = r && r.service ? r.service : {};
+    const done = Object.assign({}, s, { state: 'accepted', service_id: String(service.id || '') });
+    const sc = STATE.scan;
+    if (sc) { sc.suggestions = sc.suggestions.map((x) => (x.suggestion_id === s.suggestion_id ? done : x)); noteSuggestionChange(sc); }
+    card.replaceWith(renderSuggestionCard(done));
+    lastSvcKey = null;
+  } catch (e) {
+    msg.textContent = e.authText || errorText(e.status, e.body);
+    if (e.status === 409) refreshScan(msg.textContent);
+  } finally { delete card.dataset.busy; }
+}
+async function dismissSuggestion(s, card, msg) {
+  try { await request('POST', `/api/discovery/suggestions/${encodeURIComponent(s.suggestion_id)}/dismiss`); }
+  catch (e) { msg.textContent = e.authText || errorText(e.status, e.body); return; }
+  const sc = STATE.scan;
+  if (sc) { sc.suggestions = sc.suggestions.filter((x) => x.suggestion_id !== s.suggestion_id); noteSuggestionChange(sc); }
+  card.remove();
+  const scanBtn = $('discScanSlot').firstElementChild;
+  if (scanBtn) scanBtn.focus();
+}
+async function clearDismissals() {
+  try {
+    const r = await request('DELETE', '/api/discovery/dismissals');
+    discMsg(`Cleared ${Number(r && r.cleared) || 0} dismissed app(s). Run discovery again to see them.`);
+  } catch (e) { discMsg(e.authText || errorText(e.status, e.body)); }
+}
+// One read of the finished scan (after a 409 from accept), so the list shows what the hub now says.
+async function refreshScan(note) {
+  const sc = STATE.scan;
+  if (!sc || sc.state === 'running') return;
+  try {
+    const d = await request('GET', `/api/discovery/scans/${encodeURIComponent(sc.id)}`);
+    if (STATE.scan !== sc) return;
+    sc.suggestions = Array.isArray(d.suggestions) ? d.suggestions : [];
+    sc.limited = Boolean(d.limited);
+    renderDiscovery();
+    discMsg(note);
+  } catch (e) {
+    if (e.status === 404) { sc.state = 'expired'; discMsg('scan expired, run it again'); }
+  }
 }
 ENTER.discovery = () => renderDiscovery();
 

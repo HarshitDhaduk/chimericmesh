@@ -235,3 +235,56 @@ def test_discovery_view_does_not_scan_on_load_or_on_entry():
     enter = re.search(r"ENTER\.discovery = [^\n]*", ds.strip_comments(ds.script_text()))
     assert enter and "startScan" not in enter.group(0) and "request(" not in enter.group(0)
     assert "/api/discovery" not in ds.strip_comments(ds.section("INIT"))
+
+# ---- 6.2 discovery: suggestion review, accept and dismiss -------------------------------------------------
+def test_suggestion_card_shows_the_evidence_and_the_candidate_checklist():
+    card = code("renderSuggestionCard")
+    for piece in ("s.name", "s.confidence", "evidence.process", "evidence.pid", "evidence.process_count",
+                  "evidence.ports", "candidate_log_paths", "'exists'", "'not found'", "'not readable'",
+                  "Auto-approved fixes may only change files in this folder. You can also set it later."):
+        assert piece in card or piece in ds.strip_comments(ds.script_text()), piece
+    assert "field(" in card and "uiConfig.formats" in card
+    for label in ("'Id'", "'Name'", "'Code folder (optional)'", "'Use'", "'Path'", "'Format'"):
+        assert label in card, label
+    assert "actionButton('suggestion-accept'" in card and "actionButton('suggestion-dismiss'" in card
+def test_checked_by_default_only_when_the_file_exists_and_is_not_watched():
+    card = code("renderSuggestionCard")
+    assert re.search(r"cb\.checked = Boolean\(c\.exists && !c\.watched_by\)", card)
+    assert re.search(r"if \(c\.watched_by\)", card)
+    assert "already watched by " in card
+    assert re.search(r"cb\.disabled = true", card)
+def test_accepted_suggestions_show_the_service_instead_of_the_form():
+    card = code("renderSuggestionCard")
+    assert "s.state === 'accepted'" in card
+    assert "here.hash = `#/services/${encodeURIComponent(" in card
+    assert card.index("s.state === 'accepted'") < card.index("actionButton('suggestion-accept'")
+def test_accept_sends_only_checked_paths_through_buildacceptbody():
+    acc = code("acceptSuggestion")
+    assert "buildAcceptBody(" in acc
+    assert "`/api/discovery/suggestions/${encodeURIComponent(" in acc and "/accept`" in acc
+    assert "request('POST'" in acc
+    assert "e.status === 409" in acc and "refreshScan(" in acc
+    assert "errorText(" in acc and "textContent" in acc
+    assert "renderSuggestionCard(" in acc and "replaceWith(" in acc  # 201: the card becomes the service link
+    assert "service" in acc
+    # the body is built from the form only, never from the suggestion's unchecked or watched rows
+    assert "log_paths" not in acc
+def test_dismiss_calls_the_endpoint_and_hides_the_card():
+    dis = code("dismissSuggestion")
+    assert "/dismiss`" in dis and "request('POST'" in dis
+    assert "card.remove()" in dis
+    clear = code("clearDismissals")
+    assert "request('DELETE', '/api/discovery/dismissals')" in clear
+    assert "actionButton('dismissals-clear', 'Show dismissed apps again'" in code("renderDiscovery")
+def test_suggestions_are_not_rebuilt_while_the_user_types():
+    render = code("renderDiscovery")
+    assert "renderSuggestions(" in render
+    body = code("renderSuggestions")
+    assert "shownKey" in body and "JSON.stringify(" in body
+    assert "sc.state === 'running'" in body or "sc.state !== 'done'" in body
+def test_accept_body_cases_cover_the_documented_inputs():
+    names = case_names()
+    assert names.count("buildAcceptBody") >= 4
+    text = cases_text()
+    assert "log_paths: []" in text  # nothing checked, and a watched_by row that is never sent
+    assert re.search(r"expect: \{ id: 'a', name: 'A', log_paths: \[\{ path: '/x', format: 'ncsa' \}, \{ path: '/y', format: 'w3c' \}\] \}", text)
