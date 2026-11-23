@@ -372,6 +372,25 @@
         </table>
       </div>
     </section>
+    <section aria-labelledby="audit-h">
+      <h2 id="audit-h">Audit trail</h2>
+      <div class="actions live-ctl">
+        <div class="field"><label for="auditSvc">Service</label>
+          <select id="auditSvc"><option value="">all services</option></select></div>
+        <div class="field"><label for="auditRule">Rule id</label>
+          <input type="text" id="auditRule" maxlength="100" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div class="meta" id="auditMsg" role="status" aria-live="polite"></div>
+      <div class="table-wrap">
+        <table class="rules" aria-label="Audit trail">
+          <thead><tr>
+            <th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Subject</th><th scope="col">Detail</th>
+          </tr></thead>
+          <tbody id="auditBody"></tbody>
+        </table>
+      </div>
+      <div class="actions"><button class="ghost small" type="button" id="auditMore" hidden>Load more</button></div>
+    </section>
   </div>
   <pre id="selftest" hidden></pre>
 </main>
@@ -498,6 +517,13 @@ function ruleOverrides(defaults, v) {
   if (v.days !== 7 && when !== null) out.expires_at = when;
   if (typeof v.note === 'string' && v.note !== (defaults.note || '')) out.note = v.note;
   return out;
+}
+// Union by id, newest first; the arrays it is given are never changed.
+function mergeAudit(existing, incoming) {
+  const byId = new Map();
+  for (const r of existing || []) byId.set(r.id, r);
+  for (const r of incoming || []) byId.set(r.id, r);
+  return Array.from(byId.values()).sort((a, b) => b.id - a.id);
 }
 function isNewer(id, lastId) { return typeof id === 'number' && Number.isFinite(id) && id > lastId; }
 function lockState(uiConfig, hasToken) {
@@ -730,6 +756,11 @@ const SELFTEST_CASES = [
   { name: 'ruleOverrides', args: [{ most_urgent_severity: 3, max_per_hour: 3, max_lines: 100, expires_at: 1000000 }, { most_urgent_severity: 3, max_per_hour: 3, max_lines: 50, days: 7 }], expect: { max_lines: 50 } },
   { name: 'ruleOverrides', args: [{ max_files: 5, expires_at: 1000000 }, { max_files: 5, days: 10 }], expect: { expires_at: 1259200 } },
   { name: 'ruleOverrides', args: [{ max_files: 5, expires_at: 1000000, note: 'a' }, { max_files: null, days: 7, note: 'b' }], expect: { note: 'b' } },
+  { name: 'mergeAudit', args: [[{ id: 2 }, { id: 1 }], [{ id: 3 }]], expect: [{ id: 3 }, { id: 2 }, { id: 1 }] },
+  { name: 'mergeAudit', args: [[{ id: 2, a: 'old' }], [{ id: 2, a: 'new' }]], expect: [{ id: 2, a: 'new' }] },
+  { name: 'mergeAudit', args: [[{ id: 5 }, { id: 4 }, { id: 3 }], [{ id: 6 }, { id: 5 }]], expect: [{ id: 6 }, { id: 5 }, { id: 4 }, { id: 3 }] },
+  { name: 'mergeAudit', args: [[{ id: 1 }, { id: 3 }], [{ id: 2 }]], expect: [{ id: 3 }, { id: 2 }, { id: 1 }] },
+  { name: 'mergeAudit', args: [null, [{ id: 1 }]], expect: [{ id: 1 }] },
   { name: 'isNewer', args: [5, 4], expect: true },
   { name: 'isNewer', args: [4, 4], expect: false },
   { name: 'isNewer', args: [3, 4], expect: false },
@@ -790,7 +821,7 @@ const SELFTEST_CASES = [
 function runSelfTest() {
   const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure,
     matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk, sortServices,
-    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText, canMakeRule, boundOf, clampInt, sevFloorText, expiryFromDays, ruleOverrides };
+    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText, canMakeRule, boundOf, clampInt, sevFloorText, expiryFromDays, ruleOverrides, mergeAudit };
   const failures = [];
   for (const c of SELFTEST_CASES) {
     let got;
@@ -921,6 +952,7 @@ const SCHED = [
   { id: 'service-lists', every: 5000, last: 0, view: 'service', run: () => loadServiceLists() },
   { id: 'approvals-status', every: 5000, last: 0, view: '*', run: () => loadApprovalStatus() },
   { id: 'rules-list', every: 5000, last: 0, view: 'rules', run: () => loadRules() },
+  { id: 'audit-list', every: 5000, last: 0, view: 'rules', run: () => refreshAudit() },
   { id: 'scan-poll', every: 1000, last: 0, view: 'discovery', run: () => (scanRunning() ? pollScan() : null) },
 ];
 function tick() {
@@ -2194,7 +2226,99 @@ async function resumeRules() {
   setStatus('Auto-approval resumed');
   await Promise.allSettled([loadRules(), loadApprovalStatus()]);
 }
-ENTER.rules = () => { loadRules(); loadApprovalStatus(); };
+/* ---------- audit trail ---------- */
+STATE.audit = { rows: [], key: null, done: false, open: new Set(), shown: null };
+function fmtStamp(ts) { return new Date(ts * 1000).toLocaleString(); }
+function auditKey() { return `${$('auditSvc').value}|${$('auditRule').value.trim()}`; }
+function auditUrl(before) {
+  const p = ['limit=100'];
+  const svc = $('auditSvc').value;
+  if (svc) p.push(`service_id=${encodeURIComponent(svc)}`);
+  const rule = $('auditRule').value.trim();
+  if (rule) p.push(`rule_id=${encodeURIComponent(rule)}`);
+  if (before !== undefined) p.push(`before=${before}`);
+  return `/api/audit?${p.join('&')}`;
+}
+function auditRow(r) {
+  const tr = el('tr');
+  tr.append(el('td', '', fmtStamp(r.ts)), el('td', '', String(r.actor)), el('td', '', String(r.action)), el('td', '', String(r.subject)));
+  const full = String(r.detail === null || r.detail === undefined ? '' : r.detail);
+  const open = STATE.audit.open.has(r.id);
+  const td = el('td');
+  td.append(el('span', '', open ? capText(full, 4096) : capText(full, 300)));
+  if (!open && full.length > 300) {
+    const more = el('button', 'ghost small', 'show more');
+    more.type = 'button';
+    more.onclick = () => { STATE.audit.open.add(r.id); renderAudit(); };
+    td.append(more);
+  }
+  tr.append(td);
+  return tr;
+}
+function renderAudit() {
+  const A = STATE.audit;
+  const key = `${A.rows.map((r) => r.id).join(',')}|${Array.from(A.open).join(',')}|${A.done}`;
+  if (key === A.shown) return;
+  A.shown = key;
+  const body = $('auditBody');
+  body.replaceChildren();
+  if (!A.rows.length) {
+    const tr = el('tr');
+    const td = el('td', 'empty', 'No audit rows yet.');
+    td.colSpan = 5;
+    tr.append(td);
+    body.append(tr);
+  }
+  for (const r of A.rows) body.append(auditRow(r));
+  $('auditMore').hidden = A.done || !A.rows.length;
+}
+// Every 5 s: the newest page for the current filter, merged so the rows already loaded stay.
+async function refreshAudit() {
+  const A = STATE.audit;
+  const key = auditKey();
+  let rows;
+  try { rows = await request('GET', auditUrl()); }
+  catch (e) { $('auditMsg').textContent = e.authText || errorText(e.status, e.body); return; }
+  if (!Array.isArray(rows) || key !== auditKey()) return; // the filter changed while waiting
+  $('auditMsg').textContent = '';
+  const fresh = key !== A.key || !A.rows.length;
+  if (key !== A.key) { A.key = key; A.rows = []; A.done = false; A.open = new Set(); }
+  A.rows = mergeAudit(A.rows, rows);
+  if (fresh && rows.length < 100) A.done = true;
+  renderAudit();
+}
+async function loadMoreAudit() {
+  const A = STATE.audit;
+  if (!A.rows.length) return;
+  const oldest = A.rows[A.rows.length - 1].id; // the smallest id shown
+  let rows;
+  try { rows = await request('GET', auditUrl(oldest)); }
+  catch (e) { $('auditMsg').textContent = e.authText || errorText(e.status, e.body); return; }
+  if (!Array.isArray(rows)) return;
+  A.rows = mergeAudit(A.rows, rows);
+  if (rows.length < 100) A.done = true;
+  renderAudit();
+}
+// The service filter lists the hub's services (a read, done when the Rules view is entered).
+async function loadAuditServices() {
+  let list;
+  try { list = await request('GET', '/api/services'); } catch (e) { return; }
+  if (!Array.isArray(list)) return;
+  const sel = $('auditSvc');
+  const current = sel.value;
+  sel.replaceChildren();
+  const all = el('option', '', 'all services');
+  all.value = '';
+  sel.append(all);
+  for (const s of list) { const o = el('option', '', `${s.name} (${s.id})`); o.value = String(s.id); sel.append(o); }
+  sel.value = current;
+}
+function wireAudit() {
+  $('auditSvc').onchange = () => refreshAudit();
+  $('auditRule').onchange = () => refreshAudit();
+  $('auditMore').onclick = loadMoreAudit;
+}
+ENTER.rules = () => { loadRules(); loadApprovalStatus(); loadAuditServices(); refreshAudit(); };
 
 /* ---------- discovery: scan start and polling ---------- */
 // Nothing here runs on load: the scan starts only from the click handler of the button (R4.5).
@@ -2382,6 +2506,7 @@ function init() {
   window.addEventListener('hashchange', showRoute);
   wireUnlock();
   wireLive();
+  wireAudit();
   document.addEventListener('visibilitychange', liveVisibility);
   renderPermissionsPanel();
   $('svcBack').onclick = () => { here.hash = '#/services'; };

@@ -592,3 +592,41 @@ def test_rule_forms_are_never_opened_or_submitted_automatically():
     for name in ("openRuleForm", "saveRule", "enableRule"):
         assert name not in init and name not in sched, name
     assert len(re.findall(r"\bsaveRule\(", script)) == 4  # the definition, two click handlers (create, edit), the form submit
+
+# ---- 8.3 audit table ---------------------------------------------------------------------------------------
+def test_audit_view_markup_and_refresh_task():
+    seg = rules_markup()
+    for ident in ("auditSvc", "auditRule", "auditMore", "auditBody", "auditMsg"):
+        assert f'id="{ident}"' in seg, ident
+    assert '<label for="auditSvc">' in seg and '<label for="auditRule">' in seg
+    for head in ("Time", "Actor", "Action", "Subject", "Detail"):
+        assert f'<th scope="col">{head}</th>' in seg, head
+    rows = {r["id"]: r for r in sched_rows()}
+    assert rows["audit-list"] == {"id": "audit-list", "every": "5000", "view": "rules"}
+def test_audit_requests_use_limit_filters_and_before():
+    url = code("auditUrl")
+    assert "'limit=100'" in url
+    assert "`service_id=${encodeURIComponent(" in url and "`rule_id=${encodeURIComponent(" in url
+    assert "`before=${before}`" in url and "`/api/audit?${" in url
+    more = code("loadMoreAudit")
+    assert "A.rows[A.rows.length - 1].id" in more and "auditUrl(oldest)" in more
+    refresh = code("refreshAudit")
+    assert "mergeAudit(A.rows, rows)" in refresh and "auditUrl()" in refresh
+def test_audit_rows_are_text_with_a_capped_detail():
+    row = code("auditRow")
+    for piece in ("r.ts", "r.actor", "r.action", "r.subject", "capText(full, 300)", "capText(full, 4096)", "'show more'"):
+        assert piece in row, piece
+    assert "el('td'" in row and "innerHTML" not in row
+    assert "A.rows" in code("renderAudit") and "auditRow(" in code("renderAudit")
+def test_merge_audit_has_the_documented_cases():
+    assert "mergeAudit" in ds.functions(pure_block())
+    assert case_names().count("mergeAudit") >= 5
+    body = ds.functions(pure_block())["mergeAudit"]
+    assert ".sort(" in body and "Array.from(" in body  # never sorts the caller's array in place
+    assert "existing.sort" not in body and "incoming.sort" not in body
+def test_audit_is_wired_and_not_loaded_before_the_view_is_entered():
+    assert "refreshAudit()" in ds.strip_comments(ds.script_text()).split("ENTER.rules = ")[1].split("\n")[0]
+    wire = code("wireAudit")
+    assert "auditSvc" in wire and "auditRule" in wire and "loadMoreAudit" in wire
+    assert "wireAudit()" in ds.strip_comments(ds.section("INIT"))
+    assert "refreshAudit(" not in ds.strip_comments(ds.section("INIT"))

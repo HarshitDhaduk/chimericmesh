@@ -138,7 +138,7 @@ Conventions for every task: write the tests first and watch them fail, then impl
     - Manual browser check: compare Overview screenshots with `docs/screenshots/dashboard-incidents.png` and `dashboard-terminal.png`; run the six guide steps.
     - _Requirements: 6.5, 6.6, 1.5_
 
-- [ ] 8. Rules and audit
+- [x] 8. Rules and audit
   - [x] 8.1 Build the rules table, reduce actions and the paused banner
     - Add to `tests/unit/test_dashboard_views.py` first: the Rules view calls `GET /api/rules` every 5 s while visible; the `approvals-status` scheduler task has view `'*'` and `every: 5000`, writes `STATE.approvalStatus`, and runs on every view (a `dueTasks` self-test case: a `'*'` task is due on the Overview, Services and Rules views and not when the tab is hidden; M2); the table has the columns of R7.1 (id, service, match type and value, severity floor via `sevFloorText`, expiry via `countdown`, limits, `uses_last_hour` and `use_count`, status text, source proposal); a `suspended` row shows `status_reason`; Pause (active rules) and Revoke (active and suspended rules) are `actionButton('rule-pause'|'rule-revoke', ...)`, call `POST /api/rules/<id>/pause` and `/revoke` without a token and ask one `window.confirm` first; the Pause all button is `actionButton('rules-pause-all', ...)`, always rendered, calls `POST /api/rules/pause`; `#pausedBanner` is rendered from `STATE.approvalStatus` and shown on every view when `paused` is true and carries the text `Auto-approval is paused`, the actor and the time, and a Resume button (`actionButton('rules-resume', ...)`, token); a 429 from a reduce action shows `Retry-After`; `countdown` and `sevFloorText` have self-test cases.
     - Edit `index.html`: `renderRules`, `renderPausedBanner`, `revokeRule`, `pauseRule`, `pauseAll`, `resumeRules`, pure `countdown` cases if not yet complete.
@@ -149,7 +149,7 @@ Conventions for every task: write the tests first and watch them fail, then impl
     - Edit `index.html`: `openRuleForm`, `saveRule`, `enableRule`.
     - Manual browser check: create a signature rule for a service with a code folder, edit a limit, suspend it by changing the service's folder, then re-enable after setting the folder back (the server's 409 text is shown when it is refused).
     - _Requirements: 7.3_
-  - [ ] 8.3 Build the audit table
+  - [x] 8.3 Build the audit table
     - Add to `tests/unit/test_dashboard_views.py` first: the audit view calls `GET /api/audit?limit=100`, adds `service_id` and `rule_id` from the filter controls, and "Load more" adds `before=<smallest id shown>`; rows show time, actor, action, subject and detail through `textContent`, newest first; detail is capped at 300 characters with "show more"; the 5 s refresh merges with `mergeAudit` (cases: new rows on top, duplicates removed, older rows kept, order by id descending, input not mutated); the audit view's `every` is 5000 and its view is `rules`.
     - Edit `index.html`: `renderAudit`, `loadMoreAudit`, pure `mergeAudit`.
     - Manual browser check: revoke a rule and see the `rule_revoked` row appear within 5 s; filter by rule; load more with more than 100 rows (generate with repeated pause calls).
