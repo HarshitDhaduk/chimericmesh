@@ -25,7 +25,7 @@ LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
 PROPOSAL_ID = re.compile(r"p[1-9][0-9]*")
 TIMEOUT = 5.0
 MAX_STATE_BYTES = 64
-MAX_TARGETS = 20
+MAX_TARGETS = 21                 # verify accepts 1 to 20 files; a 21st target makes it answer ok: false
 PATH_KEYS = ("path", "file_path")
 
 

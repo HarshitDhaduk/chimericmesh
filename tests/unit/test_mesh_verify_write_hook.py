@@ -180,6 +180,19 @@ def test_unparseable_or_pathless_input_exits_zero(root, text):
     assert hub.calls == []
 
 
+def test_more_targets_than_verify_accepts_are_still_judged_not_cut_off(root):
+    """Review 3 M1: a long ``paths`` list must not hide a bad target behind the first 20."""
+    seen = []
+
+    def hub(url, body, timeout):
+        files = json.loads(body)["files"]
+        seen.append(len(files))
+        return {"ok": len(files) <= 20, "reasons": ["a write names 1 to 20 files"]}
+
+    paths = [f"f{i}.py" for i in range(40)]
+    assert run(json.dumps({"tool_input": {"paths": paths}}), root, hub)[0] == 2
+    assert seen == [21]
+
 def test_the_file_path_key_is_read(root):
     hub = FakeHub()
     run(json.dumps({"tool_input": {"file_path": "x.py"}}), root, hub)

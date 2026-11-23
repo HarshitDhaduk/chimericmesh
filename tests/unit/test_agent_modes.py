@@ -200,18 +200,15 @@ def test_unassigned_events_appear_only_through_the_generic_reads(mode, tmp_path)
     scenario(mode, tmp_path, body)
 
 
-def test_the_bare_hub_keeps_200_proposals_and_the_store_keeps_all(tmp_path):
+@pytest.mark.parametrize("mode,expected", [("bare", 200), ("store", 205)])
+def test_the_bare_hub_keeps_200_proposals_and_the_store_keeps_all(mode, expected, tmp_path):
     """README limit: in memory the proposals list keeps 200; with the store every proposal stays."""
-    from chimericmesh.store.proposals import MAX_PROPOSALS
-    assert MAX_PROPOSALS == 200
-
     async def body(w):
         iid = await w.incident()
-        for _ in range(3):
-            await w.hub.create_proposal(iid, "a", "d")
+        for _ in range(205):
+            assert await w.hub.create_proposal(iid, "a", "d") is not None
         return len(w.hub.list_proposals(None, limit=500))
-    assert scenario("store", tmp_path, body) == 3
-
+    assert scenario(mode, tmp_path, body) == expected
 
 def test_both_modes_expose_the_same_agent_routes(tmp_path):
     async def body(w):
