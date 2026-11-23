@@ -137,3 +137,7 @@ def test_long_poll_loops_on_timeout(watch_text):
 
 def test_declared_files_rule(text):
     _has_all(text, ("always declare files, estimated_lines and verification",))
+
+
+def test_pending_proposal_goes_to_exclude_ids_then_back_to_the_wait(watch_text):
+    _has_all(watch_text, ("while its proposal is pending, then call wait_for_work again",))

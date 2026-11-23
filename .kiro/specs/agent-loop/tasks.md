@@ -166,7 +166,7 @@ Design-review round 1 ids (`R1-H1`, `R1-M1` to `R1-M7`, `R1-L1` to `R1-L10`; des
     - Also record here (O16, accepted 2026-11-18; the user checks both Kiro facts here): the `permissions.yaml` schema and the shell `match` semantics from https://kiro.dev/docs/permissions/, whether the snippet text must change, and whether the IDE honours the profile's `requestTimeout`.
     - [ ] (O16) User check: the `permissions.yaml` schema and shell `match` semantics, result written under this task.
     - [ ] (O16) User check: whether the IDE honours the profile's `requestTimeout`, result written under this task.
-    - If the call fails: set `CHIMERICMESH_WATCH_MAX_WAIT` (for example `10`) in the `env` of the profile's `mcpServers.chimericmesh` entry and in the hub's environment, and repeat. If the IDE reads only `.kiro/settings/mcp.json`, say so in the README (11.1); that file stays unchanged (R5.3) and the user adds `requestTimeout` there.
+    - If the call fails: set `CHIMERICMESH_WATCH_MAX_WAIT` (for example `10`) in the environment of the hub process (the terminal that runs `python -m chimericmesh`), restart the hub, and repeat. **Corrected 2026-11-23 (review 2):** only the hub reads the variable; an entry in the profile's `env` alone changes nothing. If the IDE reads only `.kiro/settings/mcp.json`, say so in the README (11.1); that file stays unchanged (R5.3) and the user adds `requestTimeout` there.
     - [ ] (R1-M6) Result written under this task.
     - _Requirements: 4.5, F2 (requirements Open Q1)_
 

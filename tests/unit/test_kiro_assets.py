@@ -224,10 +224,11 @@ def test_power_docs_name_only_real_tools_and_cover_all():
 
 # --- mesh-watcher profile (agent-loop task 9.1) -----------------------------
 WATCHER = ROOT / ".kiro" / "agents" / "mesh-watcher.json"
-# SHA-256 of both files as committed at 95922aa (the main tree); R5.3, B8: they never change.
+# SHA-256 of both files as committed at 95922aa (the main tree), with CRLF turned into LF (the blob of
+# mcp.json has CRLF; the agent-loop baseline json hashes the raw bytes); R5.3, B8: they never change.
 BASELINE_SHA256 = {
     ".kiro/agents/mesh-responder.json": "bd67aeb787e036b6d0fc829d7c5c71594d6cc9dc786d36d6155a6e75c61d9be6",
-    ".kiro/settings/mcp.json": "55fb84a5d0d7eac79f86a70499b46fba5f847e63985f0fb224988cc309214824",
+    ".kiro/settings/mcp.json": "5b11dd75a4a60d2c71d9f35374dab05d0de1d80467471c9dc9c3bbc0b8e189e0",
 }
 WATCHER_READ_ONLY = READ_ONLY | {
     "list_services", "get_service", "service_events", "explain_log_window", "find_code_for_service",
@@ -240,7 +241,8 @@ WATCHER_FS_WRITE_DENY = [
 WATCHER_FS_READ_DENY = ["**/admin.token", "**/chimericmesh.db*", "~/.chimericmesh/**"]
 def _sha256(rel: str) -> str:
     import hashlib
-    return hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
+    # line endings are normalised: a Windows checkout with autocrlf must give the same digest (review 2, M1)
+    return hashlib.sha256((ROOT / rel).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 def test_watcher_is_valid_json_with_documented_fields():
     agent = _load(WATCHER)
     assert agent["name"] == "mesh-watcher"
@@ -351,3 +353,17 @@ def test_watch_mode_names_the_profile_and_the_wait():
     text = _skill_text("watch-mode")
     for phrase in ("mesh-watcher", "wait_for_work", "25 seconds", "timeout"):
         assert phrase in text
+# --- review 2 fixes ---------------------------------------------------------
+SERVER_KEYS = {"command", "args", "env", "timeout", "requestTimeout", "url", "oauth", "type"}
+RULE_KEYS = {"capability", "effect", "match"}
+def test_watcher_server_and_rule_keys_are_documented():
+    agent = _load(WATCHER)
+    assert set(_server(agent)) <= SERVER_KEYS
+    for rule in agent["permissions"]["rules"]:
+        assert set(rule) <= RULE_KEYS
+        assert rule["match"] and all(isinstance(m, str) and m for m in rule["match"])
+def test_watch_max_wait_is_read_by_the_hub_only():
+    # The MCP server process never reads it, so setting it only in the profile's env changes nothing (review 2, M2).
+    users = [p.relative_to(ROOT / "src").as_posix() for p in (ROOT / "src").rglob("*.py")
+             if "CHIMERICMESH_WATCH_MAX_WAIT" in p.read_text(encoding="utf-8")]
+    assert users == ["chimericmesh/agent/limits.py"]
