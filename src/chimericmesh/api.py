@@ -18,6 +18,10 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
+from .agent.ports import AgentPorts
+from .agent.routes import build_router as build_agent_router
+from .agent.service import AgentService
+from .agent.snippet import find_workspace_root
 from .approvals.errors import ApprovalsNotMigrated
 from .approvals.manager import ApprovalManager
 from .approvals.models import ApprovalSettings
@@ -30,6 +34,7 @@ from .connectors.manager import ConnectorManager
 from .connectors.schema import connectors_registry
 from .connectors.submit import make_submit
 from .connectors.syslog_tcp import start_syslog_tcp
+from .diagnostics import find_code_hints
 from .discovery.accept import Acceptor, RegistrySink
 from .discovery.catalog import load_catalog
 from .discovery.engine import run_scan_sync
@@ -240,6 +245,10 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
     if approvals is not None and hub_arg is None and store_arg is None:
         hub.enforce_limits = True  # B3: the production path (create_app() and python -m chimericmesh)
 
+    agent = AgentService(AgentPorts(
+        state=hub, registry=registry, approvals=approvals, protected_dirs=_protected_dirs(store),
+        workspace_root=find_workspace_root(os.environ, os.getcwd())))
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         closers = []
@@ -266,6 +275,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
             # Tailers are not sockets: they start whether or not the listeners do.
             await manager.start()
         except BaseException:
+            agent.aclose()
             for close in closers:
                 close()
             await discovery.manager.aclose(0.2)
@@ -288,6 +298,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
         def remaining() -> float:
             return max(0.05, deadline - time.monotonic())
 
+        agent.aclose()                                              # held wait_for_work calls end with 	imeout first (R4.6)
         for close in closers:
             close()
         await discovery.manager.aclose(min(0.2, remaining()))     # a running scan stops before the connector steps
@@ -314,6 +325,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
     app.state.connectors = manager
     app.state.discovery = discovery
     app.state.approvals = approvals
+    app.state.agent = agent
     app.state.syslog_tcp = None
 
     @app.exception_handler(StoreError)
@@ -341,6 +353,7 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
     if approvals is not None:
         app.include_router(build_approvals_router(approvals, access, require_admin))
         register_approvals_errors(app)
+    app.include_router(build_agent_router(agent))
 
     @app.get("/", include_in_schema=False)
     async def index():
@@ -392,6 +405,9 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
         inc = hub.get_incident(incident_id)
         if inc is None:
             raise HTTPException(404, "incident not found")
+        folder = agent.code_folder_for_incident(inc)              # B6: the incident's own service first
+        if folder:
+            return find_code_hints(inc, Path(folder))
         return hub.code_hints(inc)
 
     @app.post("/api/incidents/{incident_id}/resolve")

@@ -112,9 +112,47 @@ class RangeState(FakeState):
         return [self._make(i) for i in range(start, min(start + limit, self.n + 1))]
 
 
-def make_agent(mode: str):
-    """``mode`` is ``bare`` or ``store``. Completed in task 7.1."""
-    raise NotImplementedError("make_agent is completed in agent-loop task 7.1")
-
-
-__all__ = ["FakeState", "RangeState", "T0", "make_agent", "make_event", "make_incident", "make_proposal"]
+class AgentRig:
+    """An ``AgentService`` over a real hub (``bare``: memory, ``store``: file store) with a real
+    ``ApprovalManager``. Built by ``make_agent``."""
+    def __init__(self, mode, rig, agent) -> None:
+        self.mode, self.rig, self.agent = mode, rig, agent
+        self.hub, self.registry, self.manager = rig.hub, rig.registry, rig.manager
+        self.folder, self.clock = rig.folder, rig.clock
+    async def add_service(self, sid: str = "api-gw", **kw) -> str:
+        return await self.rig.add_service(sid, **kw)
+    async def incident(self, **kw) -> str:
+        from approvals_helpers import open_incident
+        return await open_incident(self.hub, **kw)
+    async def user_approved(self, iid: str, files: list[str] | None = None, by: str = "alice"):
+        extra = None if files is None else {"kind": "code_change", "files": files, "estimated_lines": 5,
+                                            "verification": "run tests"}
+        prop = await self.hub.create_proposal(iid, "fix it", "d", extra=extra)
+        assert prop is not None and prop.status == "pending"
+        done = await self.hub.decide(prop.id, True, by)
+        assert done is not None and done.status == "approved"
+        return done
+    async def rule_approved(self, iid: str, files: list[str], **rule_kw):
+        from chimericmesh.approvals.models import RuleFields
+        rule = await self.manager.create_rule(RuleFields("api-gw", "signature", "disk full on /var", **rule_kw),
+                                              actor="a")
+        prop = await self.hub.create_proposal(iid, "free up space", "d", extra={
+            "kind": "code_change", "files": files, "estimated_lines": 5, "verification": "run tests"})
+        assert prop is not None and prop.status == "approved" and prop.approved_by_rule == rule.id
+        return rule, prop
+    def close(self) -> None:
+        try:
+            self.agent.aclose()
+        finally:
+            self.rig.close()
+def make_agent(mode: str = "bare", *, approvals: bool = True, workspace_root: str | None = None,
+               settings=None) -> AgentRig:
+    """``mode`` is ``bare`` or ``store``. The service ``api-gw`` is not registered yet: ``await add_service()``."""
+    from approvals_helpers import make_manager
+    from chimericmesh.agent.ports import AgentPorts
+    from chimericmesh.agent.service import AgentService
+    rig = make_manager(mode, settings=settings)
+    ports = AgentPorts(state=rig.hub, registry=rig.registry, approvals=rig.manager if approvals else None,
+                       protected_dirs=(), workspace_root=workspace_root)
+    return AgentRig(mode, rig, AgentService(ports))
+__all__ = ["AgentRig", "FakeState", "RangeState", "T0", "make_agent", "make_event", "make_incident", "make_proposal"]

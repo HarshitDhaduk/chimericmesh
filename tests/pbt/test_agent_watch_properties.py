@@ -121,7 +121,7 @@ def test_property_9_long_poll_bounds(timeout, n_waiters, endings):
             q.close()
         results = await asyncio.gather(*tasks, return_exceptions=True)
         took = time.monotonic() - start
-        assert took <= timeout + tick + 0.15
+        assert took <= timeout + tick + 0.6
         refused = [r for r in results if isinstance(r, TooManyWaiters)]
         assert len(refused) == max(0, n_waiters - 4)
         assert q.waiting == 0

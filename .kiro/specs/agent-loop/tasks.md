@@ -1,4 +1,4 @@
-﻿# Implementation Plan: agent-loop (V1)
+# Implementation Plan: agent-loop (V1)
 
 Requirements: [requirements.md](requirements.md). Design: [design.md](design.md). Property numbers below are the numbered Correctness Properties in the design; sub-criteria 3.1a to 3.1f (R3.1) and 4.3a.1 to 4.3b (R4.3) are defined in the design (L8).
 
@@ -119,23 +119,23 @@ Design-review round 1 ids (`R1-H1`, `R1-M1` to `R1-M7`, `R1-L1` to `R1-L10`; des
     - **Validates: Requirements 5.4, 5.5, 5.8**
 
 - [ ] 7. Facade, REST routes and wiring
-  - [ ] 7.1 Implement `AgentService`
+  - [x] 7.1 Implement `AgentService`
     - Write `tests/unit/test_agent_service.py` first, parametrized over `mode in ("bare", "store")` through `make_agent(mode)` (replace the stub in `agent_helpers.py`): `service_events`, `digest` and `code_search` for a registered service work, `unassigned` and unknown ids raise `UnknownService`; `code_search` on a service without a code folder raises `NoCodeFolder`; two running searches and a third gives `SearchBusy` (a gated fake search); the search thread is told to stop when the awaiting task is cancelled; `verify` builds its inputs for a user-approved proposal, for a rule-approved one (real `ApprovalManager`, rule revoked afterwards gives `ok` false with a revoked reason), for a proposal of an unassigned incident (note, `ok` true), and for an unknown id (`UnknownProposal`); `approvals=None` makes every rule approval fail; `code_folder_for_incident` returns the live folder or `None` (B6); `permissions_snippet` uses `workspace_root`; `aclose` closes the queue.
     - [ ] (M2) The same test module passes for both modes with no `hub` import in `agent/*`.
     - [ ] (R1-L1) `AgentService(ports)` takes no limits argument; a skeleton test asserts `AgentLimits` does not exist.
     - [ ] (R1-L3) Add to the test list above: with two gated searches running, cancel one awaiting task while its thread is still blocked: a third call still gives `SearchBusy` until the thread is released, then succeeds (the slot is freed by thread completion, not by the cancelled task).
     - Create `agent/service.py` (a plain `_running` counter released by the worker future's done callback).
     - _Requirements: 1.1, 1.4, 1.5, 3.1_
-  - [ ] 7.2 Implement the REST routes
+  - [x] 7.2 Implement the REST routes
     - Write `tests/unit/test_agent_routes.py` first (`httpx.ASGITransport` on a small FastAPI app that mounts `build_router` over a real `AgentService`): every route of the design table with its success shape; `limit` 0, -5 and 10 000 give 1, 1 and 100 (the response shows the effective value); `after_id` -3 gives 0; `min_severity` 99 gives 7; `minutes` 0 and 10 000 give 1 and 240; `timeout_seconds` 0 and 99 give 1 and `WAIT_MAX` (25, or the lowered value of `CHIMERICMESH_WATCH_MAX_WAIT`; use a constructor-injected short `wait_max`); a real client disconnect over `httpx.ASGITransport` (the request is abandoned while a waiter is held) frees the slot within one tick, checked through `agent.watch.waiting` (R1-M1); non-integers give 422; `query` empty, 101 characters and with a control character give 422, a missing code folder gives 422 `service has no code folder`; `unassigned` and unknown ids give 404 on every per-service route; `exclude_ids` with 201 entries or an entry of 41 characters or with a space gives 422; a fifth waiter gives 429 with `Retry-After: 5`; `POST /verify` with 201 files gives 422, with 21 files gives 200 `ok: false`; the snippet route returns `text/plain`; log text in every response is capped at 500 characters with no control character; a static check lists every route handler in `agent/routes.py` as `async def` and finds no `require_admin` and no non-`GET`/`POST` method.
     - Create `agent/routes.py` (`build_router`, pydantic models with `extra="forbid"`, error mapping: `UnknownService` and `UnknownProposal` 404, `NoCodeFolder` and `InvalidQuery` 422, `TooManyWaiters` and `SearchBusy` 429).
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.7, 3.1, 4.2, 4.5, 5.4_
-  - [ ] 7.3 Wire the module into the app
+  - [x] 7.3 Wire the module into the app
     - Write `tests/unit/test_agent_wiring.py` first: `create_app` (both a bare hub and a store-backed hub) mounts the six routes and sets `app.state.agent`; `GET /api/incidents/{id}/code` searches the incident service's code folder when it has one and falls back to `CHIMERICMESH_CODE_ROOT` when it has none or the incident has no service (B6) and returns the same list-of-dicts shape as today; the lifespan teardown closes the queue first, so a held `wait_for_work` returns `timeout` and the app stops without waiting for it (R4.6); **a real `uvicorn.Server` on an ephemeral port with the app from `create_app`, one held `GET /api/watch/next` (25 s), then an exit request through the server's signal path, stops in under 3 s and the held client receives `timeout` or a closed connection** (R1-M2; the lifespan-only test cannot catch the uvicorn wait); `__main__.py` passes `timeout_graceful_shutdown=3` (a test inspects the `uvicorn.Config` built by the new `build_server(app, host, port)` helper); with `CHIMERICMESH_WORKSPACE_ROOT` set the snippet uses it, with an invalid value one warning is logged and no allow line is emitted; with cwd `<repo>/src` and no variable the workspace root is `<repo>` (R1-M3); existing route outputs are unchanged (golden comparison of `/api/events`, `/api/incidents`, `/api/proposals` for a fixed hub).
     - Edit `src/chimericmesh/api.py` (build `AgentService`, include the router, change `incident_code`, lifespan step) and `src/chimericmesh/__main__.py` (`build_server`, graceful timeout, exit handler that calls `agent.aclose()` first). Wiring only; `hub.py` is not edited.
     - [ ] (R1-M2) The real-server stop test. (R1-M3) The workspace-root default.
     - _Requirements: 1.6, 4.6_
-  - [ ] 7.4 Checkpoint: run `python -m pytest -q`; the new tests and the whole existing suite pass.
+  - [x] 7.4 Checkpoint: run `python -m pytest -q`; the new tests and the whole existing suite pass.
 
 - [ ] 8. MCP tools
   - [ ] 8.1 Add the wrappers and the long-call timeout

@@ -48,6 +48,19 @@ def clamp(value: int, low: int, high: int) -> int:
     return max(low, min(high, value))
 
 
+def clean_mapping(value: object, limit: int = MAX_FIELD) -> dict | None:
+    """A copy of a mapping with every text key and value passed through ``clean_text``. Numbers, booleans and
+    ``None`` are kept; anything else becomes cleaned text. ``None`` for a value that is not a mapping."""
+    if not isinstance(value, Mapping):
+        return None
+    out: dict = {}
+    for key, item in value.items():
+        if isinstance(item, str):
+            item = clean_text(item, limit)
+        elif not (item is None or isinstance(item, (bool, int, float))):
+            item = clean_text(item, limit)
+        out[clean_text(key, 80)] = item
+    return out
 def _size(envelope: Mapping[str, object]) -> int:
     return len(json.dumps(envelope, separators=(",", ":"), ensure_ascii=False).encode("utf-8", "replace"))
 

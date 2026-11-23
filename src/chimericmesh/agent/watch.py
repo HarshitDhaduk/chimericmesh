@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from chimericmesh.diagnostics import Incident
 from chimericmesh.store.models import Proposal
 from .errors import TooManyWaiters
-from .limits import MAX_WAITERS, TICK, WAIT_MAX, WAIT_MIN, clean_text
+from .limits import MAX_WAITERS, TICK, WAIT_MAX, WAIT_MIN, clean_mapping, clean_text
 from .ports import AgentPorts
 UNASSIGNED = "unassigned"
 MAX_WORK = 5
@@ -37,13 +37,9 @@ def _incident_view(inc: Incident) -> dict:
             "host": clean_text(inc.host), "category": clean_text(inc.category), "severity": inc.severity,
             "count": inc.count, "opening": inc.opening, "first_seen": inc.first_seen,
             "last_seen": inc.last_seen, "sample": clean_text(inc.sample, SAMPLE_LIMIT)}
-def _approval_view(value: object) -> dict | None:
-    if not isinstance(value, Mapping):
-        return None
-    return {clean_text(k): (clean_text(v) if isinstance(v, str) else v) for k, v in value.items()}
 def _proposal_view(prop: Proposal, approval_of: Callable[[Proposal], dict | None]) -> dict:
     try:
-        approval = _approval_view(approval_of(prop))
+        approval = clean_mapping(approval_of(prop))
     except Exception:  # noqa: BLE001
         approval = None
     files = prop.files if isinstance(prop.files, list) else None
