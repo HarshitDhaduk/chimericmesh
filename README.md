@@ -342,3 +342,47 @@ Endpoints: `GET /api/chat?after=&limit=`, `POST /api/terminal {"text": "!status"
 Origin check: POST/PUT/PATCH/DELETE requests carrying an `Origin` header that differs from `Host` get 403, which blocks other websites from driving a local instance. Clients that send no Origin (curl, scripts, the MCP server) are unaffected.
 
 Security note: IRC nicks are unauthenticated, so `CHIMERICMESH_OPERATORS` is only a guard on trusted networks, not real authentication.
+
+## Dashboard
+
+The page at `http://127.0.0.1:8000/` is one static file (`src/chimericmesh/web/index.html`, no build step, no outside scripts, fonts or images). Four views, chosen with the buttons at the top (the address keeps the choice: `#/`, `#/services`, `#/discovery`, `#/rules`):
+
+- **Overview**: the stats, incident cards, proposals, séance log, ChimericBot terminal and guided workflow described above. The proposal cards' Approve and Deny buttons now call `POST /api/proposals/<id>/decide` instead of typing `!approve` into the terminal, so they are locked until you unlock the page. The terminal itself is unchanged.
+- **Services**: a card per service (state, last seen, errors per minute, open incidents, each log source and its status), an add and edit form, and a detail page with the Kiro permissions text, a live log, the service's incidents and its proposals. On a proposal you approved yourself, "Always approve fixes like this" opens a pre-filled rule form and creates the rule only when you confirm.
+- **Discovery**: "Discover local apps" runs a scan, lists what it found with the candidate log files, and lets you accept (only the checked paths become log sources) or dismiss each suggestion.
+- **Rules**: the standing approval rules, the Pause all button, per-rule Pause and Revoke, and the audit trail with filters and "Load more". While auto-approval is paused, a banner says so on every view.
+
+**The admin token.** With access control on, the page asks for the admin token once per browser session (the Unlock button; the path of the token file is shown there). The token is kept only in `sessionStorage` (not `localStorage`), is sent only as the `X-Admin-Token` header on the routes that need it, and is never shown again, put in a URL or written to the page. While locked, the controls that add or widen things (save a service, scan, accept, approve, deny, create, edit or re-enable a rule, resume) are disabled with the title "unlock first"; pause, revoke and withdraw need no token, so Pause all, per-rule Pause, Revoke and Withdraw stay enabled. A wrong token is cleared and the page says "token rejected".
+
+**Residual risk.** V1 sends no Content-Security-Policy. Any script that ran in the page's origin could read the token from `sessionStorage`. The defences are that the page never renders log text as HTML (every log line, host, service name, path and note is written with `textContent`; a hook and a test scan fail on `innerHTML` and its relatives) and that it loads nothing from another origin. Do not paste the token into a page you did not get from your own hub.
+
+**Live log.** The service detail page opens `GET /api/services/<id>/stream` with Server-Sent Events: it first sends the newest 100 matching events (`?tail=100`), then new ones, with a heartbeat every 15 seconds. The hub allows 20 streams at once (the 21st gets `429` with `Retry-After: 5`), ends each after an hour, and resumes from `Last-Event-ID` or `?after=<id>`; the page reconnects with a 1 to 30 second backoff and resumes from the last id it showed. The page keeps at most 500 rows and 500 characters per message ("show more" reveals up to 4096). A browser holds about six connections per origin, so the 20-stream limit cannot be reached from browser tabs. Check it with a script:
+
+```powershell
+1..20 | ForEach-Object { Start-Process curl.exe -ArgumentList '-N','-s','-o','NUL','http://127.0.0.1:8000/api/services/unassigned/stream' -WindowStyle Hidden }
+Start-Sleep 2
+curl.exe -s -i -m 3 http://127.0.0.1:8000/api/services/unassigned/stream     # HTTP/1.1 429 ... Retry-After: 5
+Get-Process curl | Stop-Process                                              # frees the 20 slots
+```
+
+**Checks you can run.** The page has a built-in self-test of its pure logic. It fetches nothing and writes `SELFTEST PASS` when every case passes. Edge prints the page only when its output is redirected, so use `Start-Process`:
+
+```powershell
+$edge = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+$page = (Resolve-Path src/chimericmesh/web/index.html).Path -replace '\\', '/'
+Start-Process $edge -ArgumentList '--headless=new','--disable-gpu',"--user-data-dir=$env:TEMP\edge-check",'--virtual-time-budget=5000','--dump-dom',"`"file:///$page#selftest`"" -RedirectStandardOutput "$env:TEMP\dom.txt" -Wait -NoNewWindow
+Select-String -Path "$env:TEMP\dom.txt" -Pattern 'SELFTEST (PASS|FAIL)'
+```
+
+Hostile text must stay text. Send `<img src=x onerror=alert(1)>` as a log line, create a service named `<script>x</script>`, dump the Services page, and look for the escaped form:
+
+```powershell
+$h = @{ 'content-type' = 'application/json' }
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/ingest -Headers $h -Body '{"source":"syslog","line":"<img src=x onerror=alert(1)>","host":"web01"}'
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/services -Headers ($h + @{ 'X-Admin-Token' = (Get-Content ~/.chimericmesh/admin.token -Raw).Trim() }) -Body '{"id":"xss","name":"<script>x</script>"}'
+Start-Process $edge -ArgumentList '--headless=new','--disable-gpu',"--user-data-dir=$env:TEMP\edge-check",'--virtual-time-budget=8000','--dump-dom','"http://127.0.0.1:8000/#/services"' -RedirectStandardOutput "$env:TEMP\dom.txt" -Wait -NoNewWindow
+Select-String -Path "$env:TEMP\dom.txt" -Pattern '&lt;script&gt;x&lt;/script&gt;'     # found: shown as text
+Select-String -Path "$env:TEMP\dom.txt" -Pattern '<script>x</script>|<img src=x'      # no match: no such element
+```
+
+(With `&lt;img src=x` in the Overview's dump for the log line.) The page never starts a scan or an approval when it loads: both need a click, and the scan also needs the token.

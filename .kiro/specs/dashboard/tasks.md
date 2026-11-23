@@ -163,7 +163,7 @@ Conventions for every task: write the tests first and watch them fail, then impl
     - _Requirements: 8.1, 8.2, 8.3_
 
 - [ ] 10. Wire everything and finish
-  - [ ] 10.1 Document the dashboard in the README
+  - [x] 10.1 Document the dashboard in the README
     - Write `tests/unit/test_dashboard_readme.py` first: the README has a "Dashboard" section that names the views (Overview, Services, Discovery, Rules), says the admin token is pasted once per browser session and kept only in `sessionStorage` (not `localStorage`) and that pause, revoke and withdraw need no token, states the residual risk (no Content-Security-Policy in V1; a script in the page origin could read the token, so the page never renders log text as HTML), explains the live log (SSE, 20 streams, resume with `Last-Event-ID`, `?tail=100` backlog) and the browser's own limit of about six connections per origin, shows the scripted 20-stream check (20 `curl -N` streams, then a 21st expecting 429), the self-test command and the hostile-text check (with the exact `--dump-dom` command that worked when run once during the build, O17), and says the page never starts a scan or an approval on load.
     - Edit `README.md` (one section; no change to other sections).
     - _Requirements: 1.2, 2.2, 4.5_
