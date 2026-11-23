@@ -80,6 +80,8 @@
   #status { max-width: 40ch; overflow-wrap: anywhere; }
   .banner { margin: 0; padding: 10px clamp(16px, 4vw, 48px); background: #2a1d08; color: var(--amber); border-bottom: 1px solid var(--amber); }
   #selftest { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ghost); }
+  form.unlock { padding: 12px clamp(16px, 4vw, 48px); border-bottom: 1px solid var(--line); background: var(--panel); }
+  form.unlock .meta { overflow-wrap: anywhere; }
 
   /* guide */
   .guide-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
@@ -144,9 +146,22 @@
   </nav>
   <div class="hdr-right">
     <div id="status" class="meta" role="status" aria-live="polite"></div>
+    <span id="lockText" class="meta"></span>
+    <button class="ghost small" type="button" id="unlockBtn" aria-controls="tokenForm" aria-expanded="false">Unlock</button>
+    <button class="ghost small" type="button" id="lockBtn" hidden>Lock</button>
     <button id="storm" type="button">Summon a failure storm</button>
   </div>
 </header>
+<form class="unlock hidden" id="tokenForm" autocomplete="off" aria-label="Unlock">
+  <div class="meta" id="tokenNote"></div>
+  <div class="meta" id="tokenFile"></div>
+  <div class="prompt">
+    <label class="sr" for="tokenInput">Admin token</label>
+    <input type="password" id="tokenInput" maxlength="256" autocomplete="off" spellcheck="false" aria-label="Admin token" placeholder="admin token">
+    <button type="submit">Save</button>
+    <button class="ghost" type="button" id="tokenCancel">Cancel</button>
+  </div>
+</form>
 <div id="pausedBanner" class="banner" role="status" hidden></div>
 <main>
   <div id="view-overview" data-view="overview">
@@ -196,12 +211,6 @@
           <span class="spacer"></span>
           <button class="ghost small" type="button" id="termClear">Clear</button>
         </div>
-        <form class="prompt hidden" id="tokenForm" autocomplete="off">
-          <label class="sr" for="tokenInput">Admin token</label>
-          <input type="password" id="tokenInput" maxlength="256" autocomplete="off" spellcheck="false" aria-label="Admin token" placeholder="admin token (from admin.token)">
-          <button type="submit">Save</button>
-        </form>
-        <div class="meta hidden" id="tokenNote" role="status"></div>
         <div class="meta" id="identity" style="margin-top:8px"></div>
         <div class="meta">Press / to focus, Tab to complete, ↑↓ for history.</div>
       </section>
@@ -305,6 +314,54 @@ function afterAuthFailure(status, hadToken, retryAfter) {
   if (status === 429) return { clearToken: false, text: Number(retryAfter) > 0 ? `too many requests, try again in ${Math.floor(Number(retryAfter))} s` : 'too many requests, try again later' };
   return { clearToken: false, text: '' };
 }
+// Routes that need the admin token (method, path pattern). Taken from the route tables of the services,
+// discovery and auto-approval designs; POST /api/terminal is conditional (only !approve and !deny check it).
+const PRIVILEGED = [
+  ['POST', '^/api/services$'],
+  ['PATCH', '^/api/services/[^/]+$'],
+  ['DELETE', '^/api/services/[^/]+$'],
+  ['POST', '^/api/services/[^/]+/log-sources$'],
+  ['PATCH', '^/api/services/[^/]+/log-sources/[^/]+$'],
+  ['DELETE', '^/api/services/[^/]+/log-sources/[^/]+$'],
+  ['POST', '^/api/discovery/scan$'],
+  ['GET', '^/api/discovery/scans/[^/]+$'],
+  ['POST', '^/api/discovery/suggestions/[^/]+/accept$'],
+  ['POST', '^/api/discovery/suggestions/[^/]+/dismiss$'],
+  ['GET', '^/api/discovery/dismissals$'],
+  ['DELETE', '^/api/discovery/dismissals$'],
+  ['POST', '^/api/rules$'],
+  ['PATCH', '^/api/rules/[^/]+$'],
+  ['POST', '^/api/rules/[^/]+/enable$'],
+  ['POST', '^/api/rules/resume$'],
+  ['POST', '^/api/proposals/[^/]+/rule$'],
+  ['POST', '^/api/proposals/[^/]+/decide$'],
+  ['POST', '^/api/terminal$'],
+];
+// Sent when a token is stored, harmless when the route is open (agent-loop owns the route).
+const SEND_IF_PRESENT = [['GET', '^/api/services/[^/]+/permissions-snippet$']];
+function matchesTable(table, method, path) {
+  const p = String(path).split('?')[0];
+  return table.some(([m, rx]) => m === method && new RegExp(rx).test(p));
+}
+function needsToken(method, path) { return matchesTable(PRIVILEGED, method, path); }
+function sendsTokenIfPresent(method, path) { return needsToken(method, path) || matchesTable(SEND_IF_PRESENT, method, path); }
+// Lock registry: true needs the token (disabled while locked), false is a reduce action (always enabled),
+// 'conditional' is never disabled and sends the token when one is stored.
+const ACTIONS = {
+  'svc-save': true, 'svc-source-edit': true, 'scan-start': true, 'suggestion-accept': true,
+  'suggestion-dismiss': true, 'dismissals-clear': true, 'proposal-approve': true, 'proposal-deny': true,
+  'rule-create': true, 'rule-edit': true, 'rule-enable': true, 'rules-resume': true, 'rule-from-proposal': true,
+  'rules-pause-all': false, 'rule-pause': false, 'rule-revoke': false, 'proposal-withdraw': false,
+  'terminal-send': 'conditional',
+};
+function actionNeedsToken(id) { return Object.prototype.hasOwnProperty.call(ACTIONS, id) && ACTIONS[id] === true; }
+function tokenShapeOk(s) { return typeof s === 'string' && /^[\x21-\x7e]{1,200}$/.test(s); }
+// Used when GET /api/ui-config fails: the access mode is unknown, nothing is locked (the hub decides).
+const UI_FALLBACK = {
+  enforce_access: null, token_file: null,
+  formats: ['syslog-text', 'ncsa', 'w3c', 'xferlog', 'plain'],
+  protocols: ['syslog-udp', 'syslog-tcp', 'telnet', 'irc', 'file'],
+};
 /* PURE:end */
 
 /* ==== SELFTEST ==== */
@@ -388,9 +445,31 @@ const SELFTEST_CASES = [
   { name: 'afterAuthFailure', args: [429, false, 7], expect: { clearToken: false, text: 'too many requests, try again in 7 s' } },
   { name: 'afterAuthFailure', args: [429, false], expect: { clearToken: false, text: 'too many requests, try again later' } },
   { name: 'afterAuthFailure', args: [500, false], expect: { clearToken: false, text: '' } },
+  { name: 'matchesTable', args: [[['GET', '^/a$']], 'GET', '/a?x=1'], expect: true },
+  { name: 'matchesTable', args: [[['GET', '^/a$']], 'POST', '/a'], expect: false },
+  { name: 'needsToken', args: ['POST', '/api/services'], expect: true },
+  { name: 'needsToken', args: ['GET', '/api/services'], expect: false },
+  { name: 'needsToken', args: ['GET', '/api/discovery/scans/s1'], expect: true },
+  { name: 'needsToken', args: ['POST', '/api/rules/resume'], expect: true },
+  { name: 'needsToken', args: ['POST', '/api/rules/pause'], expect: false },
+  { name: 'needsToken', args: ['POST', '/api/rules/r1/revoke'], expect: false },
+  { name: 'needsToken', args: ['POST', '/api/proposals/p1/withdraw'], expect: false },
+  { name: 'needsToken', args: ['POST', '/api/terminal'], expect: true },
+  { name: 'needsToken', args: ['GET', '/api/services/web/stream'], expect: false },
+  { name: 'sendsTokenIfPresent', args: ['GET', '/api/services/web/permissions-snippet'], expect: true },
+  { name: 'sendsTokenIfPresent', args: ['GET', '/api/services/web'], expect: false },
+  { name: 'actionNeedsToken', args: ['svc-save'], expect: true },
+  { name: 'actionNeedsToken', args: ['rule-revoke'], expect: false },
+  { name: 'actionNeedsToken', args: ['terminal-send'], expect: false },
+  { name: 'actionNeedsToken', args: ['constructor'], expect: false },
+  { name: 'tokenShapeOk', args: ['abc-123'], expect: true },
+  { name: 'tokenShapeOk', args: ['a b'], expect: false },
+  { name: 'tokenShapeOk', args: [''], expect: false },
+  { name: 'tokenShapeOk', args: ['x'.repeat(201)], expect: false },
 ];
 function runSelfTest() {
-  const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure };
+  const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure,
+    matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk };
   const failures = [];
   for (const c of SELFTEST_CASES) {
     let got;
@@ -415,20 +494,83 @@ function toast(msg) {
 const unreachable = () => toast('Could not reach the mesh');
 const here = window.location; // the page's own address; only its hash is read (routes) or set (navigation)
 
+// A button for a registered action: locked (disabled, title "unlock first") only for a token action while
+// access control is on and no token is stored. Reduce actions and the terminal are never locked here.
+function lockButton(b) {
+  const locked = Boolean(STATE.lock && STATE.lock.locked) && actionNeedsToken(b.dataset.action);
+  if (locked) { b.disabled = true; b.title = 'unlock first'; }
+  else if (b.title === 'unlock first') { b.disabled = false; b.title = ''; }
+}
+function actionButton(id, label, handler, cls) {
+  if (!Object.prototype.hasOwnProperty.call(ACTIONS, id)) throw new Error(`unknown action ${id}`);
+  const b = el('button', cls === undefined ? 'ghost small' : cls, label);
+  b.type = 'button';
+  b.dataset.action = id;
+  b.onclick = handler;
+  lockButton(b);
+  return b;
+}
+
 /* ==== API ==== */
-// Interim admin token (the dashboard module owns the final design): kept for this tab only, sent only
-// to the two routes that need it, never shown, logged or put in the transcript.
-const TOKEN_KEY = 'chimericmesh.adminToken';
+// The admin token is kept for this tab only (sessionStorage, or memory when storage is off), read only by
+// authHeaders, sent only on the PRIVILEGED routes, and never shown, logged, put in a URL or in localStorage.
+const TOKEN_KEY = 'cm.token';
 const TOKEN_ROUTES = /^\/api\/(terminal|proposals\/[^/]+\/decide)$/;
-const TOKEN_PROMPT_TEXT = 'Approving or denying needs the admin token. Paste the contents of admin.token, then send the command again.';
-const readToken = () => { try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } };
-function askForToken() {
+const TOKEN_PROMPT_TEXT = 'Protected actions (approve, deny, add or edit a service, scan, rules) need the admin token. Paste the contents of the token file.';
+let memToken = null;
+function storedToken() {
+  try { const t = sessionStorage.getItem(TOKEN_KEY); if (t) return t; } catch (e) { /* storage unavailable */ }
+  return memToken;
+}
+function saveToken(value) {
+  memToken = null;
+  try { sessionStorage.setItem(TOKEN_KEY, value); return true; } catch (e) { memToken = value; return false; }
+}
+function clearToken() {
+  memToken = null;
   try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* storage unavailable */ }
-  const note = $('tokenNote');
-  note.textContent = TOKEN_PROMPT_TEXT;
-  note.classList.remove('hidden');
-  $('tokenForm').classList.remove('hidden');
-  $('tokenInput').focus();
+}
+const readToken = () => storedToken() || '';
+function authHeaders(method, path) {
+  const token = storedToken();
+  if (!token || !(needsToken(method, path) || sendsTokenIfPresent(method, path))) return {};
+  return { 'X-Admin-Token': token };
+}
+class ApiError extends Error {
+  constructor(status, body, retryAfter) { super(String(status)); this.status = status; this.body = body; this.retryAfter = retryAfter; }
+}
+async function errorFromResponse(r) {
+  let body = null;
+  try { body = await r.json(); } catch (e) { body = null; }
+  return new ApiError(r.status, body, r.headers.get('Retry-After'));
+}
+// 401, 403 and 429 from the hub: clear a rejected token, say why in the status line, re-apply the lock.
+function handle401(path, status, retryAfter) {
+  const out = afterAuthFailure(status === undefined ? 401 : status, Boolean(storedToken()), retryAfter);
+  if (out.clearToken) clearToken();
+  if (out.text) setStatus(out.text);
+  applyLock();
+  return out.text;
+}
+async function request(method, path, body) {
+  if (typeof path !== 'string' || !(path === '/' || path.startsWith('/api/'))) throw new ApiError(0, { detail: 'bad path' }, null);
+  const headers = Object.assign({}, authHeaders(method, path));
+  const opts = { method, headers };
+  if (body !== undefined) { headers['content-type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  let r;
+  try { r = await fetch(path, opts); } catch (e) { throw new ApiError(0, { detail: 'Could not reach the mesh' }, null); }
+  if (!r.ok) {
+    const err = await errorFromResponse(r);
+    if (r.status === 401 || r.status === 403 || r.status === 429) err.authText = handle401(path, r.status, err.retryAfter);
+    throw err;
+  }
+  if (r.status === 204) return null;
+  try { return await r.json(); } catch (e) { return null; }
+}
+// Interim helpers of the Overview (services task 7.10); task 4.3 moves the terminal onto request().
+function askForToken() {
+  handle401('/api/terminal', 401);
+  openUnlock();
 }
 const api = async (path, opts) => {
   const r = await fetch(path, opts);
@@ -439,13 +581,13 @@ const api = async (path, opts) => {
 const post = (path, body) => {
   const headers = { 'content-type': 'application/json' };
   const token = readToken();
-  if (token && TOKEN_ROUTES.test(path)) headers['X-Admin-Token'] = token;
+  if (token && TOKEN_ROUTES.test(path)) Object.assign(headers, authHeaders('POST', path));
   return api(path, { method: 'POST', headers, body: JSON.stringify(body || {}) });
 };
 
 /* ==== STATE ==== */
 const COMMANDS = ['!help', '!status', '!incidents', '!explain', '!proposals', '!resolve', '!approve', '!deny'];
-const STATE = { route: { view: 'overview' }, incidents: [], proposals: [], workflow: null, chatCursor: 0, history: [], histIdx: 0 };
+const STATE = { route: { view: 'overview' }, uiConfig: UI_FALLBACK, lock: lockState(UI_FALLBACK, false), incidents: [], proposals: [], workflow: null, chatCursor: 0, history: [], histIdx: 0 };
 const state = STATE;
 const SEV = SEV_NAMES;
 const firstOpen = () => state.incidents.find((i) => !i.resolved);
@@ -722,16 +864,6 @@ async function runCommand(text) {
   await Promise.allSettled([fetchChat(), loadProposals(), loadIncidents(), loadWorkflow()]);
 }
 
-$('tokenForm').onsubmit = (ev) => {
-  ev.preventDefault();
-  const value = $('tokenInput').value.trim();
-  $('tokenInput').value = '';
-  if (!value) return;
-  try { sessionStorage.setItem(TOKEN_KEY, value); } catch (e) { /* storage unavailable */ }
-  $('tokenForm').classList.add('hidden');
-  $('tokenNote').classList.add('hidden');
-  toast('Token saved for this tab');
-};
 
 const termInput = $('termInput');
 $('termForm').onsubmit = (ev) => { ev.preventDefault(); const t = termInput.value; termInput.value = ''; runCommand(t); };
@@ -819,6 +951,55 @@ $('sendForm').onsubmit = async (ev) => {
   refresh();
 };
 
+/* ---------- lock and unlock ---------- */
+function applyLock() {
+  const has = Boolean(storedToken());
+  const ls = lockState(STATE.uiConfig, has);
+  STATE.lock = ls;
+  $('lockText').textContent = has ? 'Unlocked' : (ls.locked ? 'Locked' : '');
+  $('unlockBtn').hidden = has || ls.mode === 'off';
+  $('lockBtn').hidden = !has;
+  document.querySelectorAll('[data-action]').forEach(lockButton);
+}
+function openUnlock() {
+  $('tokenNote').textContent = TOKEN_PROMPT_TEXT;
+  const file = STATE.uiConfig && STATE.uiConfig.token_file;
+  $('tokenFile').textContent = file ? `The token is in the file ${file}` : '';
+  $('tokenForm').classList.remove('hidden');
+  $('unlockBtn').setAttribute('aria-expanded', 'true');
+  $('tokenInput').focus();
+}
+function closeUnlock() {
+  $('tokenInput').value = '';
+  $('tokenForm').classList.add('hidden');
+  $('unlockBtn').setAttribute('aria-expanded', 'false');
+}
+function wireUnlock() {
+  $('unlockBtn').onclick = openUnlock;
+  $('tokenCancel').onclick = () => { closeUnlock(); $('unlockBtn').focus(); };
+  $('lockBtn').onclick = () => { clearToken(); applyLock(); setStatus('Locked'); $('unlockBtn').focus(); };
+  $('tokenForm').onsubmit = (ev) => {
+    ev.preventDefault();
+    const value = $('tokenInput').value.trim();
+    $('tokenInput').value = '';
+    if (!tokenShapeOk(value)) { $('tokenNote').textContent = 'That is not a token: 1 to 200 printable characters, no spaces.'; return; }
+    const kept = saveToken(value);
+    closeUnlock();
+    applyLock();
+    setStatus(kept ? 'Unlocked' : 'token kept for this tab only');
+    $('lockBtn').focus();
+  };
+}
+async function loadUiConfig() {
+  let cfg = null;
+  try { cfg = await request('GET', '/api/ui-config'); } catch (e) { cfg = null; }
+  STATE.uiConfig = cfg && typeof cfg === 'object' && typeof cfg.enforce_access === 'boolean' ? cfg : UI_FALLBACK;
+  const file = STATE.uiConfig.token_file;
+  $('tokenFile').textContent = file ? `The token is in the file ${file}` : '';
+  applyLock();
+  if (STATE.lock.mode === 'unknown') setStatus('access mode unknown');
+}
+
 /* ---------- navigation ---------- */
 const ENTER = {}; // view name -> function(route), filled by the view code below and in later tasks
 function showRoute() {
@@ -837,6 +1018,9 @@ function init() {
   if (here.hash === '#selftest') { runSelfTest(); return; } // no request of any kind in this mode
   document.querySelectorAll('nav [data-nav]').forEach((b) => { b.onclick = () => { here.hash = b.dataset.nav === 'overview' ? '#/' : `#/${b.dataset.nav}`; }; });
   window.addEventListener('hashchange', showRoute);
+  wireUnlock();
+  applyLock();
+  loadUiConfig();
   showRoute();
   refresh(); fetchChat();
   startScheduler();
