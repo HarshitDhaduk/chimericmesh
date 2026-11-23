@@ -29,7 +29,7 @@
     border-radius: 4px; cursor: pointer; font-weight: 700; }
   button:hover { background: #ffa05f; }
   button:disabled { opacity: .55; cursor: not-allowed; }
-  button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
     outline: 3px solid var(--ghost); outline-offset: 2px; }
   button.ghost { background: transparent; color: var(--ghost); border: 1px solid var(--ghost); padding: 6px 10px; }
   button.ghost:hover { background: rgba(124,255,178,.12); }
@@ -167,6 +167,18 @@
     border: 1px solid var(--blood); border-radius: 6px; padding: 8px 14px; max-width: 90vw; }
   #toast:empty { display: none; }
   @media (prefers-reduced-motion: no-preference) { .pulse { animation: pulse 2.4s ease-in-out infinite; } }
+  @media (max-width: 480px) {
+    header { padding: 16px; gap: 10px; }
+    main { padding: 16px 12px 48px; gap: 16px; }
+    section { padding: 14px; }
+    .hdr-right { width: 100%; }
+    #status { max-width: 100%; }
+    nav button { padding: 8px 10px; }
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .row.live { grid-template-columns: 56px 56px minmax(0, 1fr); gap: 6px; }
+    form.svc-form, form.rule-form { padding: 10px; }
+    dl.facts { grid-template-columns: 1fr; }
+  }
   @keyframes pulse { 50% { text-shadow: 0 0 22px rgba(255,138,61,.9); } }
 </style>
 </head>
@@ -861,10 +873,12 @@ function lockButton(b) {
   if (locked) { b.disabled = true; b.title = 'unlock first'; }
   else if (b.title === 'unlock first') { b.disabled = false; b.title = ''; }
 }
-function actionButton(id, label, handler, cls) {
+function actionButton(id, label, handler, cls, aria) {
   if (!Object.prototype.hasOwnProperty.call(ACTIONS, id)) throw new Error(`unknown action ${id}`);
+  if (typeof label !== 'string' || !label.trim()) throw new Error(`action ${id} needs a visible name`);
   const b = el('button', cls === undefined ? 'ghost small' : cls, label);
   b.type = 'button';
+  if (aria) b.setAttribute('aria-label', aria);
   b.dataset.action = id;
   b.onclick = handler;
   lockButton(b);
@@ -1087,9 +1101,9 @@ function renderProposalCard(p, incidentText) {
   msg.setAttribute('role', 'status');
   if (p.status === 'pending') {
     const a = el('div', 'actions');
-    a.append(actionButton('proposal-approve', 'Approve', () => decideProposal(p, true, msg)),
-      actionButton('proposal-deny', 'Deny', () => decideProposal(p, false, msg), 'ghost small warn'),
-      actionButton('proposal-withdraw', 'Withdraw', () => withdrawProposal(p, msg)));
+    a.append(actionButton('proposal-approve', 'Approve', () => decideProposal(p, true, msg), undefined, `Approve proposal ${p.id}`),
+      actionButton('proposal-deny', 'Deny', () => decideProposal(p, false, msg), 'ghost small warn', `Deny proposal ${p.id}`),
+      actionButton('proposal-withdraw', 'Withdraw', () => withdrawProposal(p, msg), undefined, `Withdraw proposal ${p.id}`));
     d.append(a);
   }
   if (canMakeRule(p)) {
@@ -1309,7 +1323,7 @@ termInput.addEventListener('keydown', (ev) => {
   }
 });
 document.addEventListener('keydown', (ev) => {
-  if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey || STATE.route.view !== 'overview') return;
   const t = ev.target, tag = t && t.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
   ev.preventDefault(); termInput.focus();
@@ -1427,9 +1441,10 @@ function showRoute() {
 
 /* ---------- services list ---------- */
 const STATE_CLASS = { active: 'st-active', idle: 'st-idle', never_seen: 'st-never' };
-function focusKeyButton(label, key, handler, cls) {
+function focusKeyButton(label, key, handler, cls, ariaLabel) {
   const b = el('button', cls === undefined ? 'ghost small' : cls, label);
   b.type = 'button';
+  if (ariaLabel) b.setAttribute('aria-label', ariaLabel); // the visible text stays inside the name
   b.dataset.focusKey = key;
   b.onclick = handler;
   return b;
@@ -1454,8 +1469,8 @@ function serviceCard(s, now) {
     c.append(ul);
   }
   const actions = el('div', 'actions');
-  actions.append(focusKeyButton('Open', `${s.id}:open`, () => { here.hash = `#/services/${encodeURIComponent(s.id)}`; }));
-  if (!s.builtin) actions.append(focusKeyButton('Edit', `${s.id}:edit`, () => renderServiceForm(s)));
+  actions.append(focusKeyButton('Open', `${s.id}:open`, () => { here.hash = `#/services/${encodeURIComponent(s.id)}`; }, undefined, `Open ${s.name}`));
+  if (!s.builtin) actions.append(focusKeyButton('Edit', `${s.id}:edit`, () => renderServiceForm(s), undefined, `Edit ${s.name}`));
   c.append(actions);
   return c;
 }
@@ -1633,6 +1648,7 @@ async function saveService() {
     st.busy = false;
   }
 }
+ENTER.overview = () => { refresh(); fetchChat(); };
 ENTER.services = () => { lastSvcKey = null; loadServices(); };
 
 /* ---------- service detail ---------- */
@@ -2078,10 +2094,10 @@ function ruleRow(r, now) {
   const box = el('div', 'actions');
   td.append(box);
   tr.append(td);
-  if (r.status === 'active') box.append(keyed(actionButton('rule-pause', 'Pause', () => pauseRule(r)), `${r.id}:pause`));
-  if (r.status === 'active' || r.status === 'suspended') box.append(keyed(actionButton('rule-revoke', 'Revoke', () => revokeRule(r), 'ghost small warn'), `${r.id}:revoke`));
-  if (r.status === 'suspended') box.append(keyed(actionButton('rule-enable', 'Re-enable', () => enableRule(r)), `${r.id}:enable`));
-  if (r.status === 'active' || r.status === 'suspended') box.append(keyed(actionButton('rule-edit', 'Edit', () => openRuleForm(r)), `${r.id}:edit`));
+  if (r.status === 'active') box.append(keyed(actionButton('rule-pause', 'Pause', () => pauseRule(r), undefined, `Pause rule ${r.id}`), `${r.id}:pause`));
+  if (r.status === 'active' || r.status === 'suspended') box.append(keyed(actionButton('rule-revoke', 'Revoke', () => revokeRule(r), 'ghost small warn', `Revoke rule ${r.id}`), `${r.id}:revoke`));
+  if (r.status === 'suspended') box.append(keyed(actionButton('rule-enable', 'Re-enable', () => enableRule(r), undefined, `Re-enable rule ${r.id}`), `${r.id}:enable`));
+  if (r.status === 'active' || r.status === 'suspended') box.append(keyed(actionButton('rule-edit', 'Edit', () => openRuleForm(r), undefined, `Edit rule ${r.id}`), `${r.id}:edit`));
   return tr;
 }
 let lastRulesKey = null;

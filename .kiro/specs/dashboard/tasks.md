@@ -155,8 +155,8 @@ Conventions for every task: write the tests first and watch them fail, then impl
     - Manual browser check: revoke a rule and see the `rule_revoked` row appear within 5 s; filter by rule; load more with more than 100 rows (generate with repeated pause calls).
     - _Requirements: 7.5, 7.7_
 
-- [ ] 9. Accessibility and layout
-  - [ ] 9.1 Add the accessibility checks and the narrow layout
+- [x] 9. Accessibility and layout
+  - [x] 9.1 Add the accessibility checks and the narrow layout
     - Write `tests/unit/test_dashboard_a11y.py` first (static): every `<button>` in the static HTML has text or `aria-label`; every `<input>`, `<select>` and `<textarea>` in the static HTML has a `<label for>` or `aria-label`; in the script, every function that calls `el('input'`, `el('select'` or `el('textarea'` also contains `htmlFor` or `aria-label` or uses `field(` (heuristic, documented in the test); `actionButton` throws when it gets neither a label nor an `aria-label`; the stylesheet keeps `:focus-visible` with an outline and has no `outline: none`; `stateLabel` covers every state and status of services, sources, rules and proposals (R8.2); a `@media (max-width: 480px)` block exists, the services list uses `minmax(min(100%, 280px), 1fr)`, and `overflow-wrap: anywhere` is set on card text; only the rules and audit tables are inside an `overflow-x: auto` wrapper.
     - Edit `index.html` where a check fails (labels, CSS).
     - Manual browser check: keyboard-only pass (Tab order, Enter on every button, focus visible); screenshots at 360 px width for Services, Discovery and Rules have no horizontal scroll for the services list; colour is not the only status cue (view the page in grayscale or read the labels).
