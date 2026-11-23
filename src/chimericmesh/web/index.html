@@ -1311,7 +1311,9 @@ function readServiceForm() {
 // the run and shows the server's text; what was already saved stays, and the form keeps editing it.
 async function saveService() {
   const st = STATE.svcForm;
-  if (!st) return;
+  if (!st || st.busy) return; // a double click must not send the create or a log-source POST twice
+  st.busy = true;
+  try {
   const msg = $('svcFMsg');
   msg.textContent = 'Saving...';
   const form = readServiceForm();
@@ -1355,6 +1357,9 @@ async function saveService() {
   setStatus(`Service ${st.original.id} saved`);
   lastSvcKey = null;
   loadServices();
+  } finally {
+    st.busy = false;
+  }
 }
 ENTER.services = () => { lastSvcKey = null; loadServices(); };
 

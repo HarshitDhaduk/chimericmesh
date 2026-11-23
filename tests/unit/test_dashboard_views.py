@@ -174,3 +174,13 @@ def test_copy_uses_the_clipboard_with_a_select_fallback():
     copy = code("copyPermissions")
     assert "navigator.clipboard.writeText(" in copy
     assert "selectNodeContents(" in copy and "Ctrl+C" in copy
+
+
+# ---- review-1 fixes -------------------------------------------------------------------------------------
+
+def test_save_cannot_run_twice_at_once():
+    """review-1 M1: a double click must not send the create or a log-source POST twice."""
+    save = code("saveService")
+    assert re.search(r"if \(!st \|\| st\.busy\) return;", save)
+    assert "st.busy = true;" in save and re.search(r"finally \{\s*st\.busy = false;", save)
+    assert save.index("st.busy = true;") < save.index("request(")
