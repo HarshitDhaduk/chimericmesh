@@ -117,6 +117,7 @@ def scan(text: str):
         yield "code", text[code_start:]
 
 
+@lru_cache(maxsize=None)
 def strip_comments(text: str) -> str:
     """Remove // and /* */ comments; strings and regex literals are kept as they are."""
     out = []
@@ -125,6 +126,7 @@ def strip_comments(text: str) -> str:
     return "".join(out)
 
 
+@lru_cache(maxsize=None)
 def code_only(text: str) -> str:
     """Comments removed and string/regex bodies blanked: what is left is the code structure."""
     out = []
@@ -145,6 +147,7 @@ def section(name: str) -> str:
     return s[start : m.start() if m else len(s)]
 
 
+@lru_cache(maxsize=None)
 def functions(text: str) -> dict[str, str]:
     """Top-level `function name(` (also `async function`) bodies, by name, with brace matching."""
     found: dict[str, str] = {}

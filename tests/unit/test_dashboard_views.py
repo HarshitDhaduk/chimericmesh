@@ -288,3 +288,76 @@ def test_accept_body_cases_cover_the_documented_inputs():
     text = cases_text()
     assert "log_paths: []" in text  # nothing checked, and a watched_by row that is never sent
     assert re.search(r"expect: \{ id: 'a', name: 'A', log_paths: \[\{ path: '/x', format: 'ncsa' \}, \{ path: '/y', format: 'w3c' \}\] \}", text)
+
+# ---- 7.1 service detail: live log ------------------------------------------------------------------------
+def live_markup() -> str:
+    return segment('data-slot="live-log"', 'data-slot="incidents"')
+def test_live_log_markup_has_labelled_controls():
+    seg = live_markup()
+    for ident in ("livePause", "liveAuto", "liveSev", "liveText", "liveStatus", "liveBox"):
+        assert f'id="{ident}"' in seg, ident
+    for ident in ("liveAuto", "liveSev", "liveText"):
+        assert f'<label for="{ident}">' in seg, ident
+    assert re.search(r'<button[^>]*id="livePause"[^>]*>Pause</button>', seg)
+    assert 'role="log"' in seg and 'id="liveStatus" role="status"' in seg
+def test_one_event_source_built_from_a_relative_stream_url():
+    script = ds.strip_comments(ds.script_text())
+    assert script.count("new EventSource(") == 1
+    assert "new EventSource(streamUrl(" in code("openLive")
+    url = code("streamUrl")
+    assert "`/api/services/${encodeURIComponent(id)}/stream" in url
+    assert "?tail=100" in url and "?after=${" in url
+    assert "http" not in url and "/events" not in url
+    assert not re.search(r"/api/services/\$\{[^}]*\}/events", script)  # H3: no REST backlog call
+def test_rows_are_built_with_el_and_capped():
+    add = code("addLiveRow")
+    assert "el('div', 'row live'" in add
+    assert "capText(" in add and "LOG_MSG_SHORT" in add and "LOG_MSG_LONG" in add
+    assert "'show more'" in add
+    assert "while (box.childElementCount > 500) box.firstElementChild.remove();" in add
+    script = ds.strip_comments(ds.script_text())
+    assert re.search(r"const LOG_MSG_SHORT = 500, LOG_MSG_LONG = 4096, LOG_QUEUE_MAX = 500;", script)
+    assert re.search(r"\.row\.live \.m \{[^}]*text-overflow: ellipsis", ds.load_page())
+    assert "ev.severity_name || sevName(ev.severity)" in add
+    assert "rowMatches(" in add
+def test_live_controls_are_wired():
+    wire = code("wireLive")
+    for ident in ("livePause", "liveAuto", "liveSev", "liveText"):
+        assert f"$('{ident}')" in wire, ident
+    assert "rowMatches(" in code("applyLiveFilter")
+    assert "LOG_QUEUE_MAX" in code("onLiveMessage")
+    assert "toggleLivePause" in wire
+    flush = code("toggleLivePause")
+    assert "L.queue" in flush and "addLiveRow(" in flush
+def test_rowmatches_has_cases():
+    assert case_names().count("rowMatches") >= 5
+    assert "rowMatches" in ds.functions(pure_block())
+def test_closed_and_error_handlers_close_the_source_first():
+    for name in ("onLiveClosed", "onLiveError"):
+        body = code(name)
+        assert ".close()" in body, name
+        for later in ("scheduleLive(", "openLive("):
+            if later in body:
+                assert body.index(".close()") < body.index(later), name
+    assert "'service_deleted'" in code("onLiveClosed") and "'max_age'" in code("onLiveClosed")
+    closed = code("onLiveClosed")
+    assert closed.index("'max_age'") < closed.index("openLive(")  # max_age reopens at once
+def test_reconnect_backs_off_and_resumes_from_the_last_id():
+    sched = code("scheduleLive")
+    assert "nextBackoff(L.fails)" in sched and "setTimeout(" in sched
+    assert "streamUrl(L.id, L.lastId)" in code("openLive")
+    msg = code("onLiveMessage")
+    assert "isNewer(ev.id, L.lastId)" in msg and "JSON.parse(" in msg and "try" in msg
+    assert "L.fails = 0" in msg
+    assert "too many live logs open (limit 20)" in code("onLiveError")
+def test_dropped_inserts_a_system_row():
+    dropped = code("onLiveDropped")
+    assert "events were skipped" in dropped and "addSystemRow(" in dropped
+    assert "addEventListener('dropped'" in code("openLive") and "addEventListener('closed'" in code("openLive")
+def test_leaving_the_view_or_hiding_the_tab_closes_the_source():
+    vis = code("liveVisibility")
+    assert "'hidden'" in vis and "closeLive(" in vis and "openLive(" in vis
+    assert "visibilitychange" in ds.strip_comments(ds.section("INIT")) and "liveVisibility" in ds.strip_comments(ds.section("INIT"))
+    show = code("showRoute")
+    assert "closeLive(" in show
+    assert "startLive(" in code("openServiceDetail")

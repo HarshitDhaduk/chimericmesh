@@ -100,6 +100,12 @@
   .field label { color: var(--dim); font-size: .85rem; }
   fieldset { border: 1px solid var(--line); border-radius: 4px; display: flex; flex-wrap: wrap; gap: 12px; }
   .table-wrap { overflow-x: auto; }
+  .row.live { grid-template-columns: 70px 70px minmax(0, 1fr); }
+  .row.live .cell { min-width: 0; }
+  .row.live .m { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row.live.open .m { white-space: normal; overflow-wrap: anywhere; }
+  .row.live.sys { color: var(--amber); }
+  .live-ctl { align-items: flex-end; margin-bottom: 8px; }
   .cand { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; border-top: 1px dashed var(--line); padding-top: 8px; }
   table.sources { border-collapse: collapse; width: 100%; }
   table.sources td { padding: 4px; vertical-align: bottom; }
@@ -284,7 +290,31 @@
         <div class="meta" id="permMsg" role="status" aria-live="polite"></div>
       </details>
     </div>
-    <div data-slot="live-log"></div>
+    <div data-slot="live-log">
+      <section id="liveLog" aria-labelledby="live-h">
+        <h2 id="live-h">Live log</h2>
+        <div class="actions live-ctl">
+          <button class="ghost small" type="button" id="livePause">Pause</button>
+          <div class="field"><label for="liveSev">Minimum severity</label>
+            <select id="liveSev">
+              <option value="7">all severities</option>
+              <option value="6">info or worse</option>
+              <option value="5">notice or worse</option>
+              <option value="4">warning or worse</option>
+              <option value="3">err or worse</option>
+              <option value="2">crit or worse</option>
+              <option value="1">alert or worse</option>
+              <option value="0">emerg only</option>
+            </select></div>
+          <div class="field"><label for="liveText">Filter text</label>
+            <input type="text" id="liveText" maxlength="100" autocomplete="off" spellcheck="false"></div>
+          <div class="field"><label for="liveAuto">Auto-scroll</label>
+            <input type="checkbox" id="liveAuto" checked></div>
+        </div>
+        <div class="meta" id="liveStatus" role="status" aria-live="polite"></div>
+        <div class="log" id="liveBox" role="log" aria-label="Live log rows"></div>
+      </section>
+    </div>
     <div data-slot="incidents"></div>
     <div data-slot="proposals"></div>
     <section id="svcGone" hidden>
@@ -375,6 +405,13 @@ function parseRoute(hash) {
 function dueTasks(tasks, now, view, visible) {
   if (!visible) return [];
   return tasks.filter((t) => (t.view === '*' || t.view === view) && now - t.last + SCHED_SLACK_MS >= t.every).map((t) => t.id);
+}
+function rowMatches(ev, minSev, text) {
+  const sev = Number(ev && ev.severity);
+  if (Number.isFinite(minSev) && !(sev <= minSev)) return false;
+  const t = String(text === null || text === undefined ? '' : text).toLowerCase();
+  if (!t) return true;
+  return `${ev.host || ''} ${ev.app || ''} ${ev.message || ''}`.toLowerCase().includes(t);
 }
 function isNewer(id, lastId) { return typeof id === 'number' && Number.isFinite(id) && id > lastId; }
 function lockState(uiConfig, hasToken) {
@@ -562,6 +599,11 @@ const SELFTEST_CASES = [
   { name: 'dueTasks', args: [[{ id: 'a', every: 3000, last: 0, view: 'overview' }, { id: 'c', every: 1000, last: 0, view: 'services' }], 1000, 'services', true], expect: ['c'] },
   { name: 'dueTasks', args: [[{ id: 'b', every: 5000, last: 0, view: '*' }], 5000, 'rules', true], expect: ['b'] },
   { name: 'dueTasks', args: [[{ id: 'a', every: 3000, last: 1000, view: 'overview' }], 2500, 'overview', true], expect: [] },
+  { name: 'rowMatches', args: [{ severity: 3, message: 'Disk full' }, 7, ''], expect: true },
+  { name: 'rowMatches', args: [{ severity: 5, message: 'x' }, 3, ''], expect: false },
+  { name: 'rowMatches', args: [{ severity: 3, message: 'Disk full' }, 7, 'DISK'], expect: true },
+  { name: 'rowMatches', args: [{ severity: 3, host: 'web', message: 'ok' }, 7, 'zzz'], expect: false },
+  { name: 'rowMatches', args: [{ severity: 4, host: 'db01', app: 'pg', message: 'x' }, 4, 'pg'], expect: true },
   { name: 'isNewer', args: [5, 4], expect: true },
   { name: 'isNewer', args: [4, 4], expect: false },
   { name: 'isNewer', args: [3, 4], expect: false },
@@ -622,7 +664,7 @@ const SELFTEST_CASES = [
 function runSelfTest() {
   const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure,
     matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk, sortServices,
-    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody };
+    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches };
   const failures = [];
   for (const c of SELFTEST_CASES) {
     let got;
@@ -1161,6 +1203,7 @@ const ENTER = {}; // view name -> function(route), filled by the view code below
 function showRoute() {
   const r = parseRoute(here.hash);
   STATE.route = r;
+  if (r.view !== 'service') closeLive(true);
   document.querySelectorAll('main > [data-view]').forEach((n) => { n.hidden = n.dataset.view !== r.view; });
   const active = r.view === 'service' ? 'services' : r.view;
   document.querySelectorAll('nav [data-nav]').forEach((b) => {
@@ -1382,6 +1425,7 @@ ENTER.services = () => { lastSvcKey = null; loadServices(); };
 /* ---------- service detail ---------- */
 function setSlotsHidden(hidden) { document.querySelectorAll('#view-service [data-slot]').forEach((n) => { n.hidden = hidden; }); }
 function showServiceGone() {
+  closeLive(true);
   $('svcDetail').hidden = true;
   setSlotsHidden(true);
   $('svcGone').hidden = false;
@@ -1415,6 +1459,7 @@ async function loadServiceDetail() {
 function openServiceDetail(id) {
   STATE.serviceDetail = { id, status: null };
   resetPermissionsPanel();
+  startLive(id);
   $('svcName').textContent = id;
   for (const k of ['svcId', 'svcState', 'svcSeen', 'svcRate', 'svcOpen']) $(k).textContent = '';
   $('svcGone').hidden = true;
@@ -1467,6 +1512,157 @@ function copyPermissions() {
   };
   try { navigator.clipboard.writeText(text).then(() => { $('permMsg').textContent = 'Copied'; }, fallback); }
   catch (e) { fallback(); }
+}
+
+/* ---------- live log (SSE) ---------- */
+// One EventSource per open service detail. The message text goes in with textContent only; rows are capped.
+const LOG_MSG_SHORT = 500, LOG_MSG_LONG = 4096, LOG_QUEUE_MAX = 500;
+const ROW_EV = new WeakMap(); // row -> its event, for the client-side filters
+function streamUrl(id, lastId) {
+  const base = `/api/services/${encodeURIComponent(id)}/stream`;
+  return lastId > 0 ? `${base}?after=${lastId}` : `${base}?tail=100`;
+}
+function showLiveStatus(L) {
+  const parts = [];
+  if (L.note) parts.push(L.note);
+  if (L.paused) parts.push(`Paused · ${L.queue.length} new`);
+  $('liveStatus').textContent = parts.join(' · ');
+}
+function addLiveRow(ev) {
+  const L = STATE.live;
+  if (!L) return;
+  const box = $('liveBox');
+  const row = el('div', 'row live');
+  const msg = String(ev.message === null || ev.message === undefined ? '' : ev.message);
+  const label = ev.severity_name || sevName(ev.severity);
+  const cls = SEV_NAMES.includes(label) ? label : 'unknown';
+  const host = `${ev.host === null || ev.host === undefined ? '' : ev.host}: `;
+  const text = el('span', 'm', host + capText(msg, LOG_MSG_SHORT));
+  const cell = el('div', 'cell');
+  cell.append(text);
+  if (msg.length > LOG_MSG_SHORT) {
+    const more = el('button', 'ghost small', 'show more');
+    more.type = 'button';
+    more.onclick = () => { text.textContent = host + capText(msg, LOG_MSG_LONG); row.classList.add('open'); more.remove(); };
+    cell.append(more);
+  }
+  row.append(el('span', 'meta', fmtTime(ev.ts)), el('span', `sev-${cls}`, String(label)), cell);
+  ROW_EV.set(row, ev);
+  row.hidden = !rowMatches(ev, L.sev, L.text);
+  box.append(row);
+  while (box.childElementCount > 500) box.firstElementChild.remove();
+  if (L.auto) box.scrollTop = box.scrollHeight;
+}
+function addSystemRow(text) {
+  const box = $('liveBox');
+  const row = el('div', 'row live sys');
+  row.append(el('span', 'meta', ''), el('span', '', 'system'), el('div', 'cell', text));
+  box.append(row);
+  while (box.childElementCount > 500) box.firstElementChild.remove();
+}
+function applyLiveFilter() {
+  const L = STATE.live;
+  if (!L) return;
+  for (const row of $('liveBox').children) {
+    const ev = ROW_EV.get(row);
+    if (ev) row.hidden = !rowMatches(ev, L.sev, L.text);
+  }
+}
+function onLiveMessage(L, m) {
+  if (STATE.live !== L) return;
+  let ev = null;
+  try { ev = JSON.parse(m.data); } catch (e) { return; }
+  if (!ev || typeof ev !== 'object' || !Number.isInteger(ev.id) || !isNewer(ev.id, L.lastId)) return;
+  L.lastId = ev.id;
+  L.fails = 0;
+  if (L.note) { L.note = ''; showLiveStatus(L); }
+  if (L.paused) {
+    L.queue.push(ev);
+    if (L.queue.length > LOG_QUEUE_MAX) L.queue.shift();
+    showLiveStatus(L);
+  } else addLiveRow(ev);
+}
+function onLiveDropped(L, m) {
+  if (STATE.live !== L) return;
+  let n = 0;
+  try { n = Number(JSON.parse(m.data).count) || 0; } catch (e) { n = 0; }
+  addSystemRow(`${n} events were skipped`);
+}
+function onLiveClosed(L, src, m) {
+  src.close(); // the server ends the response after a closed frame: stop the browser's own reconnect first
+  if (L.source === src) L.source = null;
+  if (STATE.live !== L) return;
+  let reason = '';
+  try { reason = String(JSON.parse(m.data).reason || ''); } catch (e) { reason = ''; }
+  if (reason === 'service_deleted') { L.stopped = true; L.note = 'this service was deleted; the live log stopped'; showLiveStatus(L); return; }
+  if (reason === 'max_age') { openLive(); return; }
+  scheduleLive();
+}
+function onLiveError(L, src) {
+  src.close(); // never let the browser reconnect on its own: that would hold a second slot
+  if (L.source !== src || STATE.live !== L) return;
+  L.source = null;
+  L.note = L.fails >= 2 ? 'live log disconnected: too many live logs open (limit 20) or the hub is down' : 'live log disconnected, reconnecting...';
+  showLiveStatus(L);
+  scheduleLive();
+}
+function scheduleLive() {
+  const L = STATE.live;
+  if (!L || L.stopped || L.timer || document.visibilityState !== 'visible') return;
+  const wait = nextBackoff(L.fails);
+  L.fails += 1;
+  L.timer = setTimeout(() => { L.timer = null; openLive(); }, wait * 1000);
+}
+function openLive() {
+  const L = STATE.live;
+  if (!L || L.stopped || L.source || document.visibilityState !== 'visible') return;
+  if (L.timer) { clearTimeout(L.timer); L.timer = null; }
+  const src = new EventSource(streamUrl(L.id, L.lastId));
+  L.source = src;
+  src.onmessage = (m) => onLiveMessage(L, m);
+  src.addEventListener('dropped', (m) => onLiveDropped(L, m));
+  src.addEventListener('closed', (m) => onLiveClosed(L, src, m));
+  src.onerror = () => onLiveError(L, src);
+}
+function closeLive(forget) {
+  const L = STATE.live;
+  if (!L) return;
+  if (L.timer) { clearTimeout(L.timer); L.timer = null; }
+  if (L.source) { L.source.close(); L.source = null; }
+  if (forget) STATE.live = null;
+}
+function startLive(id) {
+  closeLive(true);
+  const L = { id, source: null, timer: null, lastId: 0, fails: 0, paused: false, queue: [], auto: true, sev: 7, text: '', stopped: false, note: '' };
+  STATE.live = L;
+  $('liveBox').replaceChildren();
+  $('livePause').textContent = 'Pause';
+  $('liveAuto').checked = true;
+  $('liveSev').value = '7';
+  $('liveText').value = '';
+  showLiveStatus(L);
+  openLive();
+}
+function toggleLivePause() {
+  const L = STATE.live;
+  if (!L) return;
+  L.paused = !L.paused;
+  $('livePause').textContent = L.paused ? 'Resume' : 'Pause';
+  if (!L.paused) { const q = L.queue; L.queue = []; for (const ev of q) addLiveRow(ev); }
+  showLiveStatus(L);
+}
+function wireLive() {
+  $('livePause').onclick = toggleLivePause;
+  $('liveAuto').onchange = () => { if (STATE.live) STATE.live.auto = $('liveAuto').checked; };
+  $('liveSev').onchange = () => { if (STATE.live) { STATE.live.sev = Number($('liveSev').value); applyLiveFilter(); } };
+  $('liveText').oninput = () => { if (STATE.live) { STATE.live.text = $('liveText').value.trim(); applyLiveFilter(); } };
+}
+// A hidden tab holds no stream slot; coming back resumes from the last id.
+function liveVisibility() {
+  const L = STATE.live;
+  if (!L || STATE.route.view !== 'service') return;
+  if (document.visibilityState === 'hidden') closeLive(false);
+  else { L.fails = 0; openLive(); }
 }
 
 /* ---------- discovery: scan start and polling ---------- */
@@ -1654,6 +1850,8 @@ function init() {
   document.querySelectorAll('nav [data-nav]').forEach((b) => { b.onclick = () => { here.hash = b.dataset.nav === 'overview' ? '#/' : `#/${b.dataset.nav}`; }; });
   window.addEventListener('hashchange', showRoute);
   wireUnlock();
+  wireLive();
+  document.addEventListener('visibilitychange', liveVisibility);
   renderPermissionsPanel();
   $('svcBack').onclick = () => { here.hash = '#/services'; };
   $('svcAdd').onclick = () => renderServiceForm(null);
