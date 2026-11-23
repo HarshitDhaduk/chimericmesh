@@ -60,6 +60,8 @@ from .services.token import TokenStore, resolve_token_path
 from .store import MigrationRegistry, Store, StoreError
 from .store.config import MEMORY, resolve_db_path, resolve_home
 from .store.proposals import is_reserved_decider
+from .web.feed import StreamGate
+from .web.stream import build_stream_router
 
 log = logging.getLogger("chimericmesh.api")
 
@@ -354,10 +356,16 @@ def create_app(hub: Hub | None = None, start_listeners: bool = True, *,
         app.include_router(build_approvals_router(approvals, access, require_admin))
         register_approvals_errors(app)
     app.include_router(build_agent_router(agent))
+    stream_gate = StreamGate(lease_grace=10.0)  # the live-log slots (dashboard R5.3); lease_grace is set here only
+    app.state.stream_gate = stream_gate
+    app.include_router(build_stream_router(
+        hub, service_exists=lambda sid: sid == "unassigned" or registry.get(sid) is not None,
+        gate=stream_gate, clock=time.monotonic))
 
     @app.get("/", include_in_schema=False)
     async def index():
-        return FileResponse(WEB_DIR / "index.html")
+        return FileResponse(WEB_DIR / "index.html",
+                            headers={"X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
 
     @app.get("/api/stats")
     async def stats():
