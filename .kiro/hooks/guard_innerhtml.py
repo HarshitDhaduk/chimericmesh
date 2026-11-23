@@ -9,7 +9,13 @@ import re
 import sys
 
 SINK = re.compile(
-    r"\.(innerHTML|outerHTML)\s*=|insertAdjacentHTML\s*\(|document\.write\s*\("
+    r"\.(innerHTML|outerHTML)\s*(\+|\|\|)?=(?!=)"
+    r"|\[\s*['\"](innerHTML|outerHTML)['\"]\s*\]"
+    r"|insertAdjacentHTML\s*\("
+    r"|document\.write(ln)?\s*\("
+    r"|createContextualFragment\s*\("
+    r"|\.srcdoc\s*="
+    r"|new\s+DOMParser\s*\("
 )
 
 
