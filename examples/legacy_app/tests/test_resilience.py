@@ -99,3 +99,32 @@ def test_success_resets_failure_state():
     after = gaps(times[ok_index + 1:])
     assert before[-1] > before[0] * 2  # delays grew during the first outage
     assert after[0] <= before[0] * 1.5 + 1e-9  # and started over after the success
+
+
+# Demo test: it fails by design on the shipped upstream.py (which has the unbounded-backoff defect) until the upstream client has a bounded backoff.
+# It is not in the root testpaths; run it with python -m pytest -q inside examples/legacy_app.
+def test_long_outage_keeps_running_with_bounded_positive_delays():
+    failures_wanted = 2500
+    now = [0.0]
+    sleeps: list[float] = []
+    attempts = [0]
+
+    def connect(address, timeout=None):
+        attempts[0] += 1
+        now[0] += timeout or 0.2
+        raise socket.timeout("timed out")
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += max(seconds, 0.0)
+
+    client = UpstreamClient(connect=connect, sleep=sleep, clock=lambda: now[0])
+    client.run_forever(stop=lambda: attempts[0] >= failures_wanted)
+    assert attempts[0] == failures_wanted
+    assert sleeps, "client never waited between failed attempts"
+    assert all(s > 0 for s in sleeps), min(sleeps)
+    cap = max(sleeps)
+    assert cap <= 120  # bounded, so recovery is noticed in reasonable time
+    assert all(s <= cap + 1e-9 for s in sleeps)
+    assert len(sleeps) >= 1000
+    assert all(abs(s - cap) < 1e-6 for s in sleeps[-50:]), sleeps[-5:]
