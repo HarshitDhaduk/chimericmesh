@@ -4,7 +4,7 @@ description: Run ChimericMesh as a continuous watcher. Use when the user wants t
 ---
 # Watch mode
 In watch mode one session keeps running: it waits for work, proposes one fix per incident, and acts only on approved proposals. ChimericMesh never executes anything. A human (or a standing rule the user made in the hub) decides, and you do the work.
-Use the `mesh-watcher` agent profile for this. It lets the read-only mesh tools run without a prompt and asks for every state-changing tool, edit and command. The user may add write permissions for the service's code folder with the permissions snippet from the hub (workspace-relative paths only, never shell).
+Use the `mesh-watcher` agent profile for this. It lets the mesh tools run without a Kiro prompt, because the approval gate is the hub: the user approves with the admin token, and `verify_proposal` plus `get_proposal` confirm it before any edit. Kiro still asks for every edit and shell command. The user may add write permissions for the service's code folder with the permissions snippet from the hub (workspace-relative paths only, never shell).
 ## The loop
 1. Call `wait_for_work` (it waits about 25 seconds) with `exclude_ids` set to the ids you are already handling. When the status is `timeout` nothing happened: call `wait_for_work` again. Never stop because of a timeout.
 2. For an incident in the result, investigate it: `get_incident`, `get_service` (note its `code_folder`), `explain_log_window`, `service_events` and `find_code_for_service`. Read the code before you propose a fix.

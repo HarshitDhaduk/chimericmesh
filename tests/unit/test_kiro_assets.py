@@ -261,24 +261,22 @@ def test_watcher_mcp_server_is_the_workspace_one_plus_request_timeout():
     server = dict(_server(_load(WATCHER)))
     assert server.pop("requestTimeout") >= 60000
     assert server == _server(_load(WORKSPACE_MCP))
-def test_watcher_auto_allows_only_read_only_tools_that_exist():
+def test_watcher_allows_the_r51_tools_that_exist():
+    # R5.1: allow for the read-only tools and for wait_for_work, propose_remediation, verify_proposal,
+    # complete_proposal, resolve_incident and announce_to_irc (the approval gate is the hub, not a Kiro prompt)
     agent = _load(WATCHER)
     allowed = _allowed_mcp_tools(agent)
-    assert allowed == WATCHER_READ_ONLY
+    assert allowed == WATCHER_READ_ONLY | MUTATING
+    assert {"wait_for_work", "propose_remediation", "verify_proposal", "complete_proposal",
+            "resolve_incident", "announce_to_irc"} <= allowed
     assert allowed <= _tool_names()
-    assert allowed.isdisjoint(MUTATING)
     for rule in agent["permissions"]["rules"]:
         if rule["effect"] == "allow":
             assert rule["capability"] == "mcp"
             assert rule["match"] and not any("*" in m for m in rule["match"])
             assert all(m.startswith("chimericmesh/") for m in rule["match"])
-def test_watcher_state_changing_tools_ask():
-    asked = set()
-    for rule in _load(WATCHER)["permissions"]["rules"]:
-        if rule["capability"] == "mcp" and rule["effect"] == "ask":
-            asked.update(m.split("/", 1)[1] for m in rule["match"])
-    assert asked == MUTATING
-    assert asked.isdisjoint(_allowed_mcp_tools(_load(WATCHER)))
+def test_watcher_has_no_mcp_ask_rule():
+    assert not [r for r in _load(WATCHER)["permissions"]["rules"] if r["effect"] == "ask"]
 def test_watcher_has_no_shell_or_fs_write_allow_or_ask_and_denies_are_exact():
     rules = _load(WATCHER)["permissions"]["rules"]
     assert {r["capability"] for r in rules} <= {"mcp", "fs_write", "fs_read"}
