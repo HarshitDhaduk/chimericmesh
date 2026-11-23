@@ -40,6 +40,11 @@ def _tool_names() -> set[str]:
     return {t.name for t in asyncio.run(mcp.list_tools())}
 
 
+# Parameter, field and file words (snake_case, in backticks) that the three skills use besides tool names.
+# Computed once from the skills and written out; a new word in a skill needs a deliberate edit here.
+SKILL_WORDS = {
+    "after_id", "code_folder", "estimated_lines", "exclude_ids", "incident_id", "min_severity", "next_after_id",
+}
 def _load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -212,9 +217,9 @@ def test_power_docs_name_only_real_tools_and_cover_all():
     assert mentioned == names
     catalogue = (POWER / "skills" / "getting-started" / "SKILL.md").read_text(encoding="utf-8")
     assert {n for n in names if f"- `{n}`:" in catalogue} == names
-    # backticked snake_case words that look like tool names must exist
+    # a backticked snake_case word must be a tool or an entry of the explicit allow-list SKILL_WORDS
     for word in re.findall(r"`([a-z]+_[a-z_]+)`", text):
-        assert word in names or word in {"total_events"}, word
+        assert word in names or word in SKILL_WORDS, word
 
 
 # --- mesh-watcher profile (agent-loop task 9.1) -----------------------------
@@ -295,3 +300,54 @@ def test_responder_and_workspace_mcp_are_byte_identical_to_main():
 def test_power_manifest_and_mcp_json_keep_their_behaviour():
     assert set(_load(POWER / "plugin.json")) <= PLUGIN_FIELDS
     assert _server(_load(POWER / "mcp.json"))["env"] == _server(_load(WORKSPACE_MCP))["env"]
+
+
+# --- power skills (agent-loop task 9.2) -------------------------------------
+from skill_baseline import ORIGINAL_SKILL_LINES  # noqa: E402
+SKILL_LINES_REPLACED: set[str] = set()  # original lines the update replaced; none: the change is additive (R6.1)
+def _skill_text(name: str) -> str:
+    return (POWER / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+def test_skills_mention_all_17_tools_and_getting_started_lists_each():
+    names = _tool_names()
+    assert len(names) == 17
+    text = "\n".join(p.read_text(encoding="utf-8") for p in (POWER / "skills").glob("*/SKILL.md"))
+    assert {n for n in names if f"`{n}`" in text} == names
+    catalogue = _skill_text("getting-started")
+    assert [n for n in names if f"- `{n}`:" not in catalogue] == []
+def test_watch_mode_skill_has_matching_name_and_description():
+    skill = POWER / "skills" / "watch-mode" / "SKILL.md"
+    assert skill.is_file()
+    meta = _frontmatter(skill)
+    assert meta["name"] == "watch-mode" == skill.parent.name
+    assert meta["description"]
+def test_original_skill_lines_survive_the_update():
+    for name, lines in ORIGINAL_SKILL_LINES.items():
+        text = _skill_text(name)
+        for line in lines:
+            assert line in SKILL_LINES_REPLACED or line in text, (name, line)
+def test_replaced_lines_are_real_original_lines():
+    originals = {line for lines in ORIGINAL_SKILL_LINES.values() for line in lines}
+    assert SKILL_LINES_REPLACED <= originals
+def test_getting_started_explains_services_proposals_and_auto_approval():
+    text = _skill_text("getting-started")
+    section = text.split("## Services, proposals and auto-approval", 1)
+    assert len(section) == 2, "section missing"
+    body = section[1].split("\n## ", 1)[0].lower()
+    for phrase in ("service", "code folder", "files", "estimated_lines", "verification", "auto-approval",
+                   "the hub decides", "no tool", "create, edit, widen or resume a rule", "watch-mode"):
+        assert phrase in body, phrase
+    assert len(body.splitlines()) <= 14  # one short section
+def test_skill_words_has_no_stale_entry():
+    text = "\n".join(p.read_text(encoding="utf-8") for p in (POWER / "skills").glob("*/SKILL.md"))
+    used = set(re.findall(r"`([a-z]+_[a-z_]+)`", text))
+    assert SKILL_WORDS <= used
+    assert SKILL_WORDS.isdisjoint(_tool_names())
+def test_skills_never_offer_a_tool_that_decides_or_changes_rules():
+    for name in ("getting-started", "watch-mode", "remediation-loop"):
+        lowered = _skill_text(name).lower()
+        assert "decide_proposal" not in lowered and "create_rule" not in lowered
+        assert "approve_proposal" not in lowered
+def test_watch_mode_names_the_profile_and_the_wait():
+    text = _skill_text("watch-mode")
+    for phrase in ("mesh-watcher", "wait_for_work", "25 seconds", "timeout"):
+        assert phrase in text

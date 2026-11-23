@@ -16,7 +16,8 @@ ROOT = Path(__file__).resolve().parents[2]
 WATCHER = ROOT / ".kiro" / "agents" / "mesh-watcher.json"
 SKILLS = ROOT / "powers" / "chimericmesh-remediation" / "skills"
 SKILL_NAMES = ("remediation-loop", "watch-mode")
-TEXT_NAMES = ("profile",)  # 9.2 extends this to include SKILL_NAMES
+TEXT_NAMES = ("profile", *SKILL_NAMES)   # every text that carries the common rules
+WATCH_NAMES = ("profile", "watch-mode")   # the texts that describe the watch loop itself
 
 
 def _norm(text: str) -> str:
@@ -29,16 +30,17 @@ def _raw(name: str) -> str:
     return (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
 
 
-def _available() -> list[str]:
-    return [n for n in TEXT_NAMES if n == "profile" or (SKILLS / n / "SKILL.md").is_file()]
-
-
 def _text(name: str) -> str:
     return _norm(_raw(name))
 
 
-@pytest.fixture(params=_available())
+@pytest.fixture(params=TEXT_NAMES)
 def text(request) -> str:
+    return _text(request.param)
+
+
+@pytest.fixture(params=WATCH_NAMES)
+def watch_text(request) -> str:
     return _text(request.param)
 
 
@@ -47,7 +49,8 @@ def _has_all(text: str, phrases: tuple[str, ...]) -> None:
         assert phrase in text, phrase
 
 
-def test_watch_loop_order(text):
+def test_watch_loop_order(watch_text):
+    text = watch_text
     order = ("wait_for_work", "get_incident", "propose_remediation", "get_proposal", "verify_proposal",
              "complete_proposal", "resolve_incident")
     last = -1
@@ -57,12 +60,14 @@ def test_watch_loop_order(text):
         last = at
 
 
-def test_proposal_fields_are_declared_and_status_is_read(text):
+def test_proposal_fields_are_declared_and_status_is_read(watch_text):
+    text = watch_text
     _has_all(text, ("wait_for_work", "exclude_ids", "files", "estimated_lines", "verification", "status"))
     assert "never assume pending" in text
 
 
-def test_one_concrete_code_change_per_proposal(text):
+def test_one_concrete_code_change_per_proposal(watch_text):
+    text = watch_text
     _has_all(text, ("one concrete", "code change"))
 
 
@@ -109,11 +114,13 @@ def test_thirty_minute_rule(text):
     _has_all(text, ("within 30 minutes of the approval", "propose again"))
 
 
-def test_after_a_restart_list_proposals_before_proposing_again(text):
+def test_after_a_restart_list_proposals_before_proposing_again(watch_text):
+    text = watch_text
     _has_all(text, ("after a restart", "list_proposals", "before proposing again"))
 
 
-def test_exclude_ids_bookkeeping(text):
+def test_exclude_ids_bookkeeping(watch_text):
+    text = watch_text
     _has_all(text, ("pending", "exclude_ids", "still open"))
 
 
@@ -122,6 +129,11 @@ def test_no_tagged_proposal_ids(text):
     assert "p1-k7f" not in text
 
 
-def test_long_poll_loops_on_timeout(text):
+def test_long_poll_loops_on_timeout(watch_text):
+    text = watch_text
     _has_all(text, ("timeout", "call wait_for_work again"))
 
+
+
+def test_declared_files_rule(text):
+    _has_all(text, ("always declare files, estimated_lines and verification",))
