@@ -291,7 +291,19 @@
       <button class="ghost" type="button" id="svcBack">Back to services</button>
     </section>
   </div><!-- /view-service -->
-  <div id="view-discovery" data-view="discovery" hidden></div>
+  <div id="view-discovery" data-view="discovery" hidden>
+    <section aria-labelledby="disc-h">
+      <div class="guide-head">
+        <h2 id="disc-h">Discovery</h2>
+        <span id="discDismissSlot"></span>
+      </div>
+      <p class="meta" id="discExplainer"></p>
+      <div class="actions" id="discScanSlot"></div>
+      <div class="meta" id="discStatus" role="status" aria-live="polite"></div>
+      <div class="meta" id="discLimited"></div>
+      <div id="discList" class="svc-grid"></div>
+    </section>
+  </div>
   <div id="view-rules" data-view="rules" hidden></div>
   <pre id="selftest" hidden></pre>
 </main>
@@ -732,6 +744,7 @@ const SCHED = [
   { id: 'overview-chat', every: 1000, last: 0, view: 'overview', run: () => fetchChat() },
   { id: 'services-list', every: 5000, last: 0, view: 'services', run: () => loadServices() },
   { id: 'service-detail', every: 5000, last: 0, view: 'service', run: () => loadServiceDetail() },
+  { id: 'scan-poll', every: 1000, last: 0, view: 'discovery', run: () => (scanRunning() ? pollScan() : null) },
 ];
 function tick() {
   const now = Date.now();
@@ -1452,6 +1465,61 @@ function copyPermissions() {
   try { navigator.clipboard.writeText(text).then(() => { $('permMsg').textContent = 'Copied'; }, fallback); }
   catch (e) { fallback(); }
 }
+
+/* ---------- discovery: scan start and polling ---------- */
+// Nothing here runs on load: the scan starts only from the click handler of the button (R4.5).
+const DISCOVERY_EXPLAINER = 'Lists running processes and listening ports on this machine. It never reads log contents, and nothing leaves this machine.';
+const LIMITED_TEXT = 'some processes were not visible without admin rights';
+const SCAN_GIVE_UP_MS = 45000;
+function discMsg(text) { $('discStatus').textContent = text || ''; }
+function scanRunning() { return Boolean(STATE.scan && STATE.scan.state === 'running'); }
+function renderDiscovery() {
+  $('discExplainer').textContent = DISCOVERY_EXPLAINER;
+  const slot = $('discScanSlot');
+  if (!slot.firstElementChild) slot.append(actionButton('scan-start', 'Discover local apps', startScan, ''));
+  const sc = STATE.scan;
+  $('discLimited').textContent = sc && sc.limited ? LIMITED_TEXT : '';
+  if (!sc) discMsg('');
+  else if (sc.state === 'running') discMsg(`Scanning... ${Math.floor((Date.now() - sc.startedAt) / 1000)} s`);
+  else if (sc.state === 'failed') discMsg(`scan failed: ${capText(sc.reason || 'unknown reason', 300)}`);
+  else if (sc.state === 'done') discMsg(sc.suggestions.length ? '' : 'Scan finished: no apps found.');
+}
+function adoptScan(id) {
+  STATE.scan = { id, state: 'running', limited: false, suggestions: [], startedAt: Date.now(), polling: false };
+  renderDiscovery();
+  pollScan();
+}
+async function startScan() {
+  if (scanRunning()) return;
+  discMsg('Starting scan...');
+  try {
+    const r = await request('POST', '/api/discovery/scan');
+    adoptScan(String(r.scan_id));
+  } catch (e) {
+    if (e.status === 409 && e.body && typeof e.body.scan_id === 'string') { adoptScan(e.body.scan_id); return; }
+    discMsg(e.authText || errorText(e.status, e.body));
+  }
+}
+async function pollScan() {
+  const sc = STATE.scan;
+  if (!sc || sc.state !== 'running' || sc.polling) return;
+  if (Date.now() - sc.startedAt > SCAN_GIVE_UP_MS) { sc.state = 'stalled'; discMsg('scan is taking too long; check again'); return; }
+  sc.polling = true;
+  try {
+    const d = await request('GET', `/api/discovery/scans/${encodeURIComponent(sc.id)}`);
+    if (STATE.scan !== sc) return;
+    sc.state = d.state === 'done' || d.state === 'failed' ? d.state : 'running';
+    sc.limited = Boolean(d.limited);
+    sc.reason = typeof d.reason === 'string' ? d.reason : '';
+    sc.suggestions = Array.isArray(d.suggestions) ? d.suggestions : [];
+  } catch (e) {
+    if (STATE.scan !== sc) return;
+    if (e.status === 404) { sc.state = 'expired'; discMsg('scan expired, run it again'); return; }
+    discMsg(e.authText || errorText(e.status, e.body));
+  } finally { sc.polling = false; }
+  renderDiscovery();
+}
+ENTER.discovery = () => renderDiscovery();
 
 /* ==== INIT ==== */
 function init() {

@@ -184,3 +184,54 @@ def test_save_cannot_run_twice_at_once():
     assert re.search(r"if \(!st \|\| st\.busy\) return;", save)
     assert "st.busy = true;" in save and re.search(r"finally \{\s*st\.busy = false;", save)
     assert save.index("st.busy = true;") < save.index("request(")
+
+# ---- 6.1 discovery: scan start and polling ---------------------------------------------------------------
+def test_discovery_explainer_is_shown_before_the_scan_button():
+    script = ds.strip_comments(ds.script_text())
+    m = re.search(r"const DISCOVERY_EXPLAINER = '([^']+)';", script)
+    assert m, "DISCOVERY_EXPLAINER constant"
+    text = m.group(1)
+    assert "processes" in text and "listening ports" in text
+    assert "never reads log contents" in text and "nothing leaves this machine" in text
+    seg = segment('id="view-discovery"', "<pre id=\"selftest\"")
+    assert seg.index('id="discExplainer"') < seg.index('id="discScanSlot"')
+    render = code("renderDiscovery")
+    assert "DISCOVERY_EXPLAINER" in render and "textContent" in render
+def test_scan_is_started_only_by_a_click_handler():
+    script = ds.strip_comments(ds.script_text())
+    assert script.count("'/api/discovery/scan'") == 1
+    assert "'/api/discovery/scan'" in code("startScan")
+    # the only call-looking text is the definition; every other mention is a reference passed as a handler
+    assert len(re.findall(r"startScan\s*\(", script)) == 1, "only the definition looks like a call"
+    refs = [m.start() for m in re.finditer(r"\bstartScan\b", script)]
+    assert len(refs) == 2, "the definition and one click handler"
+    assert re.search(r"actionButton\('scan-start', 'Discover local apps', startScan\b", script)
+    for name in ("pollScan", "adoptScan"):
+        assert "startScan" not in code(name), name
+    assert "startScan" not in ds.strip_comments(ds.section("INIT"))
+    sched = ds.strip_comments(ds.section("SCHEDULER"))
+    assert "startScan" not in sched
+def test_scan_poll_is_a_one_second_task_that_only_works_while_a_scan_runs():
+    rows = {r["id"]: r for r in sched_rows()}
+    assert rows["scan-poll"] == {"id": "scan-poll", "every": "1000", "view": "discovery"}
+    sched = ds.strip_comments(ds.section("SCHEDULER"))
+    assert re.search(r"id: 'scan-poll'.*run: \(\) => [^\n]*scanRunning\(\)", sched)
+    assert re.search(r"function scanRunning\(\)", ds.script_text())
+    poll = code("pollScan")
+    assert "`/api/discovery/scans/${encodeURIComponent(" in poll
+    assert "sc.state !== 'running'" in poll
+def test_scan_texts_and_status_codes():
+    script = ds.strip_comments(ds.script_text())
+    assert script.count("some processes were not visible without admin rights") == 1
+    assert "sc.limited" in code("renderDiscovery")
+    start = code("startScan")
+    assert "e.status === 409" in start and "scan_id" in start and "adoptScan(" in start
+    assert "errorText(" in start  # 503 and other statuses show the server text
+    poll = code("pollScan")
+    assert "SCAN_GIVE_UP_MS" in poll and "scan is taking too long" in script
+    assert re.search(r"SCAN_GIVE_UP_MS = 45000", script)
+    assert "e.status === 404" in poll and "scan expired, run it again" in script
+def test_discovery_view_does_not_scan_on_load_or_on_entry():
+    enter = re.search(r"ENTER\.discovery = [^\n]*", ds.strip_comments(ds.script_text()))
+    assert enter and "startScan" not in enter.group(0) and "request(" not in enter.group(0)
+    assert "/api/discovery" not in ds.strip_comments(ds.section("INIT"))
