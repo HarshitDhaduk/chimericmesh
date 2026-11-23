@@ -200,6 +200,43 @@ Includes Hypothesis property tests for parser totality, IRC injection safety, an
 `tests/unit/test_kiro_assets.py` checks both files statically (JSON validity, tool names against the MCP server, consistency with `.kiro/settings/mcp.json`). It does not show that Kiro loads them.
 - PBT: `tests/pbt/`
 
+## Agent watch mode
+
+The custom agent **`mesh-watcher`** (`.kiro/agents/mesh-watcher.json`) keeps one Kiro session running as a watcher. It loops on `wait_for_work`, investigates an incident with the read-only tools, sends one `propose_remediation` per incident with `files` (absolute paths inside the service's code folder), `estimated_lines` and `verification`, and edits code only after the hub reports the proposal as approved and `verify_proposal` answers `ok`. Ids are `p1`, `p2` and so on. The power skill `watch-mode` carries the same loop. The existing `mesh-responder` agent, `.kiro/settings/mcp.json` and the power's own `mcp.json` are unchanged.
+
+Setup: trust the workspace in Kiro (an untrusted workspace does not load the profile or its MCP server), start the hub (`python -m chimericmesh`), register a service with a code folder, and select `mesh-watcher`. Tools added for the loop: `list_services`, `get_service`, `service_events`, `explain_log_window`, `find_code_for_service`, `verify_proposal` and `wait_for_work`. They only read; none takes the admin token.
+
+**Workspace root.** The hub finds the workspace root by walking up from its working directory to the nearest folder that has `.kiro/`; set `CHIMERICMESH_WORKSPACE_ROOT` (an existing absolute directory) to override it. The permissions snippet uses it to write workspace-relative paths. `files` in `verify_proposal` (and in the hook) are absolute paths; a relative path fails verify. `files` in `propose_remediation` are written relative to the service's code folder, as the proposal check of the standing rules requires.
+
+### Prompt mode (default) and autonomous mode
+
+**Prompt mode (default).** No snippet is pasted. The mesh tools run without a Kiro prompt, but every file edit and every shell command asks you. The approval gate is the hub: you approve a proposal with `!approve <id>` (or the dashboard terminal) and the agent edits only after `get_proposal` and `verify_proposal` agree.
+
+**Autonomous (hands-off) mode.** Paste the snippet from `GET /api/services/<id>/permissions-snippet` (optional `?test_command=...`) into a Kiro `permissions.yaml`. It allows `fs_write` inside the service's code folder, denies writes to protected names (`.env`, keys, `.git`, `.kiro`, `.github`) and has one commented line for a single test command. Nothing writes the file for you; the hub only returns text. Prefer the workspace-scoped file (`~/.kiro/workspace-roots/<hash>/permissions.yaml`, the hash is looked up on your machine). The user-scoped `~/.kiro/settings/permissions.yaml` applies to every session and agent of this user, not only `mesh-watcher`, so use it only on purpose. Hands-off write allows use workspace-relative globs only. Permission rules are static: if the service's code folder changes, the old allow no longer matches and Kiro prompts again until you paste a new snippet.
+
+The snippet is a standing allow. It also applies while a proposal is still `pending`, so in this mode the gate rests on the agent following its prompt, on `verify_proposal` and on the audit trail, not on a Kiro prompt. That the agent cannot approve its own proposal or widen the rules is a design goal with the limits stated below, not a guarantee.
+
+**Hands-off test-command risk (accepted for hands-off mode only).** The one allowed test command in autonomous mode runs code the agent has just written, with your privileges. That code could read the admin token file or call the hub. You accepted this risk for hands-off mode; prompt mode stays the default and has no such command. Pause, revoke and withdraw need no token and can only reduce the agent's permissions; create, widen, re-enable and resume need the token.
+
+### Waiting and timeouts
+
+`wait_for_work` holds the request for 25 seconds at most (the hard ceiling; `CHIMERICMESH_WATCH_MAX_WAIT` can only lower it) and then returns `status: "timeout"`. The MCP server's own client timeout is 35 seconds, and the profile sets `requestTimeout` to 120000 ms (the Kiro default).
+
+Live check, 2026-11-23, Kiro IDE with `mesh-watcher`: one call with the default returned `timeout` after the full wait, with no tool error. No fallback was needed. Which file the IDE reads `requestTimeout` from was **not** checked. It can be set in the profile (`mcpServers.chimericmesh.requestTimeout`) or in `.kiro/settings/mcp.json`; that file is unchanged by this module, so add the value there yourself if the call ever fails with an IDE timeout. As a fallback, set `CHIMERICMESH_WATCH_MAX_WAIT` (for example `10`) in the environment of the hub process, the terminal that runs `python -m chimericmesh`, and restart the hub. Only the hub reads it; an entry in the profile's `env` changes nothing.
+
+### Optional enforcement hook
+
+`.kiro/hooks-optional/` holds `mesh-verify-write.json` and `mesh_verify_write.py`. To opt in, copy both files into `.kiro/hooks/`; to remove it, delete both copies. While it is installed, every write needs an active proposal: the agent writes the proposal id (for example `p4`) to `.chimericmesh-active-proposal` in the workspace root, and the hook asks the hub's verify route about the target file and blocks (exit 2) when the answer is not `ok`, when the state file is missing or bad, or when the hub cannot be reached. The hook sends no token, talks to loopback only, and exits 0 (no block) when its input cannot be parsed. It covers `fs_write`, `fs_append` and `str_replace` only; it does not see shell commands. The state file is written by the agent, so an injected agent can name another approved proposal; verify then still limits the write to that proposal's declared files and folder. The snippet has a commented allow for that one state file. The hook files are not installed by default, and `.kiro/hooks/` is unchanged.
+
+### Limits
+
+- The agent runs as the same OS user as the hub. With a shell command allowed it could read the token file and call the REST API, including the token-free pause, revoke and withdraw routes. Kiro's own prompt on shell commands is the real gate for that.
+- The `~/.chimericmesh/**` and token deny globs in the profile are **check live** items: confirm in the IDE that they match. If they do not, what remains is the name-based denies and Kiro's read prompt; the hook covers writes only.
+- The `PermissionRequest` hook trigger is not part of V1.
+- `verify_proposal` refuses `.env`-type and other protected names inside the code folder for a user approval without declared files, but it cannot see edits made through a shell command.
+- In an in-memory (bare) hub the proposals list keeps the latest 200, so a user-denied proposal that falls off it makes its incident show up as work again. With the store, every proposal is kept.
+- Code search and digests read only the service's code folder and its log text, and treat all log text as untrusted.
+- **Demo precondition.** Restore the defect in `examples/legacy_app/upstream.py` yourself before the demo, for example with `git checkout -- examples/legacy_app/upstream.py`. Nothing in this module runs that command. The demo test `examples/legacy_app/tests/test_resilience.py::test_long_outage_keeps_running_with_bounded_positive_delays` fails by design until the upstream client has a bounded backoff; the root `python -m pytest -q` does not collect it.
 ## Standing approval rules
 
 A standing rule lets the hub approve a fix without asking each time. The hub decides, never the agent: the agent has no tool to create, edit, widen or resume a rule, and "approved by a rule" is read from the `approved_by_rule` column of the proposal, never from the decider text.

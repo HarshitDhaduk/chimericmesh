@@ -14,6 +14,28 @@ from .store import StoreCorruptError, StoreOpenError
 from .store.config import describe_startup, resolve_home
 
 USAGE = "usage: python -m chimericmesh [token --rotate]"
+GRACEFUL_SHUTDOWN_SECONDS = 3     # uvicorn cancels a request that is still held after this long (R1-M2)
+
+
+class MeshServer(uvicorn.Server):
+    """A server whose exit request first wakes every held `wait_for_work` call.
+
+    Uvicorn waits for in-flight requests before it runs the lifespan teardown, so a held long poll would keep
+    the hub open for up to its full wait. `aclose` makes each waiter return `timeout` at once.
+    """
+
+    def handle_exit(self, sig: int, frame) -> None:
+        agent = getattr(self.config.app.state, "agent", None)
+        if agent is not None:
+            agent.aclose()
+        super().handle_exit(sig, frame)
+
+
+def build_server(app, host: str, port: int) -> uvicorn.Server:
+    """The server `main` runs. A helper so a test can inspect the configuration."""
+    config = uvicorn.Config(app, host=host, port=port, log_level="info",
+                            timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_SECONDS)
+    return MeshServer(config)
 
 
 def rotate_token() -> int:
@@ -54,12 +76,8 @@ def main(argv: list[str] | None = None) -> None:
     token_path = app.state.access.token_path
     if token_path is not None:
         print(f"admin token file: {token_path}", flush=True)
-    uvicorn.run(
-        app,
-        host=os.environ.get("CHIMERICMESH_BIND", "127.0.0.1"),
-        port=int(os.environ.get("CHIMERICMESH_HTTP_PORT", 8000)),
-        log_level="info",
-    )
+    build_server(app, os.environ.get("CHIMERICMESH_BIND", "127.0.0.1"),
+                 int(os.environ.get("CHIMERICMESH_HTTP_PORT", 8000))).run()
 
 
 if __name__ == "__main__":

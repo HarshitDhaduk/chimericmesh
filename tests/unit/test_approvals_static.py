@@ -13,7 +13,8 @@ from test_store_static import sql_violations
 SRC = Path(__file__).resolve().parents[2] / "src" / "chimericmesh"
 APPROVALS = SRC / "approvals"
 
-ALLOWED_MCP_PREFIXES = ("/api/incidents", "/api/events", "/api/irc/say", "/api/proposals")
+ALLOWED_MCP_PREFIXES = ("/api/incidents", "/api/events", "/api/irc/say", "/api/proposals",
+                        "/api/services", "/api/watch/next")
 FORBIDDEN_MCP_PREFIXES = ("/api/rules", "/api/approvals", "/api/audit")
 FORBIDDEN_MCP_SUFFIXES = ("/rule", "/rule-defaults", "/withdraw")
 

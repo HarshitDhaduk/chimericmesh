@@ -33,6 +33,7 @@ FILE_GROUPS: dict[str, str] = {
     "connectors/": "connectors",
     "discovery/": "discovery",
     "approvals/": "auto-approval",
+    "agent/": "agent-loop",
     "notify.py": "wiring",
     "replay.py": "wiring",
     "replay_irc.py": "wiring",
@@ -70,6 +71,7 @@ THIRD_PARTY_FILES: dict[str, set[str]] = {
     "services/routes.py": {"fastapi", "starlette", "pydantic"},
     "discovery/routes.py": {"fastapi", "starlette", "pydantic"},
     "approvals/routes.py": {"fastapi", "starlette", "pydantic"},
+    "agent/routes.py": {"fastapi", "starlette", "pydantic"},
 }
 
 
@@ -504,3 +506,136 @@ def test_approvals_files_only_import_web_stack_in_routes():
         if rel.startswith("approvals/") and rel != "approvals/routes.py":
             tops = {top for top, _ in imports_of(path)}
             assert not tops & {"fastapi", "starlette", "pydantic"}, rel
+
+# ---- agent-loop rows (agent-loop task 1.1, review M2) --------------------------------------------
+AGENT_WEB = {"fastapi", "starlette", "pydantic"}
+AGENT_APPROVALS_OK = {"scope", "models"}
+AGENT_SERVICES_FORBIDDEN = {"deps", "routes"}
+AGENT_FORBIDDEN_MODULES = {"hub", "api", "commands", "listeners", "mcp_server", "connectors", "discovery"}
+
+
+def _agent_import_pairs(node: ast.AST) -> list[tuple[str, str | None]]:
+    """(first, second) component below the package for one import node of an ``agent/*`` file."""
+    pairs: list[tuple[str, str | None]] = []
+    if isinstance(node, ast.ImportFrom):
+        if node.level:        # a file of agent/ lives in the package chimericmesh.agent
+            base = [PKG, "agent"][: 2 - (node.level - 1)]
+            parts = base + ((node.module or "").split(".") if node.module else [])
+        else:
+            parts = (node.module or "").split(".")
+        if parts[0] != PKG:
+            return pairs
+        rest = parts[1:]
+        if not rest:
+            return [(a.name, None) for a in node.names]
+        if len(rest) == 1:
+            return [(rest[0], a.name) for a in node.names]
+        return [(rest[0], rest[1])]
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            parts = alias.name.split(".")
+            if parts[0] == PKG and len(parts) > 1:
+                pairs.append((parts[1], parts[2] if len(parts) > 2 else None))
+    return pairs
+
+def _agent_rule_violations(root: Path) -> list[str]:
+    """Per-file rules of agent-loop on any tree: the web stack only in routes.py, approvals only through
+    ``scope`` and ``models``, services only through its stdlib-only submodules, and no wiring module."""
+    global SRC
+    saved = SRC
+    SRC = root
+    try:
+        out: list[str] = []
+        for path in all_files():
+            rel = path.relative_to(SRC).as_posix()
+            if not rel.startswith("agent/"):
+                continue
+            tops = {top for top, _ in imports_of(path)}
+            if tops & AGENT_WEB and rel != "agent/routes.py":
+                out += [f"{rel} imports {name}" for name in sorted(tops & AGENT_WEB)]
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                for first, second in _agent_import_pairs(node):
+                    if first == "approvals" and second not in AGENT_APPROVALS_OK:
+                        out.append(f"{rel} imports approvals.{second}")
+                    if first == "services" and second in AGENT_SERVICES_FORBIDDEN:
+                        out.append(f"{rel} imports services.{second}")
+                    if first in AGENT_FORBIDDEN_MODULES:
+                        out.append(f"{rel} imports {first}")
+        return out
+    finally:
+        SRC = saved
+
+
+def test_agent_package_has_a_group_row():
+    assert group_of("agent/__init__.py") == "agent-loop"
+    assert group_of("agent/routes.py") == "agent-loop"
+    assert group_of("agent/service.py") == "agent-loop"
+    assert MAY_IMPORT["agent-loop"] == {"core", "store", "services", "auto-approval", "agent-loop"}
+    assert THIRD_PARTY_FILES["agent/routes.py"] == {"fastapi", "starlette", "pydantic"}
+    assert "agent/service.py" not in THIRD_PARTY_FILES
+
+
+def test_agent_per_file_rules_hold_on_the_tree():
+    assert _agent_rule_violations(SRC) == []
+
+
+def test_agent_init_loads_no_web_layer():
+    init = SRC / "agent" / "__init__.py"
+    assert not [top for top, _ in imports_of(init) if top in AGENT_WEB]
+    text = init.read_text(encoding="utf-8")
+    assert "from .routes" not in text and "import routes" not in text
+
+
+def _atree(tmp_path: Path, rel: str, text: str) -> Path:
+    pkg = tmp_path / PKG
+    for sub in ("agent", "services", "store", "approvals", "connectors", "discovery"):
+        (pkg / sub).mkdir(parents=True, exist_ok=True)
+        (pkg / sub / "__init__.py").write_text("")
+    for name in ("hub.py", "api.py", "commands.py", "mcp_server.py", "listeners.py"):
+        (pkg / name).write_text("")
+    for name in ("deps", "routes", "paths"):
+        (pkg / "services" / f"{name}.py").write_text("")
+    for name in ("scope", "models", "routes", "manager"):
+        (pkg / "approvals" / f"{name}.py").write_text("")
+    (pkg / rel).write_text(text)
+    return pkg
+
+
+@pytest.mark.parametrize(
+    "rel,line",
+    [
+        ("agent/feed.py", "from chimericmesh.hub import Hub"),
+        ("agent/feed.py", "from chimericmesh import hub"),
+        ("agent/feed.py", "import chimericmesh.api"),
+        ("agent/feed.py", "import chimericmesh.connectors"),
+        ("agent/feed.py", "import chimericmesh.discovery.engine"),
+        ("agent/feed.py", "from chimericmesh.services.deps import x"),
+        ("agent/feed.py", "from chimericmesh.services import routes"),
+        ("agent/feed.py", "from chimericmesh.approvals.routes import x"),
+        ("agent/feed.py", "from chimericmesh.approvals.manager import ApprovalManager"),
+        ("agent/feed.py", "from chimericmesh.approvals import manager"),
+        ("agent/feed.py", "from ..approvals.manager import ApprovalManager"),
+        ("agent/feed.py", "from ..approvals import routes"),
+        ("agent/feed.py", "from ..services.deps import x"),
+        ("agent/feed.py", "from .. import hub"),
+        ("agent/feed.py", "from ..hub import Hub"),
+        ("agent/feed.py", "import fastapi"),
+        ("agent/feed.py", "import pydantic"),
+        ("agent/feed.py", "import httpx"),
+        ("agent/__init__.py", "import starlette"),
+    ],
+)
+def test_agent_file_with_forbidden_import_fails_the_scan(tmp_path, monkeypatch, line, rel):
+    monkeypatch.setitem(FILE_GROUPS, "connectors/", "connectors")
+    pkg = _atree(tmp_path, rel, line + "\n")
+    assert _violations(pkg) + _agent_rule_violations(pkg), (rel, line)
+
+
+def test_agent_allowed_files_pass_the_scan(tmp_path):
+    pkg = _atree(tmp_path, "agent/routes.py", "import fastapi\nimport pydantic\nimport starlette\n")
+    (pkg / "agent" / "verify.py").write_text(
+        "import os\nfrom chimericmesh.approvals.scope import check_file\n"
+        "from chimericmesh.approvals.models import Rule\nfrom chimericmesh.services.paths import path_in_code_folder\n"
+        "from chimericmesh.store.models import Proposal\nfrom chimericmesh import diagnostics\n")
+    (pkg / "agent" / "service.py").write_text("from . import limits\nfrom .errors import AgentError\n")
+    assert _violations(pkg) + _agent_rule_violations(pkg) == []

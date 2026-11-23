@@ -27,6 +27,13 @@ Read-only:
 - `recent_events`: latest events, optionally filtered by source.
 - `list_proposals`: remediation proposals, optionally filtered by status.
 - `get_proposal`: current status of one proposal.
+- `list_services`: the registered services (a service groups log sources, an optional code folder and the incidents they raise).
+- `get_service`: one service, with its `code_folder`.
+- `service_events`: events of one service, oldest first; pass `next_after_id` back as `after_id` to page, optionally with `min_severity`.
+- `explain_log_window`: counts, top signatures and samples of a service's recent logs (`minutes`, 1 to 240).
+- `find_code_for_service`: search a service's code folder for a literal `query` (not a regular expression).
+- `verify_proposal`: check the absolute `files` you are about to edit against an approved proposal. Change nothing unless `ok` is true.
+- `wait_for_work`: wait up to about 25 seconds for incidents or approved proposals; the status is `work` or `timeout`. `exclude_ids` lists ids you are already handling.
 
 State-changing (the user should be prompted for each):
 - `announce_to_irc`: post a status message to an IRC channel.
@@ -34,7 +41,11 @@ State-changing (the user should be prompted for each):
 - `complete_proposal`: mark an approved proposal as done, with a note.
 - `resolve_incident`: close an incident, with a note.
 
-## Workflow
+## Services, proposals and auto-approval
+- A service is a named group of log sources with an optional code folder. Incidents belong to a service; `list_services` and `get_service` show them.
+- Make a proposal structured: one concrete code change, with `files` (1 to 20), `estimated_lines` and `verification` (the test command). A proposal that declares them can be checked by `verify_proposal`.
+- Auto-approval: the user can give the hub a standing rule for one service. The hub decides, never the agent. There is no tool to create, edit, widen or resume a rule or to decide a proposal, and the agent must not try it by shell. A rule-approved proposal shows `status` `approved` like any other, so re-read it with `get_proposal` before you act.
+- To watch continuously, use the `watch-mode` skill with the `mesh-watcher` agent.## Workflow
 
 See the `remediation-loop` skill for the approval loop and the `triage` skill for reading incidents.
 

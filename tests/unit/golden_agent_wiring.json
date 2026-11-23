@@ -1,0 +1,120 @@
+{
+ "events": [
+  {
+   "app": "irc",
+   "host": "web02",
+   "id": 5,
+   "log_source_id": null,
+   "message": "upstream timed out",
+   "raw": "",
+   "service_id": null,
+   "severity": 5,
+   "severity_name": "notice",
+   "source": "irc",
+   "ts": 1700000010.0
+  },
+  {
+   "app": "postgres",
+   "host": "db01",
+   "id": 4,
+   "log_source_id": null,
+   "message": "FATAL: could not write block: No space left on device",
+   "raw": "",
+   "service_id": null,
+   "severity": 3,
+   "severity_name": "err",
+   "source": "syslog",
+   "ts": 1700000003.0
+  },
+  {
+   "app": "postgres",
+   "host": "db01",
+   "id": 3,
+   "log_source_id": null,
+   "message": "FATAL: could not write block: No space left on device",
+   "raw": "",
+   "service_id": null,
+   "severity": 3,
+   "severity_name": "err",
+   "source": "syslog",
+   "ts": 1700000002.0
+  },
+  {
+   "app": "postgres",
+   "host": "db01",
+   "id": 2,
+   "log_source_id": null,
+   "message": "FATAL: could not write block: No space left on device",
+   "raw": "",
+   "service_id": null,
+   "severity": 3,
+   "severity_name": "err",
+   "source": "syslog",
+   "ts": 1700000001.0
+  },
+  {
+   "app": "postgres",
+   "host": "db01",
+   "id": 1,
+   "log_source_id": null,
+   "message": "FATAL: could not write block: No space left on device",
+   "raw": "",
+   "service_id": null,
+   "severity": 3,
+   "severity_name": "err",
+   "source": "syslog",
+   "ts": 1700000000.0
+  }
+ ],
+ "incidents": [
+  {
+   "category": "disk",
+   "count": 4,
+   "first_seen": 1700000000.0,
+   "host": "db01",
+   "hypothesis": "A filesystem is full, which will cascade into write failures.",
+   "id": "7ebd81ec05",
+   "last_seen": 1700000003.0,
+   "opening": 1,
+   "remediation": [
+    "Find large files (du -xh / | sort -h | tail)",
+    "Rotate or compress logs and clear temp directories",
+    "Add disk usage alerting before 90% full"
+   ],
+   "resolved": false,
+   "resolved_at": null,
+   "sample": "FATAL: could not write block: No space left on device",
+   "service_id": null,
+   "severity": 3,
+   "signature": "fatal: could not write block: no space left on device",
+   "sources": [
+    "syslog"
+   ]
+  }
+ ],
+ "proposals": [
+  {
+   "action": "free disk space",
+   "approval": null,
+   "approved_by_rule": null,
+   "created": 1700000000.0,
+   "decided_at": null,
+   "decided_by": "",
+   "decision_origin": null,
+   "details": "remove old logs",
+   "estimated_lines": null,
+   "files": null,
+   "files_changed": null,
+   "id": "p1",
+   "incident_id": "7ebd81ec05",
+   "incident_opening": 1,
+   "kind": null,
+   "lines_changed": null,
+   "result_note": "",
+   "service_id": null,
+   "status": "pending",
+   "verification": null,
+   "verification_result": null
+  }
+ ]
+}
