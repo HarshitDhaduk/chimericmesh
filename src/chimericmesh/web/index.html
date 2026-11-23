@@ -154,6 +154,8 @@
   .pill.approved { color: var(--ghost); }
   .pill.denied { color: var(--blood); }
   .pill.done { color: var(--violet); }
+  .pill.auto { color: var(--violet); font-weight: 700; }
+  .pill.unknown { color: var(--dim); }
 
   #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 10; background: #2a0f18; color: #ffd6de;
     border: 1px solid var(--blood); border-radius: 6px; padding: 8px 14px; max-width: 90vw; }
@@ -315,8 +317,18 @@
         <div class="log" id="liveBox" role="log" aria-label="Live log rows"></div>
       </section>
     </div>
-    <div data-slot="incidents"></div>
-    <div data-slot="proposals"></div>
+    <div data-slot="incidents">
+      <section aria-labelledby="svcInc-h">
+        <h2 id="svcInc-h">Incidents</h2>
+        <div id="svcIncidents" aria-live="polite"></div>
+      </section>
+    </div>
+    <div data-slot="proposals">
+      <section aria-labelledby="svcProp-h">
+        <h2 id="svcProp-h">Proposals</h2>
+        <div id="svcProposals"></div>
+      </section>
+    </div>
     <section id="svcGone" hidden>
       <p>This service no longer exists.</p>
       <button class="ghost" type="button" id="svcBack">Back to services</button>
@@ -412,6 +424,17 @@ function rowMatches(ev, minSev, text) {
   const t = String(text === null || text === undefined ? '' : text).toLowerCase();
   if (!t) return true;
   return `${ev.host || ''} ${ev.app || ''} ${ev.message || ''}`.toLowerCase().includes(t);
+}
+function approvalText(p) {
+  const a = p && p.approval;
+  if (!a || typeof a !== 'object') return '';
+  if (a.by === 'user') return `approved by ${p.decided_by || 'a user'}`;
+  if (a.by === 'rule') {
+    const st = a.rule_status_now;
+    const known = st === 'active' || st === 'suspended' || st === 'revoked' || st === 'expired';
+    return `auto-approved by rule ${a.rule_id} (${known ? `rule ${st}` : 'rule status unknown'})`;
+  }
+  return '';
 }
 function isNewer(id, lastId) { return typeof id === 'number' && Number.isFinite(id) && id > lastId; }
 function lockState(uiConfig, hasToken) {
@@ -604,6 +627,16 @@ const SELFTEST_CASES = [
   { name: 'rowMatches', args: [{ severity: 3, message: 'Disk full' }, 7, 'DISK'], expect: true },
   { name: 'rowMatches', args: [{ severity: 3, host: 'web', message: 'ok' }, 7, 'zzz'], expect: false },
   { name: 'rowMatches', args: [{ severity: 4, host: 'db01', app: 'pg', message: 'x' }, 4, 'pg'], expect: true },
+  { name: 'approvalText', args: [null], expect: '' },
+  { name: 'approvalText', args: [{ approval: null }], expect: '' },
+  { name: 'approvalText', args: [{ decided_by: 'alice', approval: { by: 'user' } }], expect: 'approved by alice' },
+  { name: 'approvalText', args: [{ approval: { by: 'user' } }], expect: 'approved by a user' },
+  { name: 'approvalText', args: [{ approval: { by: 'rule', rule_id: 'r1', rule_status_now: 'active' } }], expect: 'auto-approved by rule r1 (rule active)' },
+  { name: 'approvalText', args: [{ approval: { by: 'rule', rule_id: 'r1', rule_status_now: 'suspended' } }], expect: 'auto-approved by rule r1 (rule suspended)' },
+  { name: 'approvalText', args: [{ approval: { by: 'rule', rule_id: 'r2', rule_status_now: 'revoked' } }], expect: 'auto-approved by rule r2 (rule revoked)' },
+  { name: 'approvalText', args: [{ approval: { by: 'rule', rule_id: 'r2', rule_status_now: 'expired' } }], expect: 'auto-approved by rule r2 (rule expired)' },
+  { name: 'approvalText', args: [{ approval: { by: 'rule', rule_id: 'r3', rule_status_now: null } }], expect: 'auto-approved by rule r3 (rule status unknown)' },
+  { name: 'approvalText', args: [{ approval: { by: 'x' } }], expect: '' },
   { name: 'isNewer', args: [5, 4], expect: true },
   { name: 'isNewer', args: [4, 4], expect: false },
   { name: 'isNewer', args: [3, 4], expect: false },
@@ -664,7 +697,7 @@ const SELFTEST_CASES = [
 function runSelfTest() {
   const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure,
     matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk, sortServices,
-    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches };
+    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText };
   const failures = [];
   for (const c of SELFTEST_CASES) {
     let got;
@@ -789,6 +822,7 @@ const SCHED = [
   { id: 'overview-chat', every: 1000, last: 0, view: 'overview', run: () => fetchChat() },
   { id: 'services-list', every: 5000, last: 0, view: 'services', run: () => loadServices() },
   { id: 'service-detail', every: 5000, last: 0, view: 'service', run: () => loadServiceDetail() },
+  { id: 'service-lists', every: 5000, last: 0, view: 'service', run: () => loadServiceLists() },
   { id: 'scan-poll', every: 1000, last: 0, view: 'discovery', run: () => (scanRunning() ? pollScan() : null) },
 ];
 function tick() {
@@ -893,36 +927,76 @@ function renderEvents(list) {
 
 /* ---------- proposals ---------- */
 let lastPropKey = null;
+// The hint under the Proposals heading: Approve and Deny need the token while the page is locked.
+function updatePropNote() {
+  $('propNote').textContent = STATE.lock && STATE.lock.locked ? 'Approve and Deny need the admin token: unlock first. Withdraw works without it.' : '';
+}
+// The one proposal renderer: used by the Overview panel and by the service detail. Every string is text.
+function renderProposalCard(p, incidentText) {
+  const d = el('div', 'prop');
+  const top = el('div', 'top');
+  const st = ['pending', 'approved', 'denied', 'done'].includes(p.status) ? p.status : 'unknown';
+  const label = p.status === 'approved' ? 'approved - waiting for agent' : stateLabel('proposal', p.status);
+  top.append(el('span', `pill ${st}`, label), el('span', 'meta', `#${p.id} · ${incidentText}`));
+  if (p.approval && p.approval.by === 'rule') top.append(el('span', 'pill auto', 'AUTO-APPROVED'));
+  d.append(top, el('div', 'act', p.action));
+  const files = Array.isArray(p.files) ? p.files : [];
+  if (files.length) d.append(el('div', 'meta', `files: ${files.slice(0, 5).join(', ')}${files.length > 5 ? ` +${files.length - 5} more` : ''}`));
+  if (p.verification) d.append(el('div', 'meta', `verification: ${p.verification}`));
+  const how = approvalText(p);
+  if (how) d.append(el('div', 'meta', how));
+  const extra = [];
+  if (p.decided_by && !how) extra.push(`decided by ${p.decided_by}`);
+  if (p.estimated_lines) extra.push(`about ${p.estimated_lines} lines`);
+  if (p.files_changed !== null && p.files_changed !== undefined) extra.push(`${p.files_changed} files changed`);
+  if (p.lines_changed !== null && p.lines_changed !== undefined) extra.push(`${p.lines_changed} lines changed`);
+  if (p.verification_result) extra.push(`verification ${p.verification_result}`);
+  if (p.result_note) extra.push(p.result_note);
+  if (extra.length) d.append(el('div', 'meta', extra.join(' · ')));
+  const msg = el('div', 'meta');
+  msg.setAttribute('role', 'status');
+  if (p.status === 'pending') {
+    const a = el('div', 'actions');
+    a.append(actionButton('proposal-approve', 'Approve', () => decideProposal(p, true, msg)),
+      actionButton('proposal-deny', 'Deny', () => decideProposal(p, false, msg), 'ghost small warn'),
+      actionButton('proposal-withdraw', 'Withdraw', () => withdrawProposal(p, msg)));
+    d.append(a);
+  }
+  d.append(msg);
+  return d;
+}
+async function refreshProposalViews() {
+  await Promise.allSettled([loadProposals(), STATE.route.view === 'service' ? loadServiceLists() : null, loadWorkflow()]);
+}
+// Approve or deny through the REST route with the token (R6.3); the result or the server's text is shown in the card.
+async function decideProposal(p, approve, msg) {
+  msg.textContent = approve ? 'Approving...' : 'Denying...';
+  try { await request('POST', `/api/proposals/${encodeURIComponent(p.id)}/decide`, { approve, by: 'dashboard' }); }
+  catch (e) { msg.textContent = e.authText || errorText(e.status, e.body); return; }
+  msg.textContent = approve ? 'Approved.' : 'Denied.';
+  setStatus(`Proposal ${p.id} ${approve ? 'approved' : 'denied'}`);
+  await refreshProposalViews();
+}
+// Withdraw needs no token (a reduce action).
+async function withdrawProposal(p, msg) {
+  msg.textContent = 'Withdrawing...';
+  try { await request('POST', `/api/proposals/${encodeURIComponent(p.id)}/withdraw`); }
+  catch (e) { msg.textContent = e.authText || errorText(e.status, e.body); return; }
+  msg.textContent = 'Withdrawn.';
+  setStatus(`Proposal ${p.id} withdrawn`);
+  await refreshProposalViews();
+}
 function renderProposals(force) {
-  const operator = !(state.workflow && state.workflow.you && state.workflow.you.operator === false);
   const list = state.proposals.slice().sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 20);
-  const key = JSON.stringify([list, operator, state.incidents.map((i) => [i.id, i.category, i.host])]);
+  const key = JSON.stringify([list, state.incidents.map((i) => [i.id, i.category, i.host])]);
   if (!force && key === lastPropKey) return;
   lastPropKey = key;
-  $('propNote').textContent = operator ? '' : 'Approve and Deny are disabled: you are read-only. Set CHIMERICMESH_OPERATORS to allow approvals.';
+  updatePropNote();
   const box = $('proposals'); box.replaceChildren();
   if (!list.length) { box.append(el('p', 'empty', 'No proposals yet. An agent proposes fixes through MCP; you can simulate one from an incident card.')); return; }
   for (const p of list) {
     const inc = state.incidents.find((i) => String(i.id) === String(p.incident_id));
-    const d = el('div', 'prop');
-    const top = el('div', 'top');
-    const label = p.status === 'approved' ? 'approved - waiting for agent' : String(p.status);
-    top.append(el('span', `pill ${p.status}`, label), el('span', 'meta', `#${p.id} · ${inc ? `${inc.category} on ${inc.host}` : `incident ${p.incident_id}`}`));
-    d.append(top, el('div', 'act', p.action));
-    const extra = [];
-    if (p.decided_by) extra.push(`decided by ${p.decided_by}`);
-    if (p.result_note) extra.push(p.result_note);
-    if (extra.length) d.append(el('div', 'meta', extra.join(' · ')));
-    if (p.status === 'pending') {
-      const a = el('div', 'actions');
-      const ap = el('button', 'ghost small', 'Approve'); ap.type = 'button';
-      const dn = el('button', 'ghost small warn', 'Deny'); dn.type = 'button';
-      ap.onclick = () => runCommand(`!approve ${p.id}`);
-      dn.onclick = () => runCommand(`!deny ${p.id}`);
-      if (!operator) { ap.disabled = true; dn.disabled = true; ap.title = dn.title = 'Read-only: operators only'; }
-      a.append(ap, dn); d.append(a);
-    }
-    box.append(d);
+    box.append(renderProposalCard(p, inc ? `${inc.category} on ${inc.host}` : `incident ${p.incident_id}`));
   }
 }
 
@@ -1158,6 +1232,7 @@ function applyLock() {
   $('unlockBtn').hidden = has || ls.mode === 'off';
   $('lockBtn').hidden = !has;
   document.querySelectorAll('[data-action]').forEach(lockButton);
+  updatePropNote();
 }
 function openUnlock() {
   $('tokenNote').textContent = TOKEN_PROMPT_TEXT;
@@ -1456,10 +1531,57 @@ async function loadServiceDetail() {
     else setStatus(errorText(e.status, e.body));
   }
 }
+// Incidents and proposals of one service: the hub filters by service before it applies the limit.
+function renderIncidentsFor(list) {
+  const box = $('svcIncidents');
+  box.replaceChildren();
+  if (!list.length) { box.append(el('p', 'empty', 'No incidents for this service.')); return; }
+  for (const i of list) {
+    const sev = Number.isInteger(i.severity) ? i.severity : 7;
+    const d = el('article', `incident sev-${sev}${i.resolved ? ' resolved' : ''}`);
+    d.append(el('h3', '', `${String(i.category).toUpperCase()} on ${i.host} ×${i.count}`));
+    d.append(el('div', 'meta', `${sevName(sev)} · id ${i.id}${i.resolved ? ' · resolved' : ' · open'}`));
+    d.append(el('div', 'sample', i.sample), el('p', '', i.hypothesis));
+    box.append(d);
+  }
+}
+function renderServiceProposals(list) {
+  const box = $('svcProposals');
+  box.replaceChildren();
+  const sorted = list.slice().sort((a, b) => (b.created || 0) - (a.created || 0));
+  if (!sorted.length) { box.append(el('p', 'empty', 'No proposals for this service.')); return; }
+  for (const p of sorted) box.append(renderProposalCard(p, `incident ${p.incident_id}`));
+}
+function resetServiceLists() {
+  const d = STATE.serviceDetail;
+  if (d) { d.incKey = null; d.propKey = null; }
+  $('svcIncidents').replaceChildren();
+  $('svcProposals').replaceChildren();
+}
+async function loadServiceLists() {
+  const d = STATE.serviceDetail;
+  if (!d) return;
+  const id = encodeURIComponent(d.id);
+  const [inc, prop] = await Promise.allSettled([
+    request('GET', `/api/incidents?service_id=${id}&limit=100`),
+    request('GET', `/api/proposals?service_id=${id}`),
+  ]);
+  if (STATE.serviceDetail !== d) return;
+  if (inc.status === 'fulfilled' && Array.isArray(inc.value)) {
+    const key = JSON.stringify(inc.value);
+    if (key !== d.incKey) { d.incKey = key; renderIncidentsFor(inc.value); }
+  }
+  if (prop.status === 'fulfilled' && Array.isArray(prop.value)) {
+    const key = JSON.stringify(prop.value);
+    if (key !== d.propKey) { d.propKey = key; renderServiceProposals(prop.value); }
+  }
+}
 function openServiceDetail(id) {
   STATE.serviceDetail = { id, status: null };
   resetPermissionsPanel();
   startLive(id);
+  resetServiceLists();
+  loadServiceLists();
   $('svcName').textContent = id;
   for (const k of ['svcId', 'svcState', 'svcSeen', 'svcRate', 'svcOpen']) $(k).textContent = '';
   $('svcGone').hidden = true;

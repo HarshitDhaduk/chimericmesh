@@ -361,3 +361,55 @@ def test_leaving_the_view_or_hiding_the_tab_closes_the_source():
     show = code("showRoute")
     assert "closeLive(" in show
     assert "startLive(" in code("openServiceDetail")
+
+# ---- 7.2 proposal card, incidents and proposals per service ----------------------------------------------
+def test_detail_loads_incidents_and_proposals_from_the_hub_filtered():
+    load = code("loadServiceLists")
+    assert "`/api/incidents?service_id=${id}&limit=100`" in load
+    assert "`/api/proposals?service_id=${id}`" in load
+    assert "encodeURIComponent(d.id)" in load
+    rows = {r["id"]: r for r in sched_rows()}
+    assert rows["service-lists"] == {"id": "service-lists", "every": "5000", "view": "service"}
+    assert "loadServiceLists()" in code("openServiceDetail")
+    for name in ("loadServiceLists", "renderServiceProposals", "renderIncidentsFor"):
+        assert ".filter(" not in code(name), f"{name} must not filter by service in JavaScript"
+def test_proposals_are_shown_newest_first_with_one_renderer():
+    body = code("renderServiceProposals")
+    assert ".sort(" in body and "b.created" in body and "renderProposalCard(" in body
+    assert "renderProposalCard(" in code("renderProposals")
+    script = ds.strip_comments(ds.script_text())
+    assert script.count("el('div', 'prop')") == 1 and "el('div', 'prop')" in code("renderProposalCard")
+def test_proposal_card_fields_and_badge():
+    card = code("renderProposalCard")
+    for piece in ("stateLabel('proposal'", "p.action", "p.files", "slice(0, 5)", "more", "p.verification",
+                  "approvalText(p)", "'AUTO-APPROVED'", "p.approval"):
+        assert piece in card, piece
+    assert re.search(r"p\.approval && p\.approval\.by === 'rule'", card)
+    assert "p.decided_by" in card and "p.result_note" in card
+def test_pending_cards_have_locked_approve_deny_and_a_token_free_withdraw():
+    card = code("renderProposalCard")
+    pending = card[card.index("p.status === 'pending'"):]
+    for piece in ("actionButton('proposal-approve'", "actionButton('proposal-deny'", "actionButton('proposal-withdraw'"):
+        assert piece in pending, piece
+    assert "actionButton('proposal-approve'" not in card[: card.index("p.status === 'pending'")]
+    dec = code("decideProposal")
+    assert "request('POST', `/api/proposals/${encodeURIComponent(p.id)}/decide`, { approve, by: 'dashboard' })" in dec
+    assert "errorText(" in dec and "textContent" in dec
+    wd = code("withdrawProposal")
+    assert "/withdraw`" in wd and "request('POST'" in wd and "{ approve" not in wd
+def test_the_terminal_is_no_longer_used_to_approve_from_the_proposal_panel():
+    script = ds.strip_comments(ds.script_text())
+    assert not re.search(r"runCommand\(`!(approve|deny)", script)
+    assert "!approve" not in code("renderProposals") and "!deny" not in code("renderProposals")
+    prop = code("renderProposals")
+    assert "CHIMERICMESH_OPERATORS" not in prop and "operator" not in prop
+    note = code("updatePropNote")
+    assert "propNote" in note and "unlock first" in note and "STATE.lock" in note
+    assert "updatePropNote(" in code("applyLock")
+def test_approval_text_has_cases_for_every_shape():
+    assert case_names().count("approvalText") >= 8
+    text = cases_text()
+    for piece in ("approved by alice", "auto-approved by rule r1 (rule active)", "(rule suspended)", "(rule revoked)",
+                  "(rule expired)", "(rule status unknown)"):
+        assert piece in text, piece
+    assert "approvalText" in ds.functions(pure_block())
