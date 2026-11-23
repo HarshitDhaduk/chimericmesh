@@ -2,7 +2,7 @@
 import json
 import re
 
-from hypothesis import HealthCheck, given, settings, strategies as st
+from hypothesis import HealthCheck, example, given, settings, strategies as st
 
 from chimericmesh.events import Event
 from chimericmesh.web import sse
@@ -68,10 +68,13 @@ def test_property_1_event_frame_parses_back_to_exactly_one_event(event):
 
 @SET
 @given(st.sampled_from(["dropped", "closed"]), TEXT)
+@example("dropped", "\ud800\udfff")  # a surrogate pair: found by the full suite run of task 5
 def test_property_1_named_frames_and_comments_cannot_forge_events(name, text):
     payload = json.dumps({"reason": text, "count": 1}, ensure_ascii=True)
     parsed = reference_parse(sse.frame_named(name, payload))
-    assert len(parsed) == 1 and parsed[0]["event"] == name and json.loads(parsed[0]["data"])["reason"] == text
+    # the data field is exactly the payload (json.loads would join a surrogate pair, so compare the text)
+    assert len(parsed) == 1 and parsed[0]["event"] == name and parsed[0]["data"] == payload
+    assert json.loads(parsed[0]["data"]) == json.loads(payload)
     assert reference_parse(sse.frame_comment(text)) == []
 
 
