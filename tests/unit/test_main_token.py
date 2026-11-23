@@ -19,7 +19,7 @@ def home(tmp_path, monkeypatch):
 @pytest.fixture
 def no_server(monkeypatch):
     calls = []
-    monkeypatch.setattr(entry.uvicorn, "run", lambda app, **kw: (calls.append(app), app.state.store.close()))
+    monkeypatch.setattr(entry.MeshServer, "run", lambda self, *a, **kw: (calls.append(self.config.app), self.config.app.state.store.close()))
     return calls
 
 

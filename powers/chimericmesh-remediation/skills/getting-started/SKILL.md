@@ -27,6 +27,13 @@ Read-only:
 - `recent_events`: latest events, optionally filtered by source.
 - `list_proposals`: remediation proposals, optionally filtered by status.
 - `get_proposal`: current status of one proposal.
+- `list_services`: the registered services.
+- `get_service`: one service, with its code folder.
+- `service_events`: events of one service, oldest first, paged by last id.
+- `explain_log_window`: counts, top signatures and samples of a service's recent logs.
+- `find_code_for_service`: search a service's code folder for a literal text.
+- `verify_proposal`: check the files of an approved proposal before editing them.
+- `wait_for_work`: wait up to about 25 seconds for incidents or approved proposals.
 
 State-changing (the user should be prompted for each):
 - `announce_to_irc`: post a status message to an IRC channel.
