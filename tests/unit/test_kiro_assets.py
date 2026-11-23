@@ -215,3 +215,83 @@ def test_power_docs_name_only_real_tools_and_cover_all():
     # backticked snake_case words that look like tool names must exist
     for word in re.findall(r"`([a-z]+_[a-z_]+)`", text):
         assert word in names or word in {"total_events"}, word
+
+
+# --- mesh-watcher profile (agent-loop task 9.1) -----------------------------
+WATCHER = ROOT / ".kiro" / "agents" / "mesh-watcher.json"
+# SHA-256 of both files as committed at 95922aa (the main tree); R5.3, B8: they never change.
+BASELINE_SHA256 = {
+    ".kiro/agents/mesh-responder.json": "bd67aeb787e036b6d0fc829d7c5c71594d6cc9dc786d36d6155a6e75c61d9be6",
+    ".kiro/settings/mcp.json": "55fb84a5d0d7eac79f86a70499b46fba5f847e63985f0fb224988cc309214824",
+}
+WATCHER_READ_ONLY = READ_ONLY | {
+    "list_services", "get_service", "service_events", "explain_log_window", "find_code_for_service",
+    "verify_proposal", "wait_for_work",
+}
+WATCHER_FS_WRITE_DENY = [
+    "**/.env", "**/.env.*", "**/*.pem", "**/*.key", "**/id_rsa*", "**/admin.token", "**/chimericmesh.db*",
+    "~/.chimericmesh/**",
+]
+WATCHER_FS_READ_DENY = ["**/admin.token", "**/chimericmesh.db*", "~/.chimericmesh/**"]
+def _sha256(rel: str) -> str:
+    import hashlib
+    return hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
+def test_watcher_is_valid_json_with_documented_fields():
+    agent = _load(WATCHER)
+    assert agent["name"] == "mesh-watcher"
+    assert set(agent) <= AGENT_FIELDS
+    assert agent["prompt"].strip() and agent["description"].strip()
+    assert agent["includeMcpJson"] is False and agent["includePowers"] is False
+def test_watcher_tools_are_the_three_builtins_and_all_17_mcp_tools():
+    agent = _load(WATCHER)
+    names = _tool_names()
+    assert len(names) == 17
+    assert "*" not in agent["tools"]
+    assert {t for t in agent["tools"] if not t.startswith("@")} == {"read", "write", "shell"}
+    assert {t for t in agent["tools"] if t.startswith("@")} == {f"@chimericmesh/{n}" for n in names}
+    assert len(agent["tools"]) == len(set(agent["tools"])) == 20
+def test_watcher_mcp_server_is_the_workspace_one_plus_request_timeout():
+    server = dict(_server(_load(WATCHER)))
+    assert server.pop("requestTimeout") >= 60000
+    assert server == _server(_load(WORKSPACE_MCP))
+def test_watcher_auto_allows_only_read_only_tools_that_exist():
+    agent = _load(WATCHER)
+    allowed = _allowed_mcp_tools(agent)
+    assert allowed == WATCHER_READ_ONLY
+    assert allowed <= _tool_names()
+    assert allowed.isdisjoint(MUTATING)
+    for rule in agent["permissions"]["rules"]:
+        if rule["effect"] == "allow":
+            assert rule["capability"] == "mcp"
+            assert rule["match"] and not any("*" in m for m in rule["match"])
+            assert all(m.startswith("chimericmesh/") for m in rule["match"])
+def test_watcher_state_changing_tools_ask():
+    asked = set()
+    for rule in _load(WATCHER)["permissions"]["rules"]:
+        if rule["capability"] == "mcp" and rule["effect"] == "ask":
+            asked.update(m.split("/", 1)[1] for m in rule["match"])
+    assert asked == MUTATING
+    assert asked.isdisjoint(_allowed_mcp_tools(_load(WATCHER)))
+def test_watcher_has_no_shell_or_fs_write_allow_or_ask_and_denies_are_exact():
+    rules = _load(WATCHER)["permissions"]["rules"]
+    assert {r["capability"] for r in rules} <= {"mcp", "fs_write", "fs_read"}
+    assert {r["effect"] for r in rules} <= {"allow", "ask", "deny"}
+    assert not [r for r in rules if r["capability"] == "shell"]
+    for rule in rules:
+        if rule["capability"] in {"fs_write", "fs_read"}:
+            assert rule["effect"] == "deny"
+    assert [m for r in rules if r["capability"] == "fs_write" for m in r["match"]] == WATCHER_FS_WRITE_DENY
+    assert [m for r in rules if r["capability"] == "fs_read" for m in r["match"]] == WATCHER_FS_READ_DENY
+def test_watcher_resources_exist():
+    for resource in _load(WATCHER)["resources"]:
+        assert resource.startswith("file://") and "*" not in resource
+        assert (ROOT / resource.removeprefix("file://")).is_file()
+def test_watcher_description_calls_the_home_globs_check_live():
+    description = _load(WATCHER)["description"]
+    assert "~/.chimericmesh/**" in description and "check live" in description
+def test_responder_and_workspace_mcp_are_byte_identical_to_main():
+    for rel, digest in BASELINE_SHA256.items():
+        assert _sha256(rel) == digest, rel
+def test_power_manifest_and_mcp_json_keep_their_behaviour():
+    assert set(_load(POWER / "plugin.json")) <= PLUGIN_FIELDS
+    assert _server(_load(POWER / "mcp.json"))["env"] == _server(_load(WORKSPACE_MCP))["env"]
