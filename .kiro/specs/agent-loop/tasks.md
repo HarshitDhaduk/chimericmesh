@@ -179,12 +179,12 @@ Design-review round 1 ids (`R1-H1`, `R1-M1` to `R1-M7`, `R1-L1` to `R1-L10`; des
         - Still for the user live (12.2): the `~/.chimericmesh/**` deny globs and that an edit outside the folder prompts.
     - _Requirements: 4.5, F2 (requirements Open Q1)_
 
-- [ ] 10. Optional enforcement hook (extra layer; not in the 1.5 day estimate; build if there is slack)
-  - [ ] 10.1 Implement the hook script
+- [x] 10. Optional enforcement hook (extra layer; not in the 1.5 day estimate; build if there is slack)
+  - [x] 10.1 Implement the hook script
     - Write `tests/unit/test_mesh_verify_write_hook.py` first (load the script with `importlib` from its path, as `test_guard_hook.py` does; a fake hub through the injected `post`): a valid `p4` state file and a reply `ok: true` exits 0; `ok: false` exits 2 with the first reason on stderr; a missing, empty or malformed state file (`p0`, `p-1`, `../x`, 5 000 characters) exits 2; the hub unreachable (`post` raises) exits 2; a reply that is not JSON exits 2; a reply with the note `no code folder, path scope not checked` exits 2; `CHIMERICMESH_URL` pointing at `http://example.com` or `http://127.0.0.1.evil.com` exits 2 without calling `post`; a write whose target is `.chimericmesh-active-proposal` exits 0; a workspace-relative target `src/chimericmesh/hub.py` with `cwd` `<root>` is sent to `post` as the absolute `<root>/src/chimericmesh/hub.py` (so with a code folder `<root>/examples/legacy_app` the fake hub, using the real `evaluate_verify`, answers `ok: false`) (R1-H1); stdin that is not JSON or has no path exits 0; the request body is `{"files": [...]}` and no header carries a token; the script reads no token file (static check: no `admin.token`, no `open(` except the state file).
-    - Create `.kiro/hooks-optional/mesh_verify_write.py` (`decide`, `main`; stdlib only; 5 s timeout).
+    - Create `.kiro/hooks-optional/mesh_verify_write.py` (`decide`, `main`; stdlib only; 5 s timeout). **Done 2026-11-23.** One deliberate tightening: only the exact file `<cwd>/.chimericmesh-active-proposal` is exempt (the design said any basename), so the same name elsewhere is verified like any file; a redirect from the hub is not followed.
     - _Requirements: 5.9_
-  - [ ] 10.2 Add the hook definition and install notes
+  - [x] 10.2 Add the hook definition and install notes
     - Write the tests first, in `tests/unit/test_mesh_verify_write_hook.py`: `.kiro/hooks-optional/mesh-verify-write.json` has version `v1`, trigger `PreToolUse`, matcher exactly `^(fs_write|fs_append|str_replace)$` and equal to the matcher of `.kiro/hooks/guard-innerhtml.json` (R1-M5), a `command` action running the script, and no `timeout` key inside `action` (the hook-timeout rule of the existing test); the two files are **not** present in `.kiro/hooks/` (opt-in, O5); the README section (11.1) names the copy step, the effect "every write needs an active proposal while installed" and the removal step.
     - Create `.kiro/hooks-optional/mesh-verify-write.json`.
     - _Requirements: 5.9_
@@ -194,17 +194,18 @@ Design-review round 1 ids (`R1-H1`, `R1-M1` to `R1-M7`, `R1-L1` to `R1-L10`; des
     - **Validates: Requirements 5.9**
 
 - [ ] 11. Documentation and the carried changes
-  - [ ] 11.1 Write the README section
+  - [x] 11.1 Write the README section
     - Write `tests/unit/test_agent_readme.py` first: the README has an "Agent watch mode" section that names `mesh-watcher`, `wait_for_work`, the two modes **prompt mode (default)** and **autonomous mode**, the snippet route, and states: the workspace must be trusted (F7); permission rules are static, so a changed code folder makes Kiro prompt again (F6); the user-scoped file applies to every session and agent of this user (F5) and the workspace-scoped file is preferred; hands-off write allows use workspace-relative globs only (F11); the `PermissionRequest` hook is not part of V1 (F8); the snippet is a standing allow that also applies while a proposal is `pending` (R5.7); "the agent cannot approve its own proposal or widen rules" is a design goal with stated limits, with the token-file and shell-command limit (R5.11(a)); **the one allowed test command in autonomous mode runs code the agent has just written with the user's privileges and that code could read the token file or call the hub; the user accepted this for hands-off mode only; prompt mode stays the default** (R5.11(b), README item); pause, revoke and withdraw need no token and can only reduce the agent's permissions; the `~/.chimericmesh/**` deny globs are "check live" and what remains if they do not match (L9); the hook is write-only; the demo precondition (L6): restore the defect in `examples/legacy_app/upstream.py` yourself before the demo, for example with `git checkout -- examples/legacy_app/upstream.py` (the doc says it is the user's command; no task runs it); the long-wait setting (25 s, 35 s client timeout, `requestTimeout` 120000); ids are `p1`, `p2`.
     - Edit `README.md` (one new section; no change to other sections).
-    - [ ] (L6) The demo precondition paragraph.
-    - [ ] (L9) The "check live" paragraph.
-    - [ ] The README item of the Notes for design: the test-command risk paragraph above.
-    - [ ] (R1-L9) One sentence: in bare mode the proposals list keeps 200, so a user-denied proposal that falls off it makes its incident work again; store mode keeps all (asserted by the test).
-    - [ ] (R1-L6) One sentence, kept until task 4.4\* is built: the hook and `verify_proposal` do not protect `.env`-type names inside the code folder for a user approval without declared files; the profile `fs_write` denies do.
-    - [ ] (R1-M6) The README says which file the IDE reads for `requestTimeout` (result of 9.3), and the `CHIMERICMESH_WATCH_MAX_WAIT` fallback.
-    - [ ] (R1-M3) The README says the workspace root is found by walking up to `.kiro/` and can be set with `CHIMERICMESH_WORKSPACE_ROOT`.
-    - [ ] (R1-H1) The README says `files` are absolute paths.
+    - [x] (L6) The demo precondition paragraph.
+    - [x] (L9) The "check live" paragraph.
+    - [x] The README item of the Notes for design: the test-command risk paragraph above.
+    - [x] (R1-L9) One sentence: in bare mode the proposals list keeps 200, so a user-denied proposal that falls off it makes its incident work again; store mode keeps all (asserted by the test).
+    - [x] (R1-L6) One sentence, kept until task 4.4\* is built: the hook and `verify_proposal` do not protect `.env`-type names inside the code folder for a user approval without declared files; the profile `fs_write` denies do.
+    - [x] (R1-M6) The README says which file the IDE reads for `requestTimeout` (result of 9.3), and the `CHIMERICMESH_WATCH_MAX_WAIT` fallback.
+    - [x] (R1-M3) The README says the workspace root is found by walking up to `.kiro/` and can be set with `CHIMERICMESH_WORKSPACE_ROOT`.
+    - [x] (R1-H1) The README says `files` are absolute paths.
+    - **Done 2026-11-23:** README section Agent watch mode and 	ests/unit/test_agent_readme.py (10 tests; the hook install/removal phrases of 10.2 are asserted there). The R1-L9 sentence says the bare hub keeps 200 proposals and the store keeps all. Task 10.3 (optional property test) is not built; see blockers.md.
     - _Requirements: 5.5, 5.7, 5.10, 5.11, 4.5_
   - [x] 11.2 Carry the long-outage overflow test from the branch
     - Read the change with `git show fix/proposal-ids-and-recheck:examples/legacy_app/tests/test_resilience.py` and `git diff HEAD...fix/proposal-ids-and-recheck -- examples/legacy_app/tests` only (no checkout, no merge, no cherry-pick). Append `test_long_outage_keeps_running_with_bounded_positive_delays` to `examples/legacy_app/tests/test_resilience.py` (add the blank line before it that the branch lacks).
