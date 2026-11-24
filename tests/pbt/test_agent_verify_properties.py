@@ -201,9 +201,11 @@ def near_ok(draw):
             sent.append(join(FOLDER, ("pkg", "undeclared.py")))
         elif kind == "extra_protected":
             sent.append(join(FOLDER, ("pkg", ".env")))
-            inp = dataclasses.replace(inp, declared_files=inp.declared_files + (sent[-1],))
+            if inp.declared_files is not None:   # after "none_declared" nothing is declared: keep it so
+                inp = dataclasses.replace(inp, declared_files=inp.declared_files + (sent[-1],))
         elif kind == "undeclare":
-            inp = dataclasses.replace(inp, declared_files=inp.declared_files[1:])
+            if inp.declared_files is not None:
+                inp = dataclasses.replace(inp, declared_files=inp.declared_files[1:])
         elif kind == "nofolder":
             inp = dataclasses.replace(inp, code_folder=None, has_service=False)
         elif kind == "junk":
