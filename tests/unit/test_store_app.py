@@ -168,6 +168,7 @@ def test_shutdown_order_and_failing_store_finish_within_5_seconds(tmp_path, monk
 
 def test_listeners_close_before_the_hub(tmp_path, monkeypatch):
     monkeypatch.setenv("CHIMERICMESH_DB", ":memory:")
+    monkeypatch.setenv("CHIMERICMESH_SYSLOG_TCP_PORT", "0")  # the TCP syslog listener is not faked here: keep it off 5514
     order = []
 
     class Closer:
