@@ -29,7 +29,7 @@
     border-radius: 4px; cursor: pointer; font-weight: 700; }
   button:hover { background: #ffa05f; }
   button:disabled { opacity: .55; cursor: not-allowed; }
-  button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
     outline: 3px solid var(--ghost); outline-offset: 2px; }
   button.ghost { background: transparent; color: var(--ghost); border: 1px solid var(--ghost); padding: 6px 10px; }
   button.ghost:hover { background: rgba(124,255,178,.12); }
@@ -72,7 +72,49 @@
   input, select { font: inherit; background: #08070d; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 8px; }
   input[type=text] { flex: 1; min-width: 0; }
   .sr { position: absolute; left: -9999px; }
-  .hidden { display: none !important; }
+  .hidden, [hidden] { display: none !important; }
+  [data-view] { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+  nav { display: flex; gap: 8px; flex-wrap: wrap; }
+  nav button[aria-current="page"] { background: rgba(124,255,178,.18); }
+  .hdr-right { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  #status { max-width: 40ch; overflow-wrap: anywhere; }
+  .banner { margin: 0; padding: 10px clamp(16px, 4vw, 48px); background: #2a1d08; color: var(--amber); border-bottom: 1px solid var(--amber); }
+  #selftest { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ghost); }
+  form.unlock { padding: 12px clamp(16px, 4vw, 48px); border-bottom: 1px solid var(--line); background: var(--panel); }
+  form.unlock .meta { overflow-wrap: anywhere; }
+  dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
+  dl.facts dt { color: var(--dim); }
+  dl.facts dd { margin: 0; overflow-wrap: anywhere; }
+  .svc-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); margin-top: 14px; }
+  .svc-card { border: 1px solid var(--line); border-radius: 6px; padding: 12px; background: #0f0d17; min-width: 0; overflow-wrap: anywhere; }
+  .svc-card h3 { margin: 0; font-size: 1rem; }
+  .svc-card .top { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  .svc-card ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+  .svc-card .err { color: var(--blood); font-size: .8rem; }
+  .pill.st-active { color: var(--ghost); }
+  .pill.st-idle { color: var(--amber); }
+  .pill.st-never, .pill.st-unknown { color: var(--dim); }
+  form.svc-form { display: grid; gap: 10px; margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; }
+  form.svc-form h3, form.svc-form h4 { margin: 0; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .field label { color: var(--dim); font-size: .85rem; }
+  fieldset { border: 1px solid var(--line); border-radius: 4px; display: flex; flex-wrap: wrap; gap: 12px; }
+  .table-wrap { overflow-x: auto; }
+  table.rules { border-collapse: collapse; width: 100%; font-size: .85rem; }
+  table.rules th, table.rules td { text-align: left; padding: 6px 8px; border-bottom: 1px dashed #221f33; vertical-align: top; overflow-wrap: anywhere; min-width: 10ch; }
+  table.rules th { color: var(--dim); font-weight: 400; }
+  .row.live { grid-template-columns: 70px 70px minmax(0, 1fr); }
+  .row.live .cell { min-width: 0; }
+  .row.live .m { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row.live.open .m { white-space: normal; overflow-wrap: anywhere; }
+  .row.live.sys { color: var(--amber); }
+  .live-ctl { align-items: flex-end; margin-bottom: 8px; }
+  .cand { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; border-top: 1px dashed var(--line); padding-top: 8px; }
+  table.sources { border-collapse: collapse; width: 100%; }
+  table.sources td { padding: 4px; vertical-align: bottom; }
+  details.perm { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 20px; }
+  details.perm summary { cursor: pointer; color: var(--violet); font-weight: 700; }
+  details.perm pre { white-space: pre-wrap; max-height: 360px; overflow: auto; }
 
   /* guide */
   .guide-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
@@ -115,11 +157,28 @@
   .pill.approved { color: var(--ghost); }
   .pill.denied { color: var(--blood); }
   .pill.done { color: var(--violet); }
+  .pill.auto { color: var(--violet); font-weight: 700; }
+  form.rule-form { display: grid; gap: 10px; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; }
+  form.rule-form .grid-n { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
+  form.rule-form input[type=number] { width: 100%; }
+  .pill.unknown { color: var(--dim); }
 
   #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 10; background: #2a0f18; color: #ffd6de;
     border: 1px solid var(--blood); border-radius: 6px; padding: 8px 14px; max-width: 90vw; }
   #toast:empty { display: none; }
   @media (prefers-reduced-motion: no-preference) { .pulse { animation: pulse 2.4s ease-in-out infinite; } }
+  @media (max-width: 480px) {
+    header { padding: 16px; gap: 10px; }
+    main { padding: 16px 12px 48px; gap: 16px; }
+    section { padding: 14px; }
+    .hdr-right { width: 100%; }
+    #status { max-width: 100%; }
+    nav button { padding: 8px 10px; }
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .row.live { grid-template-columns: 56px 56px minmax(0, 1fr); gap: 6px; }
+    form.svc-form, form.rule-form { padding: 10px; }
+    dl.facts { grid-template-columns: 1fr; }
+  }
   @keyframes pulse { 50% { text-shadow: 0 0 22px rgba(255,138,61,.9); } }
 </style>
 </head>
@@ -129,9 +188,33 @@
     <h1><span>CHIMERIC</span>MESH <span class="pulse" aria-hidden="true">☠</span></h1>
     <div class="tag">Syslog · IRC · Telnet, stitched to AI agents through MCP</div>
   </div>
-  <button id="storm" type="button">Summon a failure storm</button>
+  <nav aria-label="Views">
+    <button class="ghost" type="button" data-nav="overview">Overview</button>
+    <button class="ghost" type="button" data-nav="services">Services</button>
+    <button class="ghost" type="button" data-nav="discovery">Discovery</button>
+    <button class="ghost" type="button" data-nav="rules">Rules</button>
+  </nav>
+  <div class="hdr-right">
+    <div id="status" class="meta" role="status" aria-live="polite"></div>
+    <span id="lockText" class="meta"></span>
+    <button class="ghost small" type="button" id="unlockBtn" aria-controls="tokenForm" aria-expanded="false">Unlock</button>
+    <button class="ghost small" type="button" id="lockBtn" hidden>Lock</button>
+    <button id="storm" type="button">Summon a failure storm</button>
+  </div>
 </header>
+<form class="unlock hidden" id="tokenForm" autocomplete="off" aria-label="Unlock">
+  <div class="meta" id="tokenNote"></div>
+  <div class="meta" id="tokenFile"></div>
+  <div class="prompt">
+    <label class="sr" for="tokenInput">Admin token</label>
+    <input type="password" id="tokenInput" maxlength="256" autocomplete="off" spellcheck="false" aria-label="Admin token" placeholder="admin token">
+    <button type="submit">Save</button>
+    <button class="ghost" type="button" id="tokenCancel">Cancel</button>
+  </div>
+</form>
+<div id="pausedBanner" class="banner" role="status" hidden></div>
 <main>
+  <div id="view-overview" data-view="overview">
   <section class="stats" aria-label="Statistics" id="stats"></section>
 
   <section id="guide" aria-labelledby="guide-h" class="hidden">
@@ -178,12 +261,7 @@
           <span class="spacer"></span>
           <button class="ghost small" type="button" id="termClear">Clear</button>
         </div>
-        <form class="prompt hidden" id="tokenForm" autocomplete="off">
-          <label class="sr" for="tokenInput">Admin token</label>
-          <input type="password" id="tokenInput" maxlength="256" autocomplete="off" spellcheck="false" aria-label="Admin token" placeholder="admin token (from admin.token)">
-          <button type="submit">Save</button>
-        </form>
-        <div class="meta hidden" id="tokenNote" role="status"></div>
+        <div class="meta" id="termStatus" role="status" aria-live="polite"></div>
         <div class="meta" id="identity" style="margin-top:8px"></div>
         <div class="meta">Press / to focus, Tab to complete, ↑↓ for history.</div>
       </section>
@@ -200,49 +278,713 @@
       </section>
     </div>
   </div>
+  </div>
+  <div id="view-services" data-view="services" hidden>
+    <section aria-labelledby="svc-h">
+      <div class="guide-head">
+        <h2 id="svc-h">Services</h2>
+        <button class="ghost small" type="button" id="svcAdd">Add service</button>
+      </div>
+      <div id="svcFormBox"></div>
+      <div id="svcList" class="svc-grid"></div>
+    </section>
+  </div>
+  <div id="view-service" data-view="service" hidden>
+    <section id="svcDetail" aria-labelledby="svcName">
+      <h2 id="svcName">Service</h2>
+      <dl class="facts">
+        <dt>Id</dt><dd id="svcId"></dd>
+        <dt>State</dt><dd id="svcState"></dd>
+        <dt>Last seen</dt><dd id="svcSeen"></dd>
+        <dt>Errors per minute</dt><dd id="svcRate"></dd>
+        <dt>Open incidents</dt><dd id="svcOpen"></dd>
+      </dl>
+    </section>
+    <div data-slot="permissions">
+      <details id="permPanel" class="perm">
+        <summary>Kiro permissions</summary>
+        <p>ChimericMesh never writes this file; paste it yourself.</p>
+        <p class="meta">The text has two sections: prompt mode (Kiro asks before each change) and autonomous mode.</p>
+        <pre id="permText" class="sample"></pre>
+        <div class="actions"><button class="ghost small" type="button" id="permCopy">Copy</button></div>
+        <div class="meta" id="permMsg" role="status" aria-live="polite"></div>
+      </details>
+    </div>
+    <div data-slot="live-log">
+      <section id="liveLog" aria-labelledby="live-h">
+        <h2 id="live-h">Live log</h2>
+        <div class="actions live-ctl">
+          <button class="ghost small" type="button" id="livePause">Pause</button>
+          <div class="field"><label for="liveSev">Minimum severity</label>
+            <select id="liveSev">
+              <option value="7">all severities</option>
+              <option value="6">info or worse</option>
+              <option value="5">notice or worse</option>
+              <option value="4">warning or worse</option>
+              <option value="3">err or worse</option>
+              <option value="2">crit or worse</option>
+              <option value="1">alert or worse</option>
+              <option value="0">emerg only</option>
+            </select></div>
+          <div class="field"><label for="liveText">Filter text</label>
+            <input type="text" id="liveText" maxlength="100" autocomplete="off" spellcheck="false"></div>
+          <div class="field"><label for="liveAuto">Auto-scroll</label>
+            <input type="checkbox" id="liveAuto" checked></div>
+        </div>
+        <div class="meta" id="liveStatus" role="status" aria-live="polite"></div>
+        <div class="log" id="liveBox" role="log" aria-label="Live log rows"></div>
+      </section>
+    </div>
+    <div data-slot="incidents">
+      <section aria-labelledby="svcInc-h">
+        <h2 id="svcInc-h">Incidents</h2>
+        <div id="svcIncidents" aria-live="polite"></div>
+      </section>
+    </div>
+    <div data-slot="proposals">
+      <section aria-labelledby="svcProp-h">
+        <h2 id="svcProp-h">Proposals</h2>
+        <div id="svcProposals"></div>
+      </section>
+    </div>
+    <section id="svcGone" hidden>
+      <p>This service no longer exists.</p>
+      <button class="ghost" type="button" id="svcBack">Back to services</button>
+    </section>
+  </div><!-- /view-service -->
+  <div id="view-discovery" data-view="discovery" hidden>
+    <section aria-labelledby="disc-h">
+      <div class="guide-head">
+        <h2 id="disc-h">Discovery</h2>
+        <span id="discDismissSlot"></span>
+      </div>
+      <p class="meta" id="discExplainer"></p>
+      <div class="actions" id="discScanSlot"></div>
+      <div class="meta" id="discStatus" role="status" aria-live="polite"></div>
+      <div class="meta" id="discLimited"></div>
+      <div id="discList" class="svc-grid"></div>
+    </section>
+  </div>
+  <div id="view-rules" data-view="rules" hidden>
+    <section aria-labelledby="rules-h">
+      <div class="guide-head">
+        <h2 id="rules-h">Approval rules</h2>
+        <span class="actions" id="rulesTools"></span>
+      </div>
+      <div class="meta" id="rulesMsg" role="status" aria-live="polite"></div>
+      <div id="ruleFormBox"></div>
+      <div class="table-wrap">
+        <table class="rules" aria-label="Approval rules">
+          <thead><tr>
+            <th scope="col">Id</th><th scope="col">Service</th><th scope="col">Matches</th><th scope="col">Severity floor</th>
+            <th scope="col">Expires</th><th scope="col">Limits</th><th scope="col">Uses (hour / total)</th>
+            <th scope="col">Status</th><th scope="col">Source proposal</th><th scope="col">Actions</th>
+          </tr></thead>
+          <tbody id="rulesBody"></tbody>
+        </table>
+      </div>
+    </section>
+    <section aria-labelledby="audit-h">
+      <h2 id="audit-h">Audit trail</h2>
+      <div class="actions live-ctl">
+        <div class="field"><label for="auditSvc">Service</label>
+          <select id="auditSvc"><option value="">all services</option></select></div>
+        <div class="field"><label for="auditRule">Rule id</label>
+          <input type="text" id="auditRule" maxlength="100" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div class="meta" id="auditMsg" role="status" aria-live="polite"></div>
+      <div class="table-wrap">
+        <table class="rules" aria-label="Audit trail">
+          <thead><tr>
+            <th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Subject</th><th scope="col">Detail</th>
+          </tr></thead>
+          <tbody id="auditBody"></tbody>
+        </table>
+      </div>
+      <div class="actions"><button class="ghost small" type="button" id="auditMore" hidden>Load more</button></div>
+    </section>
+  </div>
+  <pre id="selftest" hidden></pre>
 </main>
 <div id="toast" role="status" aria-live="polite"></div>
 <script>
+/* ==== PURE ==== */
+/* PURE:begin */
+// Pure functions: no browser global, no request, no storage, no clock. Self-tested by #selftest.
+const SEV_NAMES = ['emerg', 'alert', 'crit', 'err', 'warning', 'notice', 'info', 'debug'];
+const SCHED_SLACK_MS = 100; // a 1 s tick can land a few ms early
+function sevName(n) { const i = Number(n); return Number.isInteger(i) && i >= 0 && i <= 7 ? SEV_NAMES[i] : 'unknown'; }
+function capText(s, n) { const t = s === null || s === undefined ? '' : String(s); return t.length <= n ? t : `${t.slice(0, n)}…`; }
+function relTime(ts, now) {
+  if (ts === null || ts === undefined) return 'never';
+  const d = now - ts;
+  if (!(d >= 5)) return 'just now';
+  if (d < 60) return `${Math.floor(d)} s ago`;
+  if (d < 3600) return `${Math.floor(d / 60)} min ago`;
+  if (d < 86400) return `${Math.floor(d / 3600)} h ago`;
+  return `${Math.floor(d / 86400)} d ago`;
+}
+function countdown(ts, now) {
+  const d = ts - now;
+  if (!(d > 0)) return 'expired';
+  if (d >= 86400) return `${Math.floor(d / 86400)} d ${Math.floor((d % 86400) / 3600)} h`;
+  if (d >= 3600) return `${Math.floor(d / 3600)} h ${Math.floor((d % 3600) / 60)} min`;
+  return `${Math.max(1, Math.floor(d / 60))} min`;
+}
+const STATE_LABELS = {
+  service: { active: 'active', idle: 'idle', never_seen: 'never seen' },
+  source: { running: 'running', missing: 'missing', unreadable: 'unreadable', error: 'error', stopped: 'stopped', unknown: 'unknown' },
+  rule: { active: 'active', suspended: 'suspended', revoked: 'revoked', expired: 'expired' },
+  proposal: { pending: 'pending', approved: 'approved', denied: 'denied', done: 'done', withdrawn: 'withdrawn' },
+};
+function stateLabel(kind, value) {
+  const table = STATE_LABELS[kind] || {};
+  return Object.prototype.hasOwnProperty.call(table, value) ? table[value] : 'unknown';
+}
+function nextBackoff(n) { const k = Number.isInteger(n) && n > 0 ? n : 0; return Math.min(30, 2 ** Math.min(k, 5)); }
+function errorText(status, body) {
+  const detail = body && typeof body === 'object' ? body.detail : undefined;
+  let text = '';
+  if (typeof detail === 'string' && detail) text = detail;
+  else if (Array.isArray(detail) && detail.length) {
+    text = detail.map((d) => {
+      const loc = Array.isArray(d && d.loc) ? d.loc.filter((p) => p !== 'body' && p !== 'query' && p !== 'path').join('.') : '';
+      const msg = d && typeof d.msg === 'string' ? d.msg : 'invalid';
+      return loc ? `${loc}: ${msg}` : msg;
+    }).join('; ');
+  }
+  if (!text) return `HTTP ${status}`;
+  const field = body && typeof body.field === 'string' && body.field ? body.field : '';
+  return field ? `${field}: ${text}` : text;
+}
+function parseRoute(hash) {
+  const h = String(hash || '');
+  const m = /^#\/services\/([^/?#]+)$/.exec(h);
+  if (m) {
+    let id = '';
+    try { id = decodeURIComponent(m[1]); } catch (e) { id = ''; }
+    return /^[a-z0-9][a-z0-9-]{0,39}$/.test(id) ? { view: 'service', id } : { view: 'services' };
+  }
+  if (h === '#/services') return { view: 'services' };
+  if (h === '#/discovery') return { view: 'discovery' };
+  if (h === '#/rules') return { view: 'rules' };
+  return { view: 'overview' };
+}
+function dueTasks(tasks, now, view, visible) {
+  if (!visible) return [];
+  return tasks.filter((t) => (t.view === '*' || t.view === view) && now - t.last + SCHED_SLACK_MS >= t.every).map((t) => t.id);
+}
+function rowMatches(ev, minSev, text) {
+  const sev = Number(ev && ev.severity);
+  if (Number.isFinite(minSev) && !(sev <= minSev)) return false;
+  const t = String(text === null || text === undefined ? '' : text).toLowerCase();
+  if (!t) return true;
+  return `${ev.host || ''} ${ev.app || ''} ${ev.message || ''}`.toLowerCase().includes(t);
+}
+function approvalText(p) {
+  const a = p && p.approval;
+  if (!a || typeof a !== 'object') return '';
+  if (a.by === 'user') return `approved by ${p.decided_by || 'a user'}`;
+  if (a.by === 'rule') {
+    const st = a.rule_status_now;
+    const known = st === 'active' || st === 'suspended' || st === 'revoked' || st === 'expired';
+    return `auto-approved by rule ${a.rule_id} (${known ? `rule ${st}` : 'rule status unknown'})`;
+  }
+  return '';
+}
+// Rule form helpers (7.3, 8.2). Numbers come from the hub's bounds when it sent them, else from the fallbacks.
+function canMakeRule(p) {
+  const a = p && p.approval;
+  return Boolean(a && a.by === 'user' && (p.status === 'approved' || (p.status === 'done' && p.verification_result === 'passed')));
+}
+function boundOf(bounds, key, fallback) {
+  const b = bounds && typeof bounds === 'object' ? bounds[key] : null;
+  const src = b && typeof b === 'object' ? b : {};
+  const num = (v, d) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+  return { min: num(src.min, fallback.min), max: num(src.max, fallback.max), default: num(src.default, fallback.default) };
+}
+function clampInt(v, lo, hi) {
+  const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+  return Math.min(hi, Math.max(lo, Math.round(n)));
+}
+function sevFloorText(n) {
+  const i = Number(n);
+  return Number.isInteger(i) && i >= 0 && i <= 7 ? `${sevName(i)} (${i}) or more urgent` : 'unknown';
+}
+// The hub takes an absolute expires_at; the form shows days. Computed from the hub's own default (7 days),
+// never from the browser clock; n is clamped to 1..29 so the 30 day cap cannot be passed.
+function expiryFromDays(serverExpiryDefault, n) {
+  if (typeof serverExpiryDefault !== 'number' || !Number.isFinite(serverExpiryDefault)) return null;
+  if (typeof n !== 'number' || !Number.isInteger(n)) return null;
+  return serverExpiryDefault + (Math.min(29, Math.max(1, n)) - 7) * 86400;
+}
+// The fields of a rule form that differ from the hub's defaults (the proposal route takes only these).
+function ruleOverrides(defaults, v) {
+  const out = {};
+  for (const k of ['most_urgent_severity', 'max_per_hour', 'max_per_incident', 'max_files', 'max_lines']) {
+    if (v[k] !== null && v[k] !== undefined && v[k] !== defaults[k]) out[k] = v[k];
+  }
+  const when = expiryFromDays(defaults.expires_at, v.days);
+  if (v.days !== 7 && when !== null) out.expires_at = when;
+  if (typeof v.note === 'string' && v.note !== (defaults.note || '')) out.note = v.note;
+  return out;
+}
+// Union by id, newest first; the arrays it is given are never changed.
+function mergeAudit(existing, incoming) {
+  const byId = new Map();
+  for (const r of existing || []) byId.set(r.id, r);
+  for (const r of incoming || []) byId.set(r.id, r);
+  return Array.from(byId.values()).sort((a, b) => b.id - a.id);
+}
+function isNewer(id, lastId) { return typeof id === 'number' && Number.isFinite(id) && id > lastId; }
+function lockState(uiConfig, hasToken) {
+  const flag = uiConfig ? uiConfig.enforce_access : null;
+  if (flag === true) return { locked: !hasToken, mode: 'enforced' };
+  if (flag === false) return { locked: false, mode: 'off' };
+  return { locked: false, mode: 'unknown' };
+}
+function afterAuthFailure(status, hadToken, retryAfter) {
+  if (status === 401) return hadToken ? { clearToken: true, text: 'token rejected' } : { clearToken: false, text: 'unlock first' };
+  if (status === 403) return { clearToken: false, text: 'blocked by the hub: open this page at the address the hub printed' };
+  if (status === 429) return { clearToken: false, text: Number(retryAfter) > 0 ? `too many requests, try again in ${Math.floor(Number(retryAfter))} s` : 'too many requests, try again later' };
+  return { clearToken: false, text: '' };
+}
+// Routes that need the admin token (method, path pattern). Taken from the route tables of the services,
+// discovery and auto-approval designs; POST /api/terminal is conditional (only !approve and !deny check it).
+const PRIVILEGED = [
+  ['POST', '^/api/services$'],
+  ['PATCH', '^/api/services/[^/]+$'],
+  ['DELETE', '^/api/services/[^/]+$'],
+  ['POST', '^/api/services/[^/]+/log-sources$'],
+  ['PATCH', '^/api/services/[^/]+/log-sources/[^/]+$'],
+  ['DELETE', '^/api/services/[^/]+/log-sources/[^/]+$'],
+  ['POST', '^/api/discovery/scan$'],
+  ['GET', '^/api/discovery/scans/[^/]+$'],
+  ['POST', '^/api/discovery/suggestions/[^/]+/accept$'],
+  ['POST', '^/api/discovery/suggestions/[^/]+/dismiss$'],
+  ['GET', '^/api/discovery/dismissals$'],
+  ['DELETE', '^/api/discovery/dismissals$'],
+  ['POST', '^/api/rules$'],
+  ['PATCH', '^/api/rules/[^/]+$'],
+  ['POST', '^/api/rules/[^/]+/enable$'],
+  ['POST', '^/api/rules/resume$'],
+  ['POST', '^/api/proposals/[^/]+/rule$'],
+  ['POST', '^/api/proposals/[^/]+/decide$'],
+  ['POST', '^/api/terminal$'],
+];
+// Sent when a token is stored, harmless when the route is open (agent-loop owns the route).
+const SEND_IF_PRESENT = [['GET', '^/api/services/[^/]+/permissions-snippet$']];
+function matchesTable(table, method, path) {
+  const p = String(path).split('?')[0];
+  return table.some(([m, rx]) => m === method && new RegExp(rx).test(p));
+}
+function needsToken(method, path) { return matchesTable(PRIVILEGED, method, path); }
+function sendsTokenIfPresent(method, path) { return needsToken(method, path) || matchesTable(SEND_IF_PRESENT, method, path); }
+// Lock registry: true needs the token (disabled while locked), false is a reduce action (always enabled),
+// 'conditional' is never disabled and sends the token when one is stored.
+const ACTIONS = {
+  'svc-save': true, 'svc-source-edit': true, 'scan-start': true, 'suggestion-accept': true,
+  'suggestion-dismiss': true, 'dismissals-clear': true, 'proposal-approve': true, 'proposal-deny': true,
+  'rule-create': true, 'rule-edit': true, 'rule-enable': true, 'rules-resume': true, 'rule-from-proposal': true,
+  'rules-pause-all': false, 'rule-pause': false, 'rule-revoke': false, 'proposal-withdraw': false,
+  'terminal-send': 'conditional',
+};
+function actionNeedsToken(id) { return Object.prototype.hasOwnProperty.call(ACTIONS, id) && ACTIONS[id] === true; }
+function tokenShapeOk(s) { return typeof s === 'string' && /^[\x21-\x7e]{1,200}$/.test(s); }
+// Used when GET /api/ui-config fails: the access mode is unknown, nothing is locked (the hub decides).
+const UI_FALLBACK = {
+  enforce_access: null, token_file: null,
+  formats: ['syslog-text', 'ncsa', 'w3c', 'xferlog', 'plain'],
+  protocols: ['syslog-udp', 'syslog-tcp', 'telnet', 'irc', 'file'],
+};
+// Open incidents first, then the error rate (highest first), the built-in card last on a tie, then the name.
+function sortServices(list) {
+  const key = (s) => [Number(s.open_incidents) > 0 ? 0 : 1, -(Number(s.error_rate) || 0), s.builtin ? 1 : 0];
+  return list.slice().sort((a, b) => {
+    const x = key(a), y = key(b);
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] - y[i];
+    const na = String(a.name), nb = String(b.name);
+    return na < nb ? -1 : na > nb ? 1 : 0;
+  });
+}
+function splitList(text) { return String(text === null || text === undefined ? '' : text).split(',').map((x) => x.trim()).filter((x) => x); }
+// The create body: code_folder only when given (the server treats a missing key as "none").
+function serviceCreateBody(form) {
+  const body = { id: form.id, name: form.name, hosts: form.hosts, app_names: form.app_names, protocols: form.protocols };
+  if (form.code_folder) body.code_folder = form.code_folder;
+  return body;
+}
+// The PATCH body: changed fields only; a cleared code folder is sent as null (services maps it to "clear").
+function servicePatch(original, form) {
+  const out = {};
+  if (form.name !== original.name) out.name = form.name;
+  for (const k of ['hosts', 'app_names', 'protocols']) {
+    if (JSON.stringify(form[k]) !== JSON.stringify(original[k] || [])) out[k] = form[k];
+  }
+  const was = original.code_folder || '';
+  if (form.code_folder !== was) out.code_folder = form.code_folder === '' ? null : form.code_folder;
+  return out;
+}
+// Log-source operations for the form. The path of a source cannot change, so a new path is remove + add.
+function diffSources(oldList, newList) {
+  const old = new Map((oldList || []).map((s) => [s.id, s]));
+  const add = [], update = [], remove = [], kept = new Set();
+  (newList || []).forEach((row, index) => {
+    const prev = row.id ? old.get(row.id) : undefined;
+    if (prev && prev.path === row.path) {
+      kept.add(row.id);
+      const patch = {};
+      if (row.format !== prev.format) patch.format = row.format;
+      if (Boolean(row.enabled) !== Boolean(prev.enabled)) patch.enabled = Boolean(row.enabled);
+      if (Object.keys(patch).length) update.push({ id: row.id, patch });
+    } else if (row.path) add.push({ index, path: row.path, format: row.format, enabled: Boolean(row.enabled) });
+  });
+  for (const s of oldList || []) if (!kept.has(s.id)) remove.push(s.id);
+  return { add, update, remove };
+}
+// Discovery accept body: exactly id, name, log_paths, plus code_folder and app_names only when non-empty.
+function buildAcceptBody(form) {
+  const body = {
+    id: form.id, name: form.name,
+    log_paths: (form.rows || []).filter((r) => r.checked && !r.watched_by).map((r) => ({ path: r.path, format: r.format })),
+  };
+  const cf = String(form.code_folder || '').trim();
+  if (cf) body.code_folder = cf;
+  const apps = Array.isArray(form.app_names) ? form.app_names.filter((a) => a) : [];
+  if (apps.length) body.app_names = apps;
+  return body;
+}
+/* PURE:end */
+
+/* ==== SELFTEST ==== */
+const SELFTEST_CASES = [
+  { name: 'sevName', args: [3], expect: 'err' },
+  { name: 'sevName', args: [7], expect: 'debug' },
+  { name: 'sevName', args: [8], expect: 'unknown' },
+  { name: 'sevName', args: ['x'], expect: 'unknown' },
+  { name: 'capText', args: ['abc', 3], expect: 'abc' },
+  { name: 'capText', args: ['abcd', 3], expect: 'abc…' },
+  { name: 'capText', args: [null, 5], expect: '' },
+  { name: 'capText', args: [12345, 3], expect: '123…' },
+  { name: 'relTime', args: [null, 100], expect: 'never' },
+  { name: 'relTime', args: [100, 100], expect: 'just now' },
+  { name: 'relTime', args: [150, 100], expect: 'just now' },
+  { name: 'relTime', args: [9988, 10000], expect: '12 s ago' },
+  { name: 'relTime', args: [9820, 10000], expect: '3 min ago' },
+  { name: 'relTime', args: [2800, 10000], expect: '2 h ago' },
+  { name: 'relTime', args: [827200, 1000000], expect: '2 d ago' },
+  { name: 'countdown', args: [100, 100], expect: 'expired' },
+  { name: 'countdown', args: [90, 100], expect: 'expired' },
+  { name: 'countdown', args: [2800, 100], expect: '45 min' },
+  { name: 'countdown', args: [100 + 20, 100], expect: '1 min' },
+  { name: 'countdown', args: [100 + 3900, 100], expect: '1 h 5 min' },
+  { name: 'countdown', args: [100 + 183600, 100], expect: '2 d 3 h' },
+  { name: 'stateLabel', args: ['service', 'never_seen'], expect: 'never seen' },
+  { name: 'stateLabel', args: ['service', 'active'], expect: 'active' },
+  { name: 'stateLabel', args: ['service', 'idle'], expect: 'idle' },
+  { name: 'stateLabel', args: ['source', 'running'], expect: 'running' },
+  { name: 'stateLabel', args: ['source', 'missing'], expect: 'missing' },
+  { name: 'stateLabel', args: ['source', 'unreadable'], expect: 'unreadable' },
+  { name: 'stateLabel', args: ['source', 'error'], expect: 'error' },
+  { name: 'stateLabel', args: ['source', 'stopped'], expect: 'stopped' },
+  { name: 'stateLabel', args: ['source', 'unknown'], expect: 'unknown' },
+  { name: 'stateLabel', args: ['source', 'zzz'], expect: 'unknown' },
+  { name: 'stateLabel', args: ['source', 'constructor'], expect: 'unknown' },
+  { name: 'stateLabel', args: ['rule', 'suspended'], expect: 'suspended' },
+  { name: 'stateLabel', args: ['proposal', 'pending'], expect: 'pending' },
+  { name: 'nextBackoff', args: [0], expect: 1 },
+  { name: 'nextBackoff', args: [1], expect: 2 },
+  { name: 'nextBackoff', args: [2], expect: 4 },
+  { name: 'nextBackoff', args: [3], expect: 8 },
+  { name: 'nextBackoff', args: [4], expect: 16 },
+  { name: 'nextBackoff', args: [5], expect: 30 },
+  { name: 'nextBackoff', args: [6], expect: 30 },
+  { name: 'nextBackoff', args: [7], expect: 30 },
+  { name: 'nextBackoff', args: [8], expect: 30 },
+  { name: 'nextBackoff', args: ['x'], expect: 1 },
+  { name: 'errorText', args: [422, { detail: 'bad path', field: 'log_paths' }], expect: 'log_paths: bad path' },
+  { name: 'errorText', args: [400, { detail: 'nope' }], expect: 'nope' },
+  { name: 'errorText', args: [422, { detail: [{ loc: ['body', 'name'], msg: 'required' }, { loc: [], msg: 'bad' }] }], expect: 'name: required; bad' },
+  { name: 'errorText', args: [500, null], expect: 'HTTP 500' },
+  { name: 'errorText', args: [404, { detail: { a: 1 } }], expect: 'HTTP 404' },
+  { name: 'errorText', args: [503, {}], expect: 'HTTP 503' },
+  { name: 'parseRoute', args: [''], expect: { view: 'overview' } },
+  { name: 'parseRoute', args: ['#/'], expect: { view: 'overview' } },
+  { name: 'parseRoute', args: ['#/nope'], expect: { view: 'overview' } },
+  { name: 'parseRoute', args: ['#/services'], expect: { view: 'services' } },
+  { name: 'parseRoute', args: ['#/services/web'], expect: { view: 'service', id: 'web' } },
+  { name: 'parseRoute', args: ['#/services/Bad_Id'], expect: { view: 'services' } },
+  { name: 'parseRoute', args: ['#/services/web/x'], expect: { view: 'overview' } },
+  { name: 'parseRoute', args: ['#/discovery'], expect: { view: 'discovery' } },
+  { name: 'parseRoute', args: ['#/rules'], expect: { view: 'rules' } },
+  { name: 'dueTasks', args: [[{ id: 'a', every: 3000, last: 0, view: 'overview' }, { id: 'b', every: 1000, last: 0, view: '*' }, { id: 'c', every: 1000, last: 0, view: 'services' }], 3000, 'overview', true], expect: ['a', 'b'] },
+  { name: 'dueTasks', args: [[{ id: 'a', every: 3000, last: 0, view: 'overview' }], 3000, 'overview', false], expect: [] },
+  { name: 'dueTasks', args: [[{ id: 'a', every: 3000, last: 0, view: 'overview' }, { id: 'c', every: 1000, last: 0, view: 'services' }], 1000, 'services', true], expect: ['c'] },
+  { name: 'dueTasks', args: [[{ id: 'b', every: 5000, last: 0, view: '*' }], 5000, 'rules', true], expect: ['b'] },
+  { name: 'dueTasks', args: [[{ id: 'b', every: 5000, last: 0, view: '*' }], 5000, 'services', true], expect: ['b'] },
+  { name: 'dueTasks', args: [[{ id: 'b', every: 5000, last: 0, view: '*' }], 5000, 'overview', true], expect: ['b'] },
+  { name: 'dueTasks', args: [[{ id: 'a', every: 3000, last: 1000, view: 'overview' }], 2500, 'overview', true], expect: [] },
+  { name: 'rowMatches', args: [{ severity: 3, message: 'Disk full' }, 7, ''], expect: true },
+  { name: 'rowMatches', args: [{ severity: 5, message: 'x' }, 3, ''], expect: false },
+  { name: 'rowMatches', args: [{ severity: 3, message: 'Disk full' }, 7, 'DISK'], expect: true },
+  { name: 'rowMatches', args: [{ severity: 3, host: 'web', message: 'ok' }, 7, 'zzz'], expect: false },
+  { name: 'rowMatches', args: [{ severity: 4, host: 'db01', app: 'pg', message: 'x' }, 4, 'pg'], expect: true },
+  { name: 'approvalText', args: [null], expect: '' },
+  { name: 'approvalText', args: [{ approval: null }], expect: '' },
+  { name: 'approvalText', args: [{ decided_by: 'alice', approval: { by: 'user' } }], expect: 'approved by alice' },
+  { name: 'approvalText', args: [{ approval: { by: 'user' } }], expect: 'approved by a user' },
+  { name: 'approvalText', args: [{ approval: { by: 'rule', rule_id: 'r1', rule_status_now: 'active' } }], expect: 'auto-approved by rule r1 (rule active)' },
+  { name: 'approvalText', args: [{ approval: { by: 'rule', rule_id: 'r1', rule_status_now: 'suspended' } }], expect: 'auto-approved by rule r1 (rule suspended)' },
+  { name: 'approvalText', args: [{ approval: { by: 'rule', rule_id: 'r2', rule_status_now: 'revoked' } }], expect: 'auto-approved by rule r2 (rule revoked)' },
+  { name: 'approvalText', args: [{ approval: { by: 'rule', rule_id: 'r2', rule_status_now: 'expired' } }], expect: 'auto-approved by rule r2 (rule expired)' },
+  { name: 'approvalText', args: [{ approval: { by: 'rule', rule_id: 'r3', rule_status_now: null } }], expect: 'auto-approved by rule r3 (rule status unknown)' },
+  { name: 'approvalText', args: [{ approval: { by: 'x' } }], expect: '' },
+  { name: 'canMakeRule', args: [{ status: 'approved', approval: { by: 'user' } }], expect: true },
+  { name: 'canMakeRule', args: [{ status: 'done', verification_result: 'passed', approval: { by: 'user' } }], expect: true },
+  { name: 'canMakeRule', args: [{ status: 'done', verification_result: 'failed', approval: { by: 'user' } }], expect: false },
+  { name: 'canMakeRule', args: [{ status: 'approved', approval: { by: 'rule' } }], expect: false },
+  { name: 'canMakeRule', args: [{ status: 'pending', approval: null }], expect: false },
+  { name: 'canMakeRule', args: [{ status: 'approved' }], expect: false },
+  { name: 'boundOf', args: [{ max_files: { min: 1, max: 9, default: 2 } }, 'max_files', { min: 1, max: 20, default: 5 }], expect: { min: 1, max: 9, default: 2 } },
+  { name: 'boundOf', args: [{}, 'max_files', { min: 1, max: 20, default: 5 }], expect: { min: 1, max: 20, default: 5 } },
+  { name: 'boundOf', args: [null, 'x', { min: 1, max: 2, default: 1 }], expect: { min: 1, max: 2, default: 1 } },
+  { name: 'clampInt', args: ['5', 1, 10], expect: 5 },
+  { name: 'clampInt', args: [0, 1, 10], expect: 1 },
+  { name: 'clampInt', args: [99, 1, 10], expect: 10 },
+  { name: 'clampInt', args: ['x', 1, 10], expect: null },
+  { name: 'clampInt', args: ['', 1, 10], expect: null },
+  { name: 'sevFloorText', args: [3], expect: 'err (3) or more urgent' },
+  { name: 'sevFloorText', args: [4], expect: 'warning (4) or more urgent' },
+  { name: 'sevFloorText', args: [9], expect: 'unknown' },
+  { name: 'expiryFromDays', args: [1000000, 1], expect: 481600 },
+  { name: 'expiryFromDays', args: [1000000, 7], expect: 1000000 },
+  { name: 'expiryFromDays', args: [1000000, 29], expect: 2900800 },
+  { name: 'expiryFromDays', args: [1000000, 30], expect: 2900800 },
+  { name: 'expiryFromDays', args: [1000000, 0], expect: 481600 },
+  { name: 'expiryFromDays', args: [1000000, NaN], expect: null },
+  { name: 'expiryFromDays', args: [1000000, 2.5], expect: null },
+  { name: 'ruleOverrides', args: [{ most_urgent_severity: 3, max_per_hour: 3, max_per_incident: 1, max_files: 5, max_lines: 100, expires_at: 1000000, note: '' }, { most_urgent_severity: 3, max_per_hour: 3, max_per_incident: 1, max_files: 5, max_lines: 100, days: 7, note: '' }], expect: {} },
+  { name: 'ruleOverrides', args: [{ most_urgent_severity: 3, max_per_hour: 3, max_lines: 100, expires_at: 1000000 }, { most_urgent_severity: 3, max_per_hour: 3, max_lines: 50, days: 7 }], expect: { max_lines: 50 } },
+  { name: 'ruleOverrides', args: [{ max_files: 5, expires_at: 1000000 }, { max_files: 5, days: 10 }], expect: { expires_at: 1259200 } },
+  { name: 'ruleOverrides', args: [{ max_files: 5, expires_at: 1000000, note: 'a' }, { max_files: null, days: 7, note: 'b' }], expect: { note: 'b' } },
+  { name: 'mergeAudit', args: [[{ id: 2 }, { id: 1 }], [{ id: 3 }]], expect: [{ id: 3 }, { id: 2 }, { id: 1 }] },
+  { name: 'mergeAudit', args: [[{ id: 2, a: 'old' }], [{ id: 2, a: 'new' }]], expect: [{ id: 2, a: 'new' }] },
+  { name: 'mergeAudit', args: [[{ id: 5 }, { id: 4 }, { id: 3 }], [{ id: 6 }, { id: 5 }]], expect: [{ id: 6 }, { id: 5 }, { id: 4 }, { id: 3 }] },
+  { name: 'mergeAudit', args: [[{ id: 1 }, { id: 3 }], [{ id: 2 }]], expect: [{ id: 3 }, { id: 2 }, { id: 1 }] },
+  { name: 'mergeAudit', args: [null, [{ id: 1 }]], expect: [{ id: 1 }] },
+  { name: 'isNewer', args: [5, 4], expect: true },
+  { name: 'isNewer', args: [4, 4], expect: false },
+  { name: 'isNewer', args: [3, 4], expect: false },
+  { name: 'isNewer', args: ['9', 4], expect: false },
+  { name: 'lockState', args: [{ enforce_access: true }, false], expect: { locked: true, mode: 'enforced' } },
+  { name: 'lockState', args: [{ enforce_access: true }, true], expect: { locked: false, mode: 'enforced' } },
+  { name: 'lockState', args: [{ enforce_access: false }, false], expect: { locked: false, mode: 'off' } },
+  { name: 'lockState', args: [{ enforce_access: null }, false], expect: { locked: false, mode: 'unknown' } },
+  { name: 'lockState', args: [null, false], expect: { locked: false, mode: 'unknown' } },
+  { name: 'afterAuthFailure', args: [401, true], expect: { clearToken: true, text: 'token rejected' } },
+  { name: 'afterAuthFailure', args: [401, false], expect: { clearToken: false, text: 'unlock first' } },
+  { name: 'afterAuthFailure', args: [403, true], expect: { clearToken: false, text: 'blocked by the hub: open this page at the address the hub printed' } },
+  { name: 'afterAuthFailure', args: [429, false, 7], expect: { clearToken: false, text: 'too many requests, try again in 7 s' } },
+  { name: 'afterAuthFailure', args: [429, false], expect: { clearToken: false, text: 'too many requests, try again later' } },
+  { name: 'afterAuthFailure', args: [500, false], expect: { clearToken: false, text: '' } },
+  { name: 'matchesTable', args: [[['GET', '^/a$']], 'GET', '/a?x=1'], expect: true },
+  { name: 'matchesTable', args: [[['GET', '^/a$']], 'POST', '/a'], expect: false },
+  { name: 'needsToken', args: ['POST', '/api/services'], expect: true },
+  { name: 'needsToken', args: ['GET', '/api/services'], expect: false },
+  { name: 'needsToken', args: ['GET', '/api/discovery/scans/s1'], expect: true },
+  { name: 'needsToken', args: ['POST', '/api/rules/resume'], expect: true },
+  { name: 'needsToken', args: ['POST', '/api/rules/pause'], expect: false },
+  { name: 'needsToken', args: ['POST', '/api/rules/r1/revoke'], expect: false },
+  { name: 'needsToken', args: ['POST', '/api/proposals/p1/withdraw'], expect: false },
+  { name: 'needsToken', args: ['POST', '/api/terminal'], expect: true },
+  { name: 'needsToken', args: ['GET', '/api/services/web/stream'], expect: false },
+  { name: 'sendsTokenIfPresent', args: ['GET', '/api/services/web/permissions-snippet'], expect: true },
+  { name: 'sendsTokenIfPresent', args: ['GET', '/api/services/web'], expect: false },
+  { name: 'actionNeedsToken', args: ['svc-save'], expect: true },
+  { name: 'actionNeedsToken', args: ['rule-revoke'], expect: false },
+  { name: 'actionNeedsToken', args: ['terminal-send'], expect: false },
+  { name: 'actionNeedsToken', args: ['constructor'], expect: false },
+  { name: 'tokenShapeOk', args: ['abc-123'], expect: true },
+  { name: 'tokenShapeOk', args: ['a b'], expect: false },
+  { name: 'tokenShapeOk', args: [''], expect: false },
+  { name: 'tokenShapeOk', args: ['x'.repeat(201)], expect: false },
+  { name: 'sortServices', args: [[{ name: 'b', open_incidents: 0, error_rate: 1 }, { name: 'a', open_incidents: 2, error_rate: 0 }]], expect: [{ name: 'a', open_incidents: 2, error_rate: 0 }, { name: 'b', open_incidents: 0, error_rate: 1 }] },
+  { name: 'sortServices', args: [[{ name: 'b', open_incidents: 0, error_rate: 1 }, { name: 'c', open_incidents: 0, error_rate: 5 }]], expect: [{ name: 'c', open_incidents: 0, error_rate: 5 }, { name: 'b', open_incidents: 0, error_rate: 1 }] },
+  { name: 'sortServices', args: [[{ name: 'Unassigned', builtin: true, open_incidents: 0, error_rate: 0 }, { name: 'z', open_incidents: 0, error_rate: 0 }]], expect: [{ name: 'z', open_incidents: 0, error_rate: 0 }, { name: 'Unassigned', builtin: true, open_incidents: 0, error_rate: 0 }] },
+  { name: 'sortServices', args: [[{ name: 'b', open_incidents: 0, error_rate: 0 }, { name: 'a', open_incidents: 0, error_rate: 0 }]], expect: [{ name: 'a', open_incidents: 0, error_rate: 0 }, { name: 'b', open_incidents: 0, error_rate: 0 }] },
+  { name: 'splitList', args: [' a, ,b ,'], expect: ['a', 'b'] },
+  { name: 'splitList', args: [null], expect: [] },
+  { name: 'serviceCreateBody', args: [{ id: 'web', name: 'Web', hosts: ['h'], app_names: [], protocols: ['file'], code_folder: '' }], expect: { id: 'web', name: 'Web', hosts: ['h'], app_names: [], protocols: ['file'] } },
+  { name: 'serviceCreateBody', args: [{ id: 'web', name: 'Web', hosts: [], app_names: [], protocols: [], code_folder: 'C:/src' }], expect: { id: 'web', name: 'Web', hosts: [], app_names: [], protocols: [], code_folder: 'C:/src' } },
+  { name: 'servicePatch', args: [{ name: 'a', hosts: ['h'], app_names: [], protocols: [], code_folder: '/c' }, { name: 'a', hosts: ['h'], app_names: [], protocols: [], code_folder: '' }], expect: { code_folder: null } },
+  { name: 'servicePatch', args: [{ name: 'a', hosts: ['h'], app_names: [], protocols: [], code_folder: null }, { name: 'b', hosts: ['h', 'i'], app_names: [], protocols: [], code_folder: '' }], expect: { name: 'b', hosts: ['h', 'i'] } },
+  { name: 'servicePatch', args: [{ name: 'a', hosts: [], app_names: [], protocols: [], code_folder: null }, { name: 'a', hosts: [], app_names: [], protocols: [], code_folder: '' }], expect: {} },
+  { name: 'diffSources', args: [[], [{ id: '', path: '/l', format: 'ncsa', enabled: true }]], expect: { add: [{ index: 0, path: '/l', format: 'ncsa', enabled: true }], update: [], remove: [] } },
+  { name: 'diffSources', args: [[{ id: 's1', path: '/l', format: 'ncsa', enabled: true }], [{ id: 's1', path: '/l', format: 'w3c', enabled: false }]], expect: { add: [], update: [{ id: 's1', patch: { format: 'w3c', enabled: false } }], remove: [] } },
+  { name: 'diffSources', args: [[{ id: 's1', path: '/l', format: 'ncsa', enabled: true }], []], expect: { add: [], update: [], remove: ['s1'] } },
+  { name: 'diffSources', args: [[{ id: 's1', path: '/l', format: 'ncsa', enabled: true }], [{ id: 's1', path: '/l', format: 'ncsa', enabled: true }]], expect: { add: [], update: [], remove: [] } },
+  { name: 'diffSources', args: [[{ id: 's1', path: '/l', format: 'ncsa', enabled: true }], [{ id: 's1', path: '/m', format: 'ncsa', enabled: true }]], expect: { add: [{ index: 0, path: '/m', format: 'ncsa', enabled: true }], update: [], remove: ['s1'] } },
+  { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', code_folder: ' ', app_names: [], rows: [{ checked: true, path: '/x', format: 'ncsa', watched_by: null }, { checked: false, path: '/y', format: 'w3c' }] }], expect: { id: 'a', name: 'A', log_paths: [{ path: '/x', format: 'ncsa' }] } },
+  { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', code_folder: '/src', app_names: ['p'], rows: [{ checked: true, path: '/x', format: 'ncsa', watched_by: 'web' }] }], expect: { id: 'a', name: 'A', log_paths: [], code_folder: '/src', app_names: ['p'] } },
+  { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', code_folder: '', app_names: [], rows: [{ checked: false, path: '/x', format: 'ncsa' }] }], expect: { id: 'a', name: 'A', log_paths: [] } },
+  { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', rows: [{ checked: true, path: '/x', format: 'ncsa', watched_by: null }, { checked: true, path: '/y', format: 'w3c' }] }], expect: { id: 'a', name: 'A', log_paths: [{ path: '/x', format: 'ncsa' }, { path: '/y', format: 'w3c' }] } },
+];
+function runSelfTest() {
+  const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure,
+    matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk, sortServices,
+    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText, canMakeRule, boundOf, clampInt, sevFloorText, expiryFromDays, ruleOverrides, mergeAudit };
+  const failures = [];
+  for (const c of SELFTEST_CASES) {
+    let got;
+    try { got = fns[c.name](...c.args); } catch (e) { got = `threw: ${e.message}`; }
+    if (JSON.stringify(got) !== JSON.stringify(c.expect)) failures.push(`${c.name}(${JSON.stringify(c.args)}) gave ${JSON.stringify(got)}, expected ${JSON.stringify(c.expect)}`);
+  }
+  const box = document.getElementById('selftest');
+  box.hidden = false;
+  box.textContent = failures.length ? `SELFTEST FAIL (${failures.length} of ${SELFTEST_CASES.length})\n${failures.join('\n')}` : `SELFTEST PASS (${SELFTEST_CASES.length} cases)`;
+  return failures.length === 0;
+}
+
+/* ==== DOM helpers ==== */
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
-// Interim admin token (the dashboard module owns the final design): kept for this tab only, sent only
-// to the two routes that need it, never shown, logged or put in the transcript.
-const TOKEN_KEY = 'chimericmesh.adminToken';
-const TOKEN_ROUTES = /^\/api\/(terminal|proposals\/[^/]+\/decide)$/;
-const TOKEN_PROMPT_TEXT = 'Approving or denying needs the admin token. Paste the contents of admin.token, then send the command again.';
-const readToken = () => { try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } };
-function askForToken() {
-  try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* storage unavailable */ }
-  const note = $('tokenNote');
-  note.textContent = TOKEN_PROMPT_TEXT;
-  note.classList.remove('hidden');
-  $('tokenForm').classList.remove('hidden');
-  $('tokenInput').focus();
+// A visible label bound to its input (R8.1).
+function field(labelText, input) {
+  const wrap = el('div', 'field');
+  const lab = el('label', '', labelText);
+  lab.htmlFor = input.id;
+  wrap.append(lab, input);
+  return wrap;
 }
-const api = async (path, opts) => {
-  const r = await fetch(path, opts);
-  if (r.status === 401 && TOKEN_ROUTES.test(path)) { askForToken(); throw new Error('token required'); }
-  if (!r.ok) throw new Error(r.status);
-  return r.json();
-};
-const post = (path, body) => {
-  const headers = { 'content-type': 'application/json' };
-  const token = readToken();
-  if (token && TOKEN_ROUTES.test(path)) headers['X-Admin-Token'] = token;
-  return api(path, { method: 'POST', headers, body: JSON.stringify(body || {}) });
-};
-const SEV = ['emerg','alert','crit','err','warning','notice','info','debug'];
-const COMMANDS = ['!help', '!status', '!incidents', '!explain', '!proposals', '!resolve', '!approve', '!deny'];
-
-const state = { incidents: [], proposals: [], workflow: null, chatCursor: 0, history: [], histIdx: 0 };
+function setStatus(text) { $('status').textContent = text || ''; }
 let toastTimer = null;
 function toast(msg) {
   const t = $('toast'); t.textContent = msg;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.textContent = ''; }, 5000);
 }
 const unreachable = () => toast('Could not reach the mesh');
+const here = window.location; // the page's own address; only its hash is read (routes) or set (navigation)
+
+// A button for a registered action: locked (disabled, title "unlock first") only for a token action while
+// access control is on and no token is stored. Reduce actions and the terminal are never locked here.
+function lockButton(b) {
+  const locked = Boolean(STATE.lock && STATE.lock.locked) && actionNeedsToken(b.dataset.action);
+  if (locked) { b.disabled = true; b.title = 'unlock first'; }
+  else if (b.title === 'unlock first') { b.disabled = false; b.title = ''; }
+}
+function actionButton(id, label, handler, cls, aria) {
+  if (!Object.prototype.hasOwnProperty.call(ACTIONS, id)) throw new Error(`unknown action ${id}`);
+  if (typeof label !== 'string' || !label.trim()) throw new Error(`action ${id} needs a visible name`);
+  const b = el('button', cls === undefined ? 'ghost small' : cls, label);
+  b.type = 'button';
+  if (aria) b.setAttribute('aria-label', aria);
+  b.dataset.action = id;
+  b.onclick = handler;
+  lockButton(b);
+  return b;
+}
+
+/* ==== API ==== */
+// The admin token is kept for this tab only (sessionStorage, or memory when storage is off), read only by
+// authHeaders, sent only on the PRIVILEGED routes, and never shown, logged, put in a URL or in localStorage.
+const TOKEN_KEY = 'cm.token';
+const TOKEN_PROMPT_TEXT = 'Protected actions (approve, deny, add or edit a service, scan, rules) need the admin token. Paste the contents of the token file.';
+let memToken = null;
+function storedToken() {
+  try { const t = sessionStorage.getItem(TOKEN_KEY); if (t) return t; } catch (e) { /* storage unavailable */ }
+  return memToken;
+}
+function saveToken(value) {
+  memToken = null;
+  try { sessionStorage.setItem(TOKEN_KEY, value); return true; } catch (e) { memToken = value; return false; }
+}
+function clearToken() {
+  memToken = null;
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* storage unavailable */ }
+}
+function authHeaders(method, path) {
+  const token = storedToken();
+  if (!token || !(needsToken(method, path) || sendsTokenIfPresent(method, path))) return {};
+  return { 'X-Admin-Token': token };
+}
+class ApiError extends Error {
+  constructor(status, body, retryAfter) { super(String(status)); this.status = status; this.body = body; this.retryAfter = retryAfter; }
+}
+async function errorFromResponse(r) {
+  let body = null;
+  try { body = await r.json(); } catch (e) { body = null; }
+  return new ApiError(r.status, body, r.headers.get('Retry-After'));
+}
+// 401, 403 and 429 from the hub: clear a rejected token, say why in the status line, re-apply the lock.
+function handle401(path, status, retryAfter) {
+  const out = afterAuthFailure(status === undefined ? 401 : status, Boolean(storedToken()), retryAfter);
+  if (out.clearToken) clearToken();
+  if (out.text) setStatus(out.text);
+  applyLock();
+  return out.text;
+}
+// `as` is 'json' (default) or 'text' (the permissions snippet is plain text).
+async function request(method, path, body, as) {
+  if (typeof path !== 'string' || !(path === '/' || path.startsWith('/api/'))) throw new ApiError(0, { detail: 'bad path' }, null);
+  const headers = Object.assign({}, authHeaders(method, path));
+  const opts = { method, headers };
+  if (body !== undefined) { headers['content-type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  let r;
+  try { r = await fetch(path, opts); } catch (e) { throw new ApiError(0, { detail: 'Could not reach the mesh' }, null); }
+  const dateHeader = r.headers.get('Date'); // the hub's clock, for rule expiry (never the browser's)
+  const stamp = dateHeader ? Date.parse(dateHeader) : NaN;
+  if (Number.isFinite(stamp)) STATE.serverDate = Math.floor(stamp / 1000);
+  if (!r.ok) {
+    const err = await errorFromResponse(r);
+    if (r.status === 401 || r.status === 403 || r.status === 429) err.authText = handle401(path, r.status, err.retryAfter);
+    throw err;
+  }
+  if (r.status === 204) return null;
+  if (as === 'text') { try { return await r.text(); } catch (e) { return ''; } }
+  try { return await r.json(); } catch (e) { return null; }
+}
+// The Overview's short names for request(): a read and a JSON post. Errors are ApiError (message = status).
+const api = (path) => request('GET', path);
+const post = (path, body) => request('POST', path, body || {});
+
+/* ==== STATE ==== */
+const COMMANDS = ['!help', '!status', '!incidents', '!explain', '!proposals', '!resolve', '!approve', '!deny'];
+const STATE = { route: { view: 'overview' }, uiConfig: UI_FALLBACK, lock: lockState(UI_FALLBACK, false), incidents: [], proposals: [], workflow: null, chatCursor: 0, history: [], histIdx: 0 };
+const state = STATE;
+const SEV = SEV_NAMES;
 const firstOpen = () => state.incidents.find((i) => !i.resolved);
 
+/* ==== SCHEDULER ==== */
+// One 1 s timer runs the tasks whose period has elapsed, only for a visible tab and the active view
+// (a task with view '*' runs on every view). A 2.5 s task therefore runs every 3 s in practice.
+const SCHED = [
+  { id: 'overview-refresh', every: 2500, last: 0, view: 'overview', run: () => refresh() },
+  { id: 'overview-chat', every: 1000, last: 0, view: 'overview', run: () => fetchChat() },
+  { id: 'services-list', every: 5000, last: 0, view: 'services', run: () => loadServices() },
+  { id: 'service-detail', every: 5000, last: 0, view: 'service', run: () => loadServiceDetail() },
+  { id: 'service-lists', every: 5000, last: 0, view: 'service', run: () => loadServiceLists() },
+  { id: 'approvals-status', every: 5000, last: 0, view: '*', run: () => loadApprovalStatus() },
+  { id: 'rules-list', every: 5000, last: 0, view: 'rules', run: () => loadRules() },
+  { id: 'audit-list', every: 5000, last: 0, view: 'rules', run: () => refreshAudit() },
+  { id: 'scan-poll', every: 1000, last: 0, view: 'discovery', run: () => (scanRunning() ? pollScan() : null) },
+];
+function tick() {
+  const now = Date.now();
+  const due = dueTasks(SCHED.map((t) => ({ id: t.id, every: t.every, last: t.last, view: t.view })), now, STATE.route.view, document.visibilityState === 'visible');
+  for (const t of SCHED) {
+    if (!due.includes(t.id)) continue;
+    t.last = now;
+    try { Promise.resolve(t.run()).catch(() => { /* the next tick retries */ }); } catch (e) { /* the next tick retries */ }
+  }
+}
+function startScheduler() {
+  const now = Date.now();
+  for (const t of SCHED) t.last = now;
+  setInterval(tick, 1000);
+}
+
+/* ==== VIEWS ==== */
 /* ---------- stats ---------- */
 function renderStats(s) {
   const box = $('stats'); box.replaceChildren();
@@ -276,7 +1018,7 @@ function openPropose(i, card, actions, btn) {
       f.remove(); msg.remove(); btn.focus();
       await Promise.allSettled([loadProposals(), fetchChat(), loadWorkflow()]);
     } catch (err) {
-      msg.textContent = err.message === '404' ? 'Incident no longer exists (404).' : (/^\d+$/.test(err.message) ? `Rejected by the mesh (status ${err.message}).` : 'Could not reach the mesh.');
+      msg.textContent = err.status === 0 ? 'Could not reach the mesh.' : err.message === '404' ? 'Incident no longer exists (404).' : (/^\d+$/.test(err.message) ? `Rejected by the mesh (status ${err.message}).` : 'Could not reach the mesh.');
       ok.disabled = false;
     }
   };
@@ -329,36 +1071,84 @@ function renderEvents(list) {
 
 /* ---------- proposals ---------- */
 let lastPropKey = null;
+// The hint under the Proposals heading: Approve and Deny need the token while the page is locked.
+function updatePropNote() {
+  $('propNote').textContent = STATE.lock && STATE.lock.locked ? 'Approve and Deny need the admin token: unlock first. Withdraw works without it.' : '';
+}
+// The one proposal renderer: used by the Overview panel and by the service detail. Every string is text.
+function renderProposalCard(p, incidentText) {
+  const d = el('div', 'prop');
+  const top = el('div', 'top');
+  const st = ['pending', 'approved', 'denied', 'done'].includes(p.status) ? p.status : 'unknown';
+  const label = p.status === 'approved' ? 'approved - waiting for agent' : stateLabel('proposal', p.status);
+  top.append(el('span', `pill ${st}`, label), el('span', 'meta', `#${p.id} · ${incidentText}`));
+  if (p.approval && p.approval.by === 'rule') top.append(el('span', 'pill auto', 'AUTO-APPROVED'));
+  d.append(top, el('div', 'act', p.action));
+  const files = Array.isArray(p.files) ? p.files : [];
+  if (files.length) d.append(el('div', 'meta', `files: ${files.slice(0, 5).join(', ')}${files.length > 5 ? ` +${files.length - 5} more` : ''}`));
+  if (p.verification) d.append(el('div', 'meta', `verification: ${p.verification}`));
+  const how = approvalText(p);
+  if (how) d.append(el('div', 'meta', how));
+  const extra = [];
+  if (p.decided_by && !how) extra.push(`decided by ${p.decided_by}`);
+  if (p.estimated_lines) extra.push(`about ${p.estimated_lines} lines`);
+  if (p.files_changed !== null && p.files_changed !== undefined) extra.push(`${p.files_changed} files changed`);
+  if (p.lines_changed !== null && p.lines_changed !== undefined) extra.push(`${p.lines_changed} lines changed`);
+  if (p.verification_result) extra.push(`verification ${p.verification_result}`);
+  if (p.result_note) extra.push(p.result_note);
+  if (extra.length) d.append(el('div', 'meta', extra.join(' · ')));
+  const msg = el('div', 'meta');
+  msg.setAttribute('role', 'status');
+  if (p.status === 'pending') {
+    const a = el('div', 'actions');
+    a.append(actionButton('proposal-approve', 'Approve', () => decideProposal(p, true, msg), undefined, `Approve proposal ${p.id}`),
+      actionButton('proposal-deny', 'Deny', () => decideProposal(p, false, msg), 'ghost small warn', `Deny proposal ${p.id}`),
+      actionButton('proposal-withdraw', 'Withdraw', () => withdrawProposal(p, msg), undefined, `Withdraw proposal ${p.id}`));
+    d.append(a);
+  }
+  if (canMakeRule(p)) {
+    const more = el('div', 'actions');
+    const b = el('button', 'ghost small', 'Always approve fixes like this');
+    b.type = 'button';
+    b.onclick = () => openRuleFromProposal(p, d, msg);
+    more.append(b);
+    d.append(more);
+  }
+  d.append(msg);
+  return d;
+}
+async function refreshProposalViews() {
+  await Promise.allSettled([loadProposals(), STATE.route.view === 'service' ? loadServiceLists() : null, loadWorkflow()]);
+}
+// Approve or deny through the REST route with the token (R6.3); the result or the server's text is shown in the card.
+async function decideProposal(p, approve, msg) {
+  msg.textContent = approve ? 'Approving...' : 'Denying...';
+  try { await request('POST', `/api/proposals/${encodeURIComponent(p.id)}/decide`, { approve, by: 'dashboard' }); }
+  catch (e) { msg.textContent = e.authText || errorText(e.status, e.body); return; }
+  msg.textContent = approve ? 'Approved.' : 'Denied.';
+  setStatus(`Proposal ${p.id} ${approve ? 'approved' : 'denied'}`);
+  await refreshProposalViews();
+}
+// Withdraw needs no token (a reduce action).
+async function withdrawProposal(p, msg) {
+  msg.textContent = 'Withdrawing...';
+  try { await request('POST', `/api/proposals/${encodeURIComponent(p.id)}/withdraw`); }
+  catch (e) { msg.textContent = e.authText || errorText(e.status, e.body); return; }
+  msg.textContent = 'Withdrawn.';
+  setStatus(`Proposal ${p.id} withdrawn`);
+  await refreshProposalViews();
+}
 function renderProposals(force) {
-  const operator = !(state.workflow && state.workflow.you && state.workflow.you.operator === false);
   const list = state.proposals.slice().sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 20);
-  const key = JSON.stringify([list, operator, state.incidents.map((i) => [i.id, i.category, i.host])]);
+  const key = JSON.stringify([list, state.incidents.map((i) => [i.id, i.category, i.host])]);
   if (!force && key === lastPropKey) return;
   lastPropKey = key;
-  $('propNote').textContent = operator ? '' : 'Approve and Deny are disabled: you are read-only. Set CHIMERICMESH_OPERATORS to allow approvals.';
+  updatePropNote();
   const box = $('proposals'); box.replaceChildren();
   if (!list.length) { box.append(el('p', 'empty', 'No proposals yet. An agent proposes fixes through MCP; you can simulate one from an incident card.')); return; }
   for (const p of list) {
     const inc = state.incidents.find((i) => String(i.id) === String(p.incident_id));
-    const d = el('div', 'prop');
-    const top = el('div', 'top');
-    const label = p.status === 'approved' ? 'approved - waiting for agent' : String(p.status);
-    top.append(el('span', `pill ${p.status}`, label), el('span', 'meta', `#${p.id} · ${inc ? `${inc.category} on ${inc.host}` : `incident ${p.incident_id}`}`));
-    d.append(top, el('div', 'act', p.action));
-    const extra = [];
-    if (p.decided_by) extra.push(`decided by ${p.decided_by}`);
-    if (p.result_note) extra.push(p.result_note);
-    if (extra.length) d.append(el('div', 'meta', extra.join(' · ')));
-    if (p.status === 'pending') {
-      const a = el('div', 'actions');
-      const ap = el('button', 'ghost small', 'Approve'); ap.type = 'button';
-      const dn = el('button', 'ghost small warn', 'Deny'); dn.type = 'button';
-      ap.onclick = () => runCommand(`!approve ${p.id}`);
-      dn.onclick = () => runCommand(`!deny ${p.id}`);
-      if (!operator) { ap.disabled = true; dn.disabled = true; ap.title = dn.title = 'Read-only: operators only'; }
-      a.append(ap, dn); d.append(a);
-    }
-    box.append(d);
+    box.append(renderProposalCard(p, inc ? `${inc.category} on ${inc.host}` : `incident ${p.incident_id}`));
   }
 }
 
@@ -487,21 +1277,17 @@ async function runCommand(text) {
   if (state.history[state.history.length - 1] !== text) state.history.push(text);
   if (state.history.length > 50) state.history.shift();
   state.histIdx = state.history.length;
-  try { await post('/api/terminal', { text }); }
-  catch (e) { if (e.message !== 'token required') unreachable(); return; }
+  $('termStatus').textContent = '';
+  try { await request('POST', '/api/terminal', { text }); }
+  catch (e) {
+    // Only !approve and !deny need the token on this route (R6.5); request() already cleared a rejected token.
+    if (e.status === 401 && /^!(approve|deny)\b/.test(text)) { $('termStatus').textContent = 'unlock first'; openUnlock(); }
+    else if (!e.authText) unreachable();
+    return;
+  }
   await Promise.allSettled([fetchChat(), loadProposals(), loadIncidents(), loadWorkflow()]);
 }
 
-$('tokenForm').onsubmit = (ev) => {
-  ev.preventDefault();
-  const value = $('tokenInput').value.trim();
-  $('tokenInput').value = '';
-  if (!value) return;
-  try { sessionStorage.setItem(TOKEN_KEY, value); } catch (e) { /* storage unavailable */ }
-  $('tokenForm').classList.add('hidden');
-  $('tokenNote').classList.add('hidden');
-  toast('Token saved for this tab');
-};
 
 const termInput = $('termInput');
 $('termForm').onsubmit = (ev) => { ev.preventDefault(); const t = termInput.value; termInput.value = ''; runCommand(t); };
@@ -537,7 +1323,7 @@ termInput.addEventListener('keydown', (ev) => {
   }
 });
 document.addEventListener('keydown', (ev) => {
-  if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey || STATE.route.view !== 'overview') return;
   const t = ev.target, tag = t && t.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
   ev.preventDefault(); termInput.focus();
@@ -545,9 +1331,8 @@ document.addEventListener('keydown', (ev) => {
 
 function renderIdentity() {
   const you = state.workflow && state.workflow.you;
-  $('identity').textContent = you
-    ? (you.operator ? `You are ${you.nick} (operator)` : `You are ${you.nick} (read-only: set CHIMERICMESH_OPERATORS to allow approvals)`)
-    : '';
+  const access = STATE.lock && STATE.lock.locked ? 'locked (unlock to approve)' : 'unlocked';
+  $('identity').textContent = you ? `You are ${you.nick} · ${access}` : '';
 }
 
 /* ---------- data loading ---------- */
@@ -589,10 +1374,1168 @@ $('sendForm').onsubmit = async (ev) => {
   refresh();
 };
 
-refresh(); fetchChat();
-setInterval(refresh, 2500);
-setInterval(() => { if (document.visibilityState === 'visible') fetchChat(); }, 1000);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { fetchChat(); refresh(); } });
+/* ---------- lock and unlock ---------- */
+function applyLock() {
+  const has = Boolean(storedToken());
+  const ls = lockState(STATE.uiConfig, has);
+  STATE.lock = ls;
+  $('lockText').textContent = has ? 'Unlocked' : (ls.locked ? 'Locked' : '');
+  $('unlockBtn').hidden = has || ls.mode === 'off';
+  $('lockBtn').hidden = !has;
+  document.querySelectorAll('[data-action]').forEach(lockButton);
+  updatePropNote();
+  renderIdentity();
+}
+function openUnlock() {
+  $('tokenNote').textContent = TOKEN_PROMPT_TEXT;
+  const file = STATE.uiConfig && STATE.uiConfig.token_file;
+  $('tokenFile').textContent = file ? `The token is in the file ${file}` : '';
+  $('tokenForm').classList.remove('hidden');
+  $('unlockBtn').setAttribute('aria-expanded', 'true');
+  $('tokenInput').focus();
+}
+function closeUnlock() {
+  $('tokenInput').value = '';
+  $('tokenForm').classList.add('hidden');
+  $('unlockBtn').setAttribute('aria-expanded', 'false');
+}
+function wireUnlock() {
+  $('unlockBtn').onclick = openUnlock;
+  $('tokenCancel').onclick = () => { closeUnlock(); $('unlockBtn').focus(); };
+  $('lockBtn').onclick = () => { clearToken(); applyLock(); setStatus('Locked'); $('unlockBtn').focus(); };
+  $('tokenForm').onsubmit = (ev) => {
+    ev.preventDefault();
+    const value = $('tokenInput').value.trim();
+    $('tokenInput').value = '';
+    if (!tokenShapeOk(value)) { $('tokenNote').textContent = 'That is not a token: 1 to 200 printable characters, no spaces.'; return; }
+    const kept = saveToken(value);
+    closeUnlock();
+    applyLock();
+    setStatus(kept ? 'Unlocked' : 'token kept for this tab only');
+    $('lockBtn').focus();
+  };
+}
+async function loadUiConfig() {
+  let cfg = null;
+  try { cfg = await request('GET', '/api/ui-config'); } catch (e) { cfg = null; }
+  STATE.uiConfig = cfg && typeof cfg === 'object' && typeof cfg.enforce_access === 'boolean' ? cfg : UI_FALLBACK;
+  const file = STATE.uiConfig.token_file;
+  $('tokenFile').textContent = file ? `The token is in the file ${file}` : '';
+  applyLock();
+  if (STATE.lock.mode === 'unknown') setStatus('access mode unknown');
+}
+
+/* ---------- navigation ---------- */
+const ENTER = {}; // view name -> function(route), filled by the view code below and in later tasks
+function showRoute() {
+  const r = parseRoute(here.hash);
+  STATE.route = r;
+  if (r.view !== 'service') closeLive(true);
+  document.querySelectorAll('main > [data-view]').forEach((n) => { n.hidden = n.dataset.view !== r.view; });
+  const active = r.view === 'service' ? 'services' : r.view;
+  document.querySelectorAll('nav [data-nav]').forEach((b) => {
+    if (b.dataset.nav === active) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+  if (ENTER[r.view]) ENTER[r.view](r);
+}
+
+/* ---------- services list ---------- */
+const STATE_CLASS = { active: 'st-active', idle: 'st-idle', never_seen: 'st-never' };
+function focusKeyButton(label, key, handler, cls, ariaLabel) {
+  const b = el('button', cls === undefined ? 'ghost small' : cls, label);
+  b.type = 'button';
+  if (ariaLabel) b.setAttribute('aria-label', ariaLabel); // the visible text stays inside the name
+  b.dataset.focusKey = key;
+  b.onclick = handler;
+  return b;
+}
+function serviceCard(s, now) {
+  const c = el('article', 'svc-card');
+  const top = el('div', 'top');
+  top.append(el('h3', '', String(s.name)), el('span', `pill ${STATE_CLASS[s.state] || 'st-unknown'}`, stateLabel('service', s.state)));
+  c.append(top, el('div', 'meta', `id ${s.id}`));
+  if (s.builtin) c.append(el('div', 'meta', 'built in'));
+  c.append(el('div', 'meta', `last seen ${relTime(s.last_seen, now)} · ${Number(s.error_rate) || 0} errors/min · ${Number(s.open_incidents) || 0} open incidents`));
+  const sources = Array.isArray(s.log_sources) ? s.log_sources : [];
+  if (sources.length) {
+    const ul = el('ul');
+    for (const ls of sources) {
+      const li = el('li');
+      li.append(el('div', '', String(ls.path)));
+      li.append(el('div', 'meta', `${ls.format} · ${stateLabel('source', ls.status)} · ${Number(ls.lines_dropped) || 0} lines dropped`));
+      if (ls.last_error) li.append(el('div', 'err', capText(ls.last_error, 300)));
+      ul.append(li);
+    }
+    c.append(ul);
+  }
+  const actions = el('div', 'actions');
+  actions.append(focusKeyButton('Open', `${s.id}:open`, () => { here.hash = `#/services/${encodeURIComponent(s.id)}`; }, undefined, `Open ${s.name}`));
+  if (!s.builtin) actions.append(focusKeyButton('Edit', `${s.id}:edit`, () => renderServiceForm(s), undefined, `Edit ${s.name}`));
+  c.append(actions);
+  return c;
+}
+let lastSvcKey = null;
+function renderServices() {
+  const list = sortServices(Array.isArray(STATE.services) ? STATE.services : []);
+  const now = Date.now() / 1000;
+  const key = JSON.stringify([list, Math.floor(now / 30)]);
+  if (key === lastSvcKey) return;
+  lastSvcKey = key;
+  const box = $('svcList');
+  const f = document.activeElement;
+  const focusKey = f && box.contains(f) ? f.dataset.focusKey : null;
+  box.replaceChildren();
+  if (!list.some((s) => !s.builtin)) {
+    const empty = el('div', 'svc-card');
+    empty.append(el('p', 'empty', 'No services yet. Run discovery or add one.'));
+    const a = el('div', 'actions');
+    a.append(focusKeyButton('Discover local apps', 'empty:discover', () => { here.hash = '#/discovery'; }, ''));
+    a.append(focusKeyButton('Add service', 'empty:add', () => renderServiceForm(null), 'ghost'));
+    empty.append(a);
+    box.append(empty);
+  }
+  for (const s of list) box.append(serviceCard(s, now));
+  if (focusKey) {
+    const n = Array.from(box.querySelectorAll('[data-focus-key]')).find((x) => x.dataset.focusKey === focusKey);
+    if (n) n.focus();
+  }
+}
+async function loadServices() {
+  try {
+    STATE.services = await request('GET', '/api/services');
+    renderServices();
+  } catch (e) { setStatus(errorText(e.status, e.body)); }
+}
+/* ---------- add and edit form ---------- */
+function textInput(id, value, max) {
+  const i = el('input');
+  i.type = 'text'; i.id = id; i.value = value || ''; i.maxLength = max; i.autocomplete = 'off'; i.spellcheck = false;
+  return i;
+}
+const SRC_ROWS = new WeakMap(); // table row -> its inputs and source id
+let srcRowSeq = 0;
+function sourceRow(src) {
+  const n = ++srcRowSeq;
+  const tr = el('tr');
+  const path = textInput(`svcFSrc${n}Path`, src ? src.path : '', 1024);
+  if (src) path.disabled = true; // the path of a source cannot change: remove the row and add a new one
+  const fmt = el('select');
+  fmt.id = `svcFSrc${n}Fmt`;
+  const formats = STATE.uiConfig.formats.slice();
+  if (src && !formats.includes(src.format)) formats.push(src.format);
+  for (const f of formats) { const o = el('option', '', f); o.value = f; fmt.append(o); }
+  fmt.value = src ? src.format : formats[0];
+  const on = el('input');
+  on.type = 'checkbox'; on.id = `svcFSrc${n}On`; on.checked = src ? Boolean(src.enabled) : true;
+  const rm = el('button', 'ghost small warn', 'Remove');
+  rm.type = 'button';
+  rm.onclick = () => { tr.remove(); };
+  for (const cell of [field('Path', path), field('Format', fmt), field('Enabled', on), rm]) { const td = el('td'); td.append(cell); tr.append(td); }
+  SRC_ROWS.set(tr, { id: src ? src.id : '', path, fmt, on });
+  return tr;
+}
+function renderServiceForm(s) {
+  const create = !s;
+  STATE.svcForm = { mode: create ? 'create' : 'edit', original: s || null };
+  const box = $('svcFormBox');
+  box.replaceChildren();
+  const f = el('form', 'svc-form');
+  f.setAttribute('aria-label', create ? 'Add service' : 'Edit service');
+  f.append(el('h3', '', create ? 'Add service' : `Edit ${s.name}`));
+  if (create) f.append(field('Id', textInput('svcFId', '', 40)));
+  f.append(field('Name', textInput('svcFName', s ? s.name : '', 200)));
+  f.append(field('Hosts (comma separated)', textInput('svcFHosts', s ? (s.hosts || []).join(', ') : '', 4000)));
+  f.append(field('App names (comma separated)', textInput('svcFApps', s ? (s.app_names || []).join(', ') : '', 4000)));
+  const protos = el('fieldset');
+  protos.append(el('legend', '', 'Protocols'));
+  STATE.uiConfig.protocols.forEach((p, i) => {
+    const c = el('input');
+    c.type = 'checkbox'; c.id = `svcFProto${i}`; c.value = p; c.checked = Boolean(s && (s.protocols || []).includes(p));
+    protos.append(field(p, c));
+  });
+  f.append(protos);
+  f.append(field('Code folder', textInput('svcFCode', s ? s.code_folder || '' : '', 1024)));
+  f.append(el('h4', '', 'Log files'));
+  const wrap = el('div', 'table-wrap');
+  const table = el('table', 'sources');
+  const tbody = el('tbody');
+  tbody.id = 'svcFSources';
+  for (const ls of (s && s.log_sources) || []) tbody.append(sourceRow(ls));
+  table.append(tbody); wrap.append(table); f.append(wrap);
+  const addRow = el('button', 'ghost small', 'Add log file');
+  addRow.type = 'button';
+  addRow.onclick = () => { const tr = sourceRow(null); tbody.append(tr); SRC_ROWS.get(tr).path.focus(); };
+  const save = actionButton('svc-save', 'Save', () => saveService(), '');
+  const cancel = el('button', 'ghost', 'Cancel');
+  cancel.type = 'button';
+  cancel.onclick = () => { box.replaceChildren(); STATE.svcForm = null; $('svcAdd').focus(); };
+  const actions = el('div', 'actions');
+  actions.append(addRow, save, cancel);
+  const msg = el('div', 'meta');
+  msg.id = 'svcFMsg';
+  msg.setAttribute('role', 'status');
+  f.onsubmit = (ev) => { ev.preventDefault(); if (!save.disabled) saveService(); };
+  f.append(actions, msg);
+  box.append(f);
+  (create ? $('svcFId') : $('svcFName')).focus();
+}
+function readServiceForm() {
+  const idIn = $('svcFId');
+  return {
+    id: idIn ? idIn.value.trim() : '',
+    name: $('svcFName').value.trim(),
+    hosts: splitList($('svcFHosts').value),
+    app_names: splitList($('svcFApps').value),
+    protocols: STATE.uiConfig.protocols.filter((p, i) => { const c = $(`svcFProto${i}`); return Boolean(c && c.checked); }),
+    code_folder: $('svcFCode').value.trim(),
+    rows: Array.from($('svcFSources').children).map((tr) => {
+      const r = SRC_ROWS.get(tr);
+      return { id: r.id, path: r.path.value.trim(), format: r.fmt.value, enabled: r.on.checked, tr };
+    }),
+  };
+}
+// Sequential save: the service, then the log-source operations (POST, PATCH, DELETE). The first failure stops
+// the run and shows the server's text; what was already saved stays, and the form keeps editing it.
+async function saveService() {
+  const st = STATE.svcForm;
+  if (!st || st.busy) return; // a double click must not send the create or a log-source POST twice
+  st.busy = true;
+  try {
+  const msg = $('svcFMsg');
+  msg.textContent = 'Saving...';
+  const form = readServiceForm();
+  const fail = (e) => { msg.textContent = errorText(e.status, e.body); };
+  if (st.mode === 'create') {
+    try { st.original = await request('POST', '/api/services', serviceCreateBody(form)); }
+    catch (e) { fail(e); return; }
+    st.mode = 'edit';
+    if (!Array.isArray(st.original.log_sources)) st.original.log_sources = [];
+    $('svcFId').disabled = true;
+  } else {
+    const patch = servicePatch(st.original, form);
+    if (Object.keys(patch).length) {
+      try { Object.assign(st.original, await request('PATCH', `/api/services/${encodeURIComponent(st.original.id)}`, patch)); }
+      catch (e) { fail(e); return; }
+    }
+  }
+  const sid = encodeURIComponent(st.original.id);
+  const sources = st.original.log_sources || [];
+  const diff = diffSources(sources, form.rows);
+  for (const a of diff.add) {
+    let created;
+    try { created = await request('POST', `/api/services/${sid}/log-sources`, { path: a.path, format: a.format, enabled: a.enabled }); }
+    catch (e) { fail(e); return; }
+    const row = SRC_ROWS.get(form.rows[a.index].tr);
+    row.id = created.id; row.path.disabled = true;
+    sources.push(created);
+  }
+  for (const u of diff.update) {
+    try { Object.assign(sources.find((x) => x.id === u.id), await request('PATCH', `/api/services/${sid}/log-sources/${encodeURIComponent(u.id)}`, u.patch)); }
+    catch (e) { fail(e); return; }
+  }
+  for (const id of diff.remove) {
+    try { await request('DELETE', `/api/services/${sid}/log-sources/${encodeURIComponent(id)}`); }
+    catch (e) { fail(e); return; }
+    sources.splice(sources.findIndex((x) => x.id === id), 1);
+  }
+  msg.textContent = 'Saved.';
+  STATE.svcForm = null;
+  $('svcFormBox').replaceChildren();
+  setStatus(`Service ${st.original.id} saved`);
+  lastSvcKey = null;
+  loadServices();
+  } finally {
+    st.busy = false;
+  }
+}
+ENTER.overview = () => { refresh(); fetchChat(); };
+ENTER.services = () => { lastSvcKey = null; loadServices(); };
+
+/* ---------- service detail ---------- */
+function setSlotsHidden(hidden) { document.querySelectorAll('#view-service [data-slot]').forEach((n) => { n.hidden = hidden; }); }
+function showServiceGone() {
+  closeLive(true);
+  $('svcDetail').hidden = true;
+  setSlotsHidden(true);
+  $('svcGone').hidden = false;
+  $('svcBack').focus();
+}
+function renderServiceHeader(s) {
+  $('svcDetail').hidden = false;
+  $('svcGone').hidden = true;
+  setSlotsHidden(false);
+  $('svcName').textContent = String(s.name);
+  $('svcId').textContent = String(s.id);
+  $('svcState').textContent = stateLabel('service', s.state);
+  $('svcSeen').textContent = relTime(s.last_seen, Date.now() / 1000);
+  $('svcRate').textContent = String(s.error_rate);
+  $('svcOpen').textContent = String(s.open_incidents);
+}
+async function loadServiceDetail() {
+  const d = STATE.serviceDetail;
+  if (!d) return;
+  try {
+    const s = await request('GET', `/api/services/${encodeURIComponent(d.id)}`);
+    if (STATE.serviceDetail !== d) return;
+    d.status = s;
+    renderServiceHeader(s);
+  } catch (e) {
+    if (STATE.serviceDetail !== d) return;
+    if (e.status === 404) showServiceGone();
+    else setStatus(errorText(e.status, e.body));
+  }
+}
+// Incidents and proposals of one service: the hub filters by service before it applies the limit.
+function renderIncidentsFor(list) {
+  const box = $('svcIncidents');
+  box.replaceChildren();
+  if (!list.length) { box.append(el('p', 'empty', 'No incidents for this service.')); return; }
+  for (const i of list) {
+    const sev = Number.isInteger(i.severity) ? i.severity : 7;
+    const d = el('article', `incident sev-${sev}${i.resolved ? ' resolved' : ''}`);
+    d.append(el('h3', '', `${String(i.category).toUpperCase()} on ${i.host} ×${i.count}`));
+    d.append(el('div', 'meta', `${sevName(sev)} · id ${i.id}${i.resolved ? ' · resolved' : ' · open'}`));
+    d.append(el('div', 'sample', i.sample), el('p', '', i.hypothesis));
+    box.append(d);
+  }
+}
+function renderServiceProposals(list) {
+  const box = $('svcProposals');
+  box.replaceChildren();
+  const sorted = list.slice().sort((a, b) => (b.created || 0) - (a.created || 0));
+  if (!sorted.length) { box.append(el('p', 'empty', 'No proposals for this service.')); return; }
+  for (const p of sorted) box.append(renderProposalCard(p, `incident ${p.incident_id}`));
+}
+function resetServiceLists() {
+  const d = STATE.serviceDetail;
+  if (d) { d.incKey = null; d.propKey = null; }
+  $('svcIncidents').replaceChildren();
+  $('svcProposals').replaceChildren();
+}
+async function loadServiceLists() {
+  const d = STATE.serviceDetail;
+  if (!d) return;
+  const id = encodeURIComponent(d.id);
+  const [inc, prop] = await Promise.allSettled([
+    request('GET', `/api/incidents?service_id=${id}&limit=100`),
+    request('GET', `/api/proposals?service_id=${id}`),
+  ]);
+  if (STATE.serviceDetail !== d) return;
+  if (inc.status === 'fulfilled' && Array.isArray(inc.value)) {
+    const key = JSON.stringify(inc.value);
+    if (key !== d.incKey) { d.incKey = key; renderIncidentsFor(inc.value); }
+  }
+  if (prop.status === 'fulfilled' && Array.isArray(prop.value)) {
+    const key = JSON.stringify(prop.value);
+    if (key !== d.propKey) { d.propKey = key; renderServiceProposals(prop.value); }
+  }
+}
+function openServiceDetail(id) {
+  STATE.serviceDetail = { id, status: null };
+  resetPermissionsPanel();
+  startLive(id);
+  resetServiceLists();
+  loadServiceLists();
+  $('svcName').textContent = id;
+  for (const k of ['svcId', 'svcState', 'svcSeen', 'svcRate', 'svcOpen']) $(k).textContent = '';
+  $('svcGone').hidden = true;
+  $('svcDetail').hidden = false;
+  setSlotsHidden(false);
+  loadServiceDetail();
+}
+ENTER.service = (r) => openServiceDetail(r.id);
+
+/* ---------- Kiro permissions panel ---------- */
+// Fetched on the first open of the panel for this service, never on page load; shown as text only.
+function renderPermissionsPanel() {
+  const panel = $('permPanel');
+  panel.addEventListener('toggle', () => { if (panel.open) loadPermissions(); });
+  $('permCopy').onclick = copyPermissions;
+}
+function resetPermissionsPanel() {
+  STATE.permFor = null;
+  $('permPanel').open = false;
+  $('permText').textContent = '';
+  $('permMsg').textContent = '';
+}
+async function loadPermissions() {
+  const d = STATE.serviceDetail;
+  if (!d || STATE.permFor === d.id) return;
+  STATE.permFor = d.id;
+  $('permMsg').textContent = 'Loading...';
+  try {
+    const text = await request('GET', `/api/services/${encodeURIComponent(d.id)}/permissions-snippet`, undefined, 'text');
+    if (STATE.serviceDetail !== d) return;
+    $('permText').textContent = String(text);
+    $('permMsg').textContent = '';
+  } catch (e) {
+    STATE.permFor = null; // the next open tries again
+    if (STATE.serviceDetail !== d) return;
+    $('permMsg').textContent = e.status === 404 ? 'not available yet' : errorText(e.status, e.body);
+  }
+}
+function copyPermissions() {
+  const pre = $('permText');
+  const text = pre.textContent;
+  if (!text) return;
+  const fallback = () => {
+    const range = document.createRange();
+    range.selectNodeContents(pre);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    $('permMsg').textContent = 'Could not copy: the text is selected, press Ctrl+C';
+  };
+  try { navigator.clipboard.writeText(text).then(() => { $('permMsg').textContent = 'Copied'; }, fallback); }
+  catch (e) { fallback(); }
+}
+
+/* ---------- live log (SSE) ---------- */
+// One EventSource per open service detail. The message text goes in with textContent only; rows are capped.
+const LOG_MSG_SHORT = 500, LOG_MSG_LONG = 4096, LOG_QUEUE_MAX = 500;
+const ROW_EV = new WeakMap(); // row -> its event, for the client-side filters
+function streamUrl(id, lastId) {
+  const base = `/api/services/${encodeURIComponent(id)}/stream`;
+  return lastId > 0 ? `${base}?after=${lastId}` : `${base}?tail=100`;
+}
+function showLiveStatus(L) {
+  const parts = [];
+  if (L.note) parts.push(L.note);
+  if (L.paused) parts.push(`Paused · ${L.queue.length} new`);
+  $('liveStatus').textContent = parts.join(' · ');
+}
+function addLiveRow(ev) {
+  const L = STATE.live;
+  if (!L) return;
+  const box = $('liveBox');
+  const row = el('div', 'row live');
+  const msg = String(ev.message === null || ev.message === undefined ? '' : ev.message);
+  const label = ev.severity_name || sevName(ev.severity);
+  const cls = SEV_NAMES.includes(label) ? label : 'unknown';
+  const host = `${ev.host === null || ev.host === undefined ? '' : ev.host}: `;
+  const text = el('span', 'm', host + capText(msg, LOG_MSG_SHORT));
+  const cell = el('div', 'cell');
+  cell.append(text);
+  if (msg.length > LOG_MSG_SHORT) {
+    const more = el('button', 'ghost small', 'show more');
+    more.type = 'button';
+    more.onclick = () => { text.textContent = host + capText(msg, LOG_MSG_LONG); row.classList.add('open'); more.remove(); };
+    cell.append(more);
+  }
+  row.append(el('span', 'meta', fmtTime(ev.ts)), el('span', `sev-${cls}`, String(label)), cell);
+  ROW_EV.set(row, ev);
+  row.hidden = !rowMatches(ev, L.sev, L.text);
+  box.append(row);
+  while (box.childElementCount > 500) box.firstElementChild.remove();
+  if (L.auto) box.scrollTop = box.scrollHeight;
+}
+function addSystemRow(text) {
+  const box = $('liveBox');
+  const row = el('div', 'row live sys');
+  row.append(el('span', 'meta', ''), el('span', '', 'system'), el('div', 'cell', text));
+  box.append(row);
+  while (box.childElementCount > 500) box.firstElementChild.remove();
+}
+function applyLiveFilter() {
+  const L = STATE.live;
+  if (!L) return;
+  for (const row of $('liveBox').children) {
+    const ev = ROW_EV.get(row);
+    if (ev) row.hidden = !rowMatches(ev, L.sev, L.text);
+  }
+}
+function onLiveMessage(L, m) {
+  if (STATE.live !== L) return;
+  let ev = null;
+  try { ev = JSON.parse(m.data); } catch (e) { return; }
+  if (!ev || typeof ev !== 'object' || !Number.isInteger(ev.id) || !isNewer(ev.id, L.lastId)) return;
+  L.lastId = ev.id;
+  L.fails = 0;
+  if (L.note) { L.note = ''; showLiveStatus(L); }
+  if (L.paused) {
+    L.queue.push(ev);
+    if (L.queue.length > LOG_QUEUE_MAX) L.queue.shift();
+    showLiveStatus(L);
+  } else addLiveRow(ev);
+}
+function onLiveDropped(L, m) {
+  if (STATE.live !== L) return;
+  let n = 0;
+  try { n = Number(JSON.parse(m.data).count) || 0; } catch (e) { n = 0; }
+  addSystemRow(`${n} events were skipped`);
+}
+function onLiveClosed(L, src, m) {
+  src.close(); // the server ends the response after a closed frame: stop the browser's own reconnect first
+  if (L.source === src) L.source = null;
+  if (STATE.live !== L) return;
+  let reason = '';
+  try { reason = String(JSON.parse(m.data).reason || ''); } catch (e) { reason = ''; }
+  if (reason === 'service_deleted') { L.stopped = true; L.note = 'this service was deleted; the live log stopped'; showLiveStatus(L); return; }
+  if (reason === 'max_age') { openLive(); return; }
+  scheduleLive();
+}
+function onLiveError(L, src) {
+  src.close(); // never let the browser reconnect on its own: that would hold a second slot
+  if (L.source !== src || STATE.live !== L) return;
+  L.source = null;
+  L.note = L.fails >= 2 ? 'live log disconnected: too many live logs open (limit 20) or the hub is down' : 'live log disconnected, reconnecting...';
+  showLiveStatus(L);
+  scheduleLive();
+}
+function scheduleLive() {
+  const L = STATE.live;
+  if (!L || L.stopped || L.timer || document.visibilityState !== 'visible') return;
+  const wait = nextBackoff(L.fails);
+  L.fails += 1;
+  L.timer = setTimeout(() => { L.timer = null; openLive(); }, wait * 1000);
+}
+function openLive() {
+  const L = STATE.live;
+  if (!L || L.stopped || L.source || document.visibilityState !== 'visible') return;
+  if (L.timer) { clearTimeout(L.timer); L.timer = null; }
+  const src = new EventSource(streamUrl(L.id, L.lastId));
+  L.source = src;
+  src.onmessage = (m) => onLiveMessage(L, m);
+  src.addEventListener('dropped', (m) => onLiveDropped(L, m));
+  src.addEventListener('closed', (m) => onLiveClosed(L, src, m));
+  src.onerror = () => onLiveError(L, src);
+}
+function closeLive(forget) {
+  const L = STATE.live;
+  if (!L) return;
+  if (L.timer) { clearTimeout(L.timer); L.timer = null; }
+  if (L.source) { L.source.close(); L.source = null; }
+  if (forget) STATE.live = null;
+}
+function startLive(id) {
+  closeLive(true);
+  const L = { id, source: null, timer: null, lastId: 0, fails: 0, paused: false, queue: [], auto: true, sev: 7, text: '', stopped: false, note: '' };
+  STATE.live = L;
+  $('liveBox').replaceChildren();
+  $('livePause').textContent = 'Pause';
+  $('liveAuto').checked = true;
+  $('liveSev').value = '7';
+  $('liveText').value = '';
+  showLiveStatus(L);
+  openLive();
+}
+function toggleLivePause() {
+  const L = STATE.live;
+  if (!L) return;
+  L.paused = !L.paused;
+  $('livePause').textContent = L.paused ? 'Resume' : 'Pause';
+  if (!L.paused) { const q = L.queue; L.queue = []; for (const ev of q) addLiveRow(ev); }
+  showLiveStatus(L);
+}
+function wireLive() {
+  $('livePause').onclick = toggleLivePause;
+  $('liveAuto').onchange = () => { if (STATE.live) STATE.live.auto = $('liveAuto').checked; };
+  $('liveSev').onchange = () => { if (STATE.live) { STATE.live.sev = Number($('liveSev').value); applyLiveFilter(); } };
+  $('liveText').oninput = () => { if (STATE.live) { STATE.live.text = $('liveText').value.trim(); applyLiveFilter(); } };
+}
+// A hidden tab holds no stream slot; coming back resumes from the last id.
+function liveVisibility() {
+  const L = STATE.live;
+  if (!L || STATE.route.view !== 'service') return;
+  if (document.visibilityState === 'hidden') closeLive(false);
+  else { L.fails = 0; openLive(); }
+}
+
+/* ---------- rule form and rule from a proposal ---------- */
+const RULE_CATEGORIES = ['memory', 'disk', 'network', 'security', 'crash', 'unknown'];
+const RULE_FALLBACK = {
+  most_urgent_severity: { min: 3, max: 4, default: 3 },
+  max_per_hour: { min: 1, max: 10, default: 3 },
+  max_per_incident: { min: 1, max: 3, default: 1 },
+  max_files: { min: 1, max: 20, default: 5 },
+  max_lines: { min: 1, max: 500, default: 100 },
+  expires_days: { min: 1, max: 29, default: 7 },
+};
+let ruleFormSeq = 0;
+// One read of the approval status for the form's bounds, only when the page has none yet.
+async function ensureApprovalStatus() {
+  if (STATE.approvalStatus) return STATE.approvalStatus;
+  try { STATE.approvalStatus = await request('GET', '/api/approvals/status'); } catch (e) { /* the fallback numbers are used */ }
+  return STATE.approvalStatus || null;
+}
+function numberInput(id, b, value) {
+  const i = el('input');
+  i.type = 'number'; i.id = id; i.min = String(b.min); i.max = String(b.max); i.step = '1'; i.value = String(value);
+  return i;
+}
+// The shared rule form. `defaults` is the hub's rule-defaults (or null for a new rule); the caller adds its own
+// confirm button to `actions`, so the lock registry sees the right action id.
+function renderRuleForm(defaults, mode) {
+  const n = ++ruleFormSeq;
+  const create = mode === 'create';
+  const edit = mode === 'edit';
+  const bounds = STATE.approvalStatus && STATE.approvalStatus.bounds;
+  const sb = boundOf(bounds, 'most_urgent_severity', RULE_FALLBACK.most_urgent_severity);
+  const hb = boundOf(bounds, 'max_per_hour', RULE_FALLBACK.max_per_hour);
+  const ib = boundOf(bounds, 'max_per_incident', RULE_FALLBACK.max_per_incident);
+  const fb = boundOf(bounds, 'max_files', RULE_FALLBACK.max_files);
+  const lb = boundOf(bounds, 'max_lines', RULE_FALLBACK.max_lines);
+  const eb = boundOf(bounds, 'expires_days', RULE_FALLBACK.expires_days);
+  const dayBound = { min: Math.max(1, eb.min), max: Math.min(29, eb.max), default: 7 };
+  const d = defaults || {};
+  const pick = (key, b) => (typeof d[key] === 'number' ? d[key] : b.default);
+  const f = el('form', 'rule-form');
+  f.append(el('h4', '', mode === 'proposal' ? 'Always approve fixes like this' : edit ? 'Edit rule' : 'New rule'));
+  let svc = null, mtype = null, valText = null, valCat = null, first = null;
+  if (create) {
+    const eligible = (Array.isArray(STATE.services) ? STATE.services : []).filter((s) => !s.builtin && s.code_folder);
+    svc = el('select');
+    svc.id = `ruleF${n}Svc`;
+    for (const s of eligible) { const o = el('option', '', `${s.name} (${s.id})`); o.value = s.id; svc.append(o); }
+    mtype = el('select');
+    mtype.id = `ruleF${n}Type`;
+    for (const t of ['signature', 'category']) { const o = el('option', '', t); o.value = t; mtype.append(o); }
+    valText = textInput(`ruleF${n}Value`, '', 200);
+    valCat = el('select');
+    valCat.id = `ruleF${n}Cat`;
+    const cats = bounds && Array.isArray(bounds.categories) ? bounds.categories.filter((c) => typeof c === 'string') : RULE_CATEGORIES;
+    for (const c of cats) { const o = el('option', '', c); o.value = c; valCat.append(o); }
+    const textField = field('Signature text', valText);
+    const catField = field('Category', valCat);
+    catField.hidden = true;
+    mtype.onchange = () => { const isCat = mtype.value === 'category'; textField.hidden = isCat; catField.hidden = !isCat; };
+    f.append(field('Service (with a code folder)', svc), field('Match on', mtype), textField, catField);
+    if (!eligible.length) f.append(el('p', 'meta', 'No service has a code folder yet. Set one in the service form first.'));
+    first = svc;
+  } else {
+    const facts = el('dl', 'facts');
+    facts.append(el('dt', '', 'Service'), el('dd', '', String(d.service_id || '')), el('dt', '', 'Matches'), el('dd', '', `${d.match_type || ''} ${d.match_value || ''}`));
+    f.append(facts);
+  }
+  const match = () => (create
+    ? { service_id: svc.value, match_type: mtype.value, match_value: mtype.value === 'category' ? valCat.value : valText.value.trim() }
+    : { service_id: d.service_id, match_type: d.match_type, match_value: d.match_value });
+  const sev = numberInput(`ruleF${n}Sev`, sb, pick('most_urgent_severity', sb));
+  const per = numberInput(`ruleF${n}Hour`, hb, pick('max_per_hour', hb));
+  const inc = numberInput(`ruleF${n}Inc`, ib, pick('max_per_incident', ib));
+  const files = numberInput(`ruleF${n}Files`, fb, pick('max_files', fb));
+  const lines = numberInput(`ruleF${n}Lines`, lb, pick('max_lines', lb));
+  const days = edit ? null : numberInput(`ruleF${n}Days`, dayBound, dayBound.default);
+  const note = textInput(`ruleF${n}Note`, d.note || '', 200);
+  const grid = el('div', 'grid-n');
+  grid.append(field('Severity floor (0 most urgent)', sev), field('Max per hour', per), field('Max per incident', inc),
+    field('Max files', files), field('Max lines', lines));
+  if (days) grid.append(field('Expires in (days)', days));
+  f.append(grid, field('Note (optional)', note));
+  const words = el('p', 'meta');
+  const read = () => Object.assign(match(), {
+    most_urgent_severity: clampInt(sev.value, sb.min, sb.max), max_per_hour: clampInt(per.value, hb.min, hb.max),
+    max_per_incident: clampInt(inc.value, ib.min, ib.max), max_files: clampInt(files.value, fb.min, fb.max),
+    max_lines: clampInt(lines.value, lb.min, lb.max), days: days ? clampInt(days.value, dayBound.min, dayBound.max) : null, note: note.value.trim(),
+  });
+  const describe = () => {
+    const v = read();
+    words.textContent = `This rule approves fixes for service ${v.service_id || '?'} that match ${v.match_type || '?'} "${v.match_value || '?'}", for incidents at ${sevFloorText(v.most_urgent_severity)}, at most ${v.max_per_hour} per hour and ${v.max_per_incident} per incident, up to ${v.max_files} files and ${v.max_lines} lines each${v.days ? `, for ${v.days} day(s)` : ''}.`;
+  };
+  f.addEventListener('input', describe);
+  f.addEventListener('change', describe);
+  describe();
+  f.append(words);
+  const actions = el('div', 'actions');
+  const msg = el('div', 'meta');
+  msg.setAttribute('role', 'status');
+  f.append(actions, msg);
+  return { form: f, read, actions, msg, first: first || sev };
+}
+async function openRuleFromProposal(p, host, note) {
+  const open = host.querySelector('form.rule-form');
+  if (open) { open.querySelector('input').focus(); return; }
+  note.textContent = 'Loading...';
+  let defaults;
+  try { defaults = await request('GET', `/api/proposals/${encodeURIComponent(p.id)}/rule-defaults`); }
+  catch (e) { note.textContent = e.authText || errorText(e.status, e.body); return; }
+  await ensureApprovalStatus();
+  note.textContent = '';
+  const rf = renderRuleForm(defaults, 'proposal');
+  const cancel = el('button', 'ghost', 'Cancel');
+  cancel.type = 'button';
+  cancel.onclick = () => { rf.form.remove(); };
+  rf.actions.append(actionButton('rule-from-proposal', 'Confirm rule', () => confirmRuleFromProposal(p, defaults, rf), ''), cancel);
+  host.append(rf.form);
+  rf.first.focus();
+}
+// The only place that creates a rule from a proposal: only after the user pressed Confirm.
+async function confirmRuleFromProposal(p, defaults, rf) {
+  if (rf.busy) return;
+  rf.busy = true;
+  rf.msg.textContent = 'Saving...';
+  try {
+    const r = await request('POST', `/api/proposals/${encodeURIComponent(p.id)}/rule`, ruleOverrides(defaults, rf.read()));
+    rf.form.remove();
+    setStatus(`Rule ${r && r.id ? r.id : ''} created`);
+    await loadRules();
+    await refreshProposalViews();
+  } catch (e) { rf.msg.textContent = e.authText || errorText(e.status, e.body); }
+  finally { rf.busy = false; }
+}
+
+/* ---------- rules, pause banner ---------- */
+function rulesMsg(text) { $('rulesMsg').textContent = text || ''; }
+function keyed(b, key) { b.dataset.focusKey = key; return b; }
+function ruleRow(r, now) {
+  const tr = el('tr');
+  const cell = (text) => { const td = el('td', '', text); tr.append(td); return td; };
+  cell(String(r.id));
+  cell(String(r.service_id));
+  cell(`${r.match_type}: ${r.match_value}`);
+  cell(sevFloorText(r.most_urgent_severity));
+  cell(countdown(r.expires_at, now));
+  cell(`${r.max_per_hour}/hour · ${r.max_per_incident}/incident · ${r.max_files} files · ${r.max_lines} lines`);
+  cell(`${r.uses_last_hour} / ${r.use_count}`);
+  const st = cell(stateLabel('rule', r.status));
+  if (r.status === 'suspended' && r.status_reason) st.append(el('div', 'meta', String(r.status_reason)));
+  cell(r.source_proposal_id ? String(r.source_proposal_id) : '');
+  const td = el('td');
+  const box = el('div', 'actions');
+  td.append(box);
+  tr.append(td);
+  if (r.status === 'active') box.append(keyed(actionButton('rule-pause', 'Pause', () => pauseRule(r), undefined, `Pause rule ${r.id}`), `${r.id}:pause`));
+  if (r.status === 'active' || r.status === 'suspended') box.append(keyed(actionButton('rule-revoke', 'Revoke', () => revokeRule(r), 'ghost small warn', `Revoke rule ${r.id}`), `${r.id}:revoke`));
+  if (r.status === 'suspended') box.append(keyed(actionButton('rule-enable', 'Re-enable', () => enableRule(r), undefined, `Re-enable rule ${r.id}`), `${r.id}:enable`));
+  if (r.status === 'active' || r.status === 'suspended') box.append(keyed(actionButton('rule-edit', 'Edit', () => openRuleForm(r), undefined, `Edit rule ${r.id}`), `${r.id}:edit`));
+  return tr;
+}
+let lastRulesKey = null;
+function renderRules() {
+  const list = Array.isArray(STATE.rules) ? STATE.rules : [];
+  const now = Date.now() / 1000;
+  const tools = $('rulesTools');
+  if (!tools.firstElementChild) {
+    tools.append(actionButton('rule-create', 'New rule', () => openRuleForm(null)), actionButton('rules-pause-all', 'Pause all', pauseAll, 'ghost small warn'));
+  }
+  const key = JSON.stringify([list, Math.floor(now / 30)]);
+  if (key === lastRulesKey) return;
+  lastRulesKey = key;
+  const body = $('rulesBody');
+  const f = document.activeElement;
+  const focusKey = f && body.contains(f) ? f.dataset.focusKey : null;
+  body.replaceChildren();
+  if (!list.length) {
+    const tr = el('tr');
+    const td = el('td', 'empty', 'No rules yet. Approve a fix, then choose "Always approve fixes like this".');
+    td.colSpan = 10;
+    tr.append(td);
+    body.append(tr);
+  }
+  for (const r of list) body.append(ruleRow(r, now));
+  if (focusKey) {
+    const n = Array.from(body.querySelectorAll('[data-focus-key]')).find((x) => x.dataset.focusKey === focusKey);
+    if (n) n.focus();
+  }
+}
+async function loadRules() {
+  try {
+    STATE.rules = await request('GET', '/api/rules');
+    renderRules();
+  } catch (e) { setStatus(e.authText || errorText(e.status, e.body)); }
+}
+async function loadApprovalStatus() {
+  try { STATE.approvalStatus = await request('GET', '/api/approvals/status'); }
+  catch (e) { return; }
+  renderPausedBanner();
+}
+// The banner is on every view while auto-approval is paused; Resume widens, so it needs the token.
+function renderPausedBanner() {
+  const s = STATE.approvalStatus;
+  const b = $('pausedBanner');
+  if (!s || !s.paused) { b.hidden = true; b.replaceChildren(); STATE.bannerKey = ''; return; }
+  const key = `${s.paused_by}|${s.paused_at}`;
+  if (key === STATE.bannerKey && !b.hidden) return;
+  STATE.bannerKey = key;
+  b.replaceChildren();
+  const when = typeof s.paused_at === 'number' ? ` at ${fmtTime(s.paused_at)}` : '';
+  b.append(el('span', '', `Auto-approval is paused. No rule approves anything. Paused by ${s.paused_by || 'unknown'}${when}. `));
+  b.append(actionButton('rules-resume', 'Resume', resumeRules));
+  b.hidden = false;
+}
+// Reduce actions: no token, one confirmation first. A 429 shows the hub's Retry-After through authText.
+async function reduceCall(path, okText) {
+  try { await request('POST', path); }
+  catch (e) { rulesMsg(e.authText || errorText(e.status, e.body)); return; }
+  rulesMsg(okText);
+  setStatus(okText);
+  await Promise.allSettled([loadRules(), loadApprovalStatus()]);
+}
+async function pauseRule(r) {
+  if (!window.confirm(`Pause rule ${r.id}? It stops approving until it is re-enabled (re-enabling needs the admin token).`)) return;
+  await reduceCall(`/api/rules/${encodeURIComponent(r.id)}/pause`, `Rule ${r.id} paused`);
+}
+async function revokeRule(r) {
+  if (!window.confirm(`Revoke rule ${r.id}? A revoked rule cannot be used again.`)) return;
+  await reduceCall(`/api/rules/${encodeURIComponent(r.id)}/revoke`, `Rule ${r.id} revoked`);
+}
+async function pauseAll() {
+  if (!window.confirm('Pause every rule? Nothing is auto-approved until you resume (resuming needs the admin token).')) return;
+  await reduceCall('/api/rules/pause', 'Auto-approval paused');
+}
+// The hub's own clock (seconds): approvals/status `now` when it has one, else the Date header of the last answer.
+function serverNowSeconds() {
+  const st = STATE.approvalStatus;
+  if (st && typeof st.now === 'number') return st.now;
+  return typeof STATE.serverDate === 'number' ? STATE.serverDate : null;
+}
+// Days to an absolute expires_at from the hub's clock (the default is 7 days from its now); null when unknown.
+function createExpiry(days) {
+  const now = serverNowSeconds();
+  return now === null ? null : expiryFromDays(now + 7 * 86400, days);
+}
+// Opened only by a click on New rule or Edit; nothing here runs on load.
+async function openRuleForm(rule) {
+  const box = $('ruleFormBox');
+  box.replaceChildren();
+  await ensureApprovalStatus();
+  if (!rule) { try { STATE.services = await request('GET', '/api/services'); } catch (e) { /* the form says no service qualifies */ } }
+  const rf = renderRuleForm(rule, rule ? 'edit' : 'create');
+  const save = rule
+    ? actionButton('rule-edit', 'Save changes', () => saveRule(rule, rf), '')
+    : actionButton('rule-create', 'Create rule', () => saveRule(null, rf), '');
+  const cancel = el('button', 'ghost', 'Cancel');
+  cancel.type = 'button';
+  cancel.onclick = () => { box.replaceChildren(); };
+  rf.form.onsubmit = (ev) => { ev.preventDefault(); if (!save.disabled) saveRule(rule, rf); };
+  rf.actions.append(save, cancel);
+  box.append(rf.form);
+  rf.first.focus();
+}
+async function saveRule(rule, rf) {
+  if (rf.busy) return; // a double click must not send the request twice
+  rf.busy = true;
+  rf.msg.textContent = 'Saving...';
+  try {
+    const v = rf.read();
+    if (rule) {
+      const patch = ruleOverrides(rule, v);
+      if (!Object.keys(patch).length) { rf.msg.textContent = 'Nothing changed.'; return; }
+      await request('PATCH', `/api/rules/${encodeURIComponent(rule.id)}`, patch);
+    } else {
+      const body = {
+        service_id: v.service_id, match_type: v.match_type, match_value: v.match_value,
+        most_urgent_severity: v.most_urgent_severity, max_per_hour: v.max_per_hour, max_per_incident: v.max_per_incident,
+        max_files: v.max_files, max_lines: v.max_lines,
+      };
+      const when = createExpiry(v.days);
+      if (v.days !== 7 && when !== null) body.expires_at = when;
+      if (v.note) body.note = v.note;
+      await request('POST', '/api/rules', body);
+    }
+    $('ruleFormBox').replaceChildren();
+    rulesMsg('Rule saved.');
+    setStatus('Rule saved');
+    await loadRules();
+  } catch (e) { rf.msg.textContent = e.authText || errorText(e.status, e.body); }
+  finally { rf.busy = false; }
+}
+async function enableRule(r) {
+  try { await request('POST', `/api/rules/${encodeURIComponent(r.id)}/enable`); }
+  catch (e) { rulesMsg(e.authText || errorText(e.status, e.body)); return; }
+  rulesMsg(`Rule ${r.id} re-enabled`);
+  await loadRules();
+}
+async function resumeRules() {
+  try { await request('POST', '/api/rules/resume'); }
+  catch (e) { setStatus(e.authText || errorText(e.status, e.body)); return; }
+  setStatus('Auto-approval resumed');
+  await Promise.allSettled([loadRules(), loadApprovalStatus()]);
+}
+/* ---------- audit trail ---------- */
+STATE.audit = { rows: [], key: null, done: false, open: new Set(), shown: null };
+function fmtStamp(ts) { return new Date(ts * 1000).toLocaleString(); }
+function auditKey() { return `${$('auditSvc').value}|${$('auditRule').value.trim()}`; }
+function auditUrl(before) {
+  const p = ['limit=100'];
+  const svc = $('auditSvc').value;
+  if (svc) p.push(`service_id=${encodeURIComponent(svc)}`);
+  const rule = $('auditRule').value.trim();
+  if (rule) p.push(`rule_id=${encodeURIComponent(rule)}`);
+  if (before !== undefined) p.push(`before=${before}`);
+  return `/api/audit?${p.join('&')}`;
+}
+function auditRow(r) {
+  const tr = el('tr');
+  tr.append(el('td', '', fmtStamp(r.ts)), el('td', '', String(r.actor)), el('td', '', String(r.action)), el('td', '', String(r.subject)));
+  const full = String(r.detail === null || r.detail === undefined ? '' : r.detail);
+  const open = STATE.audit.open.has(r.id);
+  const td = el('td');
+  td.append(el('span', '', open ? capText(full, 4096) : capText(full, 300)));
+  if (!open && full.length > 300) {
+    const more = el('button', 'ghost small', 'show more');
+    more.type = 'button';
+    more.onclick = () => { STATE.audit.open.add(r.id); renderAudit(); };
+    td.append(more);
+  }
+  tr.append(td);
+  return tr;
+}
+function renderAudit() {
+  const A = STATE.audit;
+  const key = `${A.rows.map((r) => r.id).join(',')}|${Array.from(A.open).join(',')}|${A.done}`;
+  if (key === A.shown) return;
+  A.shown = key;
+  const body = $('auditBody');
+  body.replaceChildren();
+  if (!A.rows.length) {
+    const tr = el('tr');
+    const td = el('td', 'empty', 'No audit rows yet.');
+    td.colSpan = 5;
+    tr.append(td);
+    body.append(tr);
+  }
+  for (const r of A.rows) body.append(auditRow(r));
+  $('auditMore').hidden = A.done || !A.rows.length;
+}
+// Every 5 s: the newest page for the current filter, merged so the rows already loaded stay.
+async function refreshAudit() {
+  const A = STATE.audit;
+  const key = auditKey();
+  let rows;
+  try { rows = await request('GET', auditUrl()); }
+  catch (e) { $('auditMsg').textContent = e.authText || errorText(e.status, e.body); return; }
+  if (!Array.isArray(rows) || key !== auditKey()) return; // the filter changed while waiting
+  $('auditMsg').textContent = '';
+  const fresh = key !== A.key || !A.rows.length;
+  if (key !== A.key) { A.key = key; A.rows = []; A.done = false; A.open = new Set(); }
+  A.rows = mergeAudit(A.rows, rows);
+  if (fresh && rows.length < 100) A.done = true;
+  renderAudit();
+}
+async function loadMoreAudit() {
+  const A = STATE.audit;
+  if (!A.rows.length) return;
+  const oldest = A.rows[A.rows.length - 1].id; // the smallest id shown
+  let rows;
+  try { rows = await request('GET', auditUrl(oldest)); }
+  catch (e) { $('auditMsg').textContent = e.authText || errorText(e.status, e.body); return; }
+  if (!Array.isArray(rows)) return;
+  A.rows = mergeAudit(A.rows, rows);
+  if (rows.length < 100) A.done = true;
+  renderAudit();
+}
+// The service filter lists the hub's services (a read, done when the Rules view is entered).
+async function loadAuditServices() {
+  let list;
+  try { list = await request('GET', '/api/services'); } catch (e) { return; }
+  if (!Array.isArray(list)) return;
+  const sel = $('auditSvc');
+  const current = sel.value;
+  sel.replaceChildren();
+  const all = el('option', '', 'all services');
+  all.value = '';
+  sel.append(all);
+  for (const s of list) { const o = el('option', '', `${s.name} (${s.id})`); o.value = String(s.id); sel.append(o); }
+  sel.value = current;
+}
+function wireAudit() {
+  $('auditSvc').onchange = () => refreshAudit();
+  $('auditRule').onchange = () => refreshAudit();
+  $('auditMore').onclick = loadMoreAudit;
+}
+ENTER.rules = () => { loadRules(); loadApprovalStatus(); loadAuditServices(); refreshAudit(); };
+
+/* ---------- discovery: scan start and polling ---------- */
+// Nothing here runs on load: the scan starts only from the click handler of the button (R4.5).
+const DISCOVERY_EXPLAINER = 'Lists running processes and listening ports on this machine. It never reads log contents, and nothing leaves this machine.';
+const LIMITED_TEXT = 'some processes were not visible without admin rights';
+const SCAN_GIVE_UP_MS = 45000;
+function discMsg(text) { $('discStatus').textContent = text || ''; }
+function scanRunning() { return Boolean(STATE.scan && STATE.scan.state === 'running'); }
+function renderDiscovery() {
+  $('discExplainer').textContent = DISCOVERY_EXPLAINER;
+  const slot = $('discScanSlot');
+  if (!slot.firstElementChild) slot.append(actionButton('scan-start', 'Discover local apps', startScan, ''));
+  const dslot = $('discDismissSlot');
+  if (!dslot.firstElementChild) dslot.append(actionButton('dismissals-clear', 'Show dismissed apps again', clearDismissals));
+  const sc = STATE.scan;
+  $('discLimited').textContent = sc && sc.limited ? LIMITED_TEXT : '';
+  if (!sc) discMsg('');
+  else if (sc.state === 'running') discMsg(`Scanning... ${Math.floor((Date.now() - sc.startedAt) / 1000)} s`);
+  else if (sc.state === 'failed') discMsg(`scan failed: ${capText(sc.reason || 'unknown reason', 300)}`);
+  else if (sc.state === 'done') discMsg(sc.suggestions.length ? '' : 'Scan finished: no apps found.');
+  renderSuggestions(sc);
+}
+function adoptScan(id) {
+  STATE.scan = { id, state: 'running', limited: false, suggestions: [], startedAt: Date.now(), polling: false };
+  renderDiscovery();
+  pollScan();
+}
+async function startScan() {
+  if (scanRunning()) return;
+  discMsg('Starting scan...');
+  try {
+    const r = await request('POST', '/api/discovery/scan');
+    adoptScan(String(r.scan_id));
+  } catch (e) {
+    if (e.status === 409 && e.body && typeof e.body.scan_id === 'string') { adoptScan(e.body.scan_id); return; }
+    discMsg(e.authText || errorText(e.status, e.body));
+  }
+}
+async function pollScan() {
+  const sc = STATE.scan;
+  if (!sc || sc.state !== 'running' || sc.polling) return;
+  if (Date.now() - sc.startedAt > SCAN_GIVE_UP_MS) { sc.state = 'stalled'; discMsg('scan is taking too long; check again'); return; }
+  sc.polling = true;
+  try {
+    const d = await request('GET', `/api/discovery/scans/${encodeURIComponent(sc.id)}`);
+    if (STATE.scan !== sc) return;
+    sc.state = d.state === 'done' || d.state === 'failed' ? d.state : 'running';
+    sc.limited = Boolean(d.limited);
+    sc.reason = typeof d.reason === 'string' ? d.reason : '';
+    sc.suggestions = Array.isArray(d.suggestions) ? d.suggestions : [];
+  } catch (e) {
+    if (STATE.scan !== sc) return;
+    if (e.status === 404) { sc.state = 'expired'; discMsg('scan expired, run it again'); return; }
+    discMsg(e.authText || errorText(e.status, e.body));
+  } finally { sc.polling = false; }
+  renderDiscovery();
+}
+/* ---------- discovery: suggestion review, accept and dismiss ---------- */
+const CODE_FOLDER_HELP = 'Auto-approved fixes may only change files in this folder. You can also set it later.';
+let discSeq = 0;
+function renderSuggestionCard(s) {
+  const card = el('article', 'svc-card');
+  const evidence = s.evidence || {};
+  const top = el('div', 'top');
+  top.append(el('h3', '', String(s.name)), el('span', 'pill', `confidence: ${s.confidence}`));
+  const ports = Array.isArray(evidence.ports) ? evidence.ports.join(', ') : '';
+  card.append(top, el('div', 'meta', `process ${evidence.process || 'unknown'} · pid ${evidence.pid === null || evidence.pid === undefined ? 'n/a' : evidence.pid} · ${Number(evidence.process_count) || 0} process(es) · ports ${ports || 'none'}`));
+  if (s.state === 'accepted') {
+    card.append(el('div', 'meta', `accepted as service ${s.service_id}`));
+    const a = el('div', 'actions');
+    a.append(focusKeyButton('Open service', `${s.suggestion_id}:open`, () => { here.hash = `#/services/${encodeURIComponent(s.service_id)}`; }));
+    card.append(a);
+    return card;
+  }
+  const n = ++discSeq;
+  const idIn = textInput(`discF${n}Id`, s.app_id, 40);
+  const nameIn = textInput(`discF${n}Name`, s.name, 200);
+  const codeIn = textInput(`discF${n}Code`, '', 1024);
+  const f = el('form', 'svc-form');
+  f.append(field('Id', idIn), field('Name', nameIn), field('Code folder (optional)', codeIn), el('div', 'meta', CODE_FOLDER_HELP));
+  const fs = el('fieldset');
+  fs.append(el('legend', '', 'Candidate log files'));
+  const rows = [];
+  (Array.isArray(s.candidate_log_paths) ? s.candidate_log_paths : []).forEach((c, k) => {
+    const cb = el('input');
+    cb.type = 'checkbox'; cb.id = `discF${n}Use${k}`;
+    cb.checked = Boolean(c.exists && !c.watched_by);
+    const path = textInput(`discF${n}Path${k}`, c.path, 1024);
+    const fmt = el('select');
+    fmt.id = `discF${n}Fmt${k}`;
+    const formats = STATE.uiConfig.formats.slice();
+    if (!formats.includes(c.format)) formats.push(c.format);
+    for (const x of formats) { const o = el('option', '', x); o.value = x; fmt.append(o); }
+    fmt.value = c.format;
+    const line = el('div', 'cand');
+    line.append(field('Use', cb), field('Path', path), field('Format', fmt));
+    line.append(el('div', 'meta', !c.exists ? 'not found' : c.readable === false ? 'not readable' : 'exists'));
+    if (c.watched_by) {
+      cb.checked = false;
+      cb.disabled = true;
+      line.append(el('div', 'meta', `already watched by ${c.watched_by}`));
+    }
+    fs.append(line);
+    rows.push({ cb, path, fmt, c });
+  });
+  f.append(fs);
+  const read = () => ({
+    id: idIn.value.trim(), name: nameIn.value.trim(), code_folder: codeIn.value, app_names: [],
+    rows: rows.map((r) => ({ checked: r.cb.checked, path: r.path.value.trim(), format: r.fmt.value, watched_by: r.c.watched_by || null })),
+  });
+  const msg = el('div', 'meta');
+  msg.setAttribute('role', 'status');
+  const accept = actionButton('suggestion-accept', 'Accept', () => acceptSuggestion(s, card, read, msg), '');
+  const dismiss = actionButton('suggestion-dismiss', 'Dismiss', () => dismissSuggestion(s, card, msg));
+  const actions = el('div', 'actions');
+  actions.append(accept, dismiss);
+  f.onsubmit = (ev) => { ev.preventDefault(); if (!accept.disabled) acceptSuggestion(s, card, read, msg); };
+  f.append(actions, msg);
+  card.append(f);
+  return card;
+}
+function renderSuggestions(sc) {
+  const key = sc && sc.state === 'done' ? JSON.stringify(sc.suggestions) : '';
+  if (key === STATE.shownKey) return; // never rebuild the cards while the user is typing in one
+  STATE.shownKey = key;
+  const box = $('discList');
+  box.replaceChildren();
+  if (!sc || sc.state !== 'done') return;
+  for (const s of sc.suggestions) box.append(renderSuggestionCard(s));
+}
+function noteSuggestionChange(sc) { STATE.shownKey = sc.state === 'done' ? JSON.stringify(sc.suggestions) : ''; }
+async function acceptSuggestion(s, card, read, msg) {
+  if (card.dataset.busy === 'yes') return; // a double click must not accept twice
+  card.dataset.busy = 'yes';
+  msg.textContent = 'Saving...';
+  try {
+    const r = await request('POST', `/api/discovery/suggestions/${encodeURIComponent(s.suggestion_id)}/accept`, buildAcceptBody(read()));
+    const service = r && r.service ? r.service : {};
+    const done = Object.assign({}, s, { state: 'accepted', service_id: String(service.id || '') });
+    const sc = STATE.scan;
+    if (sc) { sc.suggestions = sc.suggestions.map((x) => (x.suggestion_id === s.suggestion_id ? done : x)); noteSuggestionChange(sc); }
+    card.replaceWith(renderSuggestionCard(done));
+    lastSvcKey = null;
+  } catch (e) {
+    msg.textContent = e.authText || errorText(e.status, e.body);
+    if (e.status === 409) refreshScan(msg.textContent);
+  } finally { delete card.dataset.busy; }
+}
+async function dismissSuggestion(s, card, msg) {
+  try { await request('POST', `/api/discovery/suggestions/${encodeURIComponent(s.suggestion_id)}/dismiss`); }
+  catch (e) { msg.textContent = e.authText || errorText(e.status, e.body); return; }
+  const sc = STATE.scan;
+  if (sc) { sc.suggestions = sc.suggestions.filter((x) => x.suggestion_id !== s.suggestion_id); noteSuggestionChange(sc); }
+  card.remove();
+  const scanBtn = $('discScanSlot').firstElementChild;
+  if (scanBtn) scanBtn.focus();
+}
+async function clearDismissals() {
+  try {
+    const r = await request('DELETE', '/api/discovery/dismissals');
+    discMsg(`Cleared ${Number(r && r.cleared) || 0} dismissed app(s). Run discovery again to see them.`);
+  } catch (e) { discMsg(e.authText || errorText(e.status, e.body)); }
+}
+// One read of the finished scan (after a 409 from accept), so the list shows what the hub now says.
+async function refreshScan(note) {
+  const sc = STATE.scan;
+  if (!sc || sc.state === 'running') return;
+  try {
+    const d = await request('GET', `/api/discovery/scans/${encodeURIComponent(sc.id)}`);
+    if (STATE.scan !== sc) return;
+    sc.suggestions = Array.isArray(d.suggestions) ? d.suggestions : [];
+    sc.limited = Boolean(d.limited);
+    renderDiscovery();
+    discMsg(note);
+  } catch (e) {
+    if (e.status === 404) { sc.state = 'expired'; discMsg('scan expired, run it again'); }
+  }
+}
+ENTER.discovery = () => renderDiscovery();
+
+/* ==== INIT ==== */
+function init() {
+  if (here.hash === '#selftest') { runSelfTest(); return; } // no request of any kind in this mode
+  document.querySelectorAll('nav [data-nav]').forEach((b) => { b.onclick = () => { here.hash = b.dataset.nav === 'overview' ? '#/' : `#/${b.dataset.nav}`; }; });
+  window.addEventListener('hashchange', showRoute);
+  wireUnlock();
+  wireLive();
+  wireAudit();
+  document.addEventListener('visibilitychange', liveVisibility);
+  renderPermissionsPanel();
+  $('svcBack').onclick = () => { here.hash = '#/services'; };
+  $('svcAdd').onclick = () => renderServiceForm(null);
+  applyLock();
+  loadUiConfig();
+  loadApprovalStatus();
+  showRoute();
+  refresh(); fetchChat();
+  startScheduler();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (STATE.route.view === 'overview') { fetchChat(); refresh(); } } });
+}
+init();
 </script>
 </body>
 </html>

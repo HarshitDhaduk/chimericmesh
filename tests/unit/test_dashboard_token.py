@@ -58,17 +58,28 @@ def test_token_lives_in_session_storage_only():
     assert "URLSearchParams" not in js and "location.hash" not in js
 
 
-def test_header_only_for_the_two_routes_and_only_when_stored():
+def test_header_only_for_privileged_routes_and_only_when_stored():
+    # Superseded by the dashboard module (task 4.3, design O7): the interim two-route regex became the
+    # PRIVILEGED table; the header is added only by authHeaders, only for a route in that table (or the
+    # send-if-present permissions snippet), and only when a token is stored.
     js = script()
-    m = re.search(r"const TOKEN_ROUTES = /(.*)/;", js)
-    assert m, "TOKEN_ROUTES regex not found"
-    pattern = m.group(1)
-    rx = re.compile(pattern)
-    assert rx.search("/api/terminal") and rx.search("/api/proposals/p1/decide")
-    assert not rx.search("/api/proposals") and not rx.search("/api/ingest") and not rx.search("/api/demo/storm")
-    assert not rx.search("/api/proposals/p1/complete")
-    assert "X-Admin-Token" in js
-    assert re.search(r"if \(token && TOKEN_ROUTES\.test\(path\)\)", js)
+    m = re.search(r"const PRIVILEGED = \[(.*?)\n\];", js, re.S)
+    assert m, "PRIVILEGED table not found"
+    rows = re.findall(r"\[\s*'([A-Z]+)'\s*,\s*'([^']+)'\s*\]", m.group(1))
+
+    def privileged(method, path):
+        return any(mm == method and re.search(rx, path) for mm, rx in rows)
+
+    assert privileged("POST", "/api/terminal") and privileged("POST", "/api/proposals/p1/decide")
+    assert not privileged("POST", "/api/proposals") and not privileged("POST", "/api/ingest")
+    assert not privileged("POST", "/api/demo/storm") and not privileged("POST", "/api/proposals/p1/complete")
+    assert not privileged("GET", "/api/proposals") and not privileged("GET", "/api/stats")
+    assert js.count("X-Admin-Token") == 1
+    body = re.search(r"function authHeaders\(method, path\) \{(.*?)\n\}", js, re.S)
+    assert body, "authHeaders not found"
+    assert "if (!token || !(needsToken(method, path) || sendsTokenIfPresent(method, path))) return {};" in body.group(1)
+    assert "X-Admin-Token" in body.group(1)
+    assert "TOKEN_ROUTES" not in js
 
 
 def test_401_clears_token_and_shows_fixed_text():

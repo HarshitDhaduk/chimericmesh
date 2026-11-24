@@ -34,6 +34,10 @@ FILE_GROUPS: dict[str, str] = {
     "discovery/": "discovery",
     "approvals/": "auto-approval",
     "agent/": "agent-loop",
+    "web/__init__.py": "dashboard",
+    "web/sse.py": "dashboard",
+    "web/feed.py": "dashboard",
+    "web/stream.py": "dashboard",
     "notify.py": "wiring",
     "replay.py": "wiring",
     "replay_irc.py": "wiring",
@@ -72,6 +76,7 @@ THIRD_PARTY_FILES: dict[str, set[str]] = {
     "discovery/routes.py": {"fastapi", "starlette", "pydantic"},
     "approvals/routes.py": {"fastapi", "starlette", "pydantic"},
     "agent/routes.py": {"fastapi", "starlette", "pydantic"},
+    "web/stream.py": {"fastapi", "starlette"},
 }
 
 
@@ -639,3 +644,41 @@ def test_agent_allowed_files_pass_the_scan(tmp_path):
         "from chimericmesh.store.models import Proposal\nfrom chimericmesh import diagnostics\n")
     (pkg / "agent" / "service.py").write_text("from . import limits\nfrom .errors import AgentError\n")
     assert _violations(pkg) + _agent_rule_violations(pkg) == []
+
+# ---- dashboard (web/*.py) rows: dashboard task 1.1 ----
+WEB_FILES = {"__init__.py", "sse.py", "feed.py", "stream.py"}
+WEB_FORBIDDEN_CALLS = ("socket", "subprocess", "os.system", "time.time", "open(")
+
+
+def _web_files() -> list[Path]:
+    return sorted(p for p in (SRC / "web").glob("*.py"))
+
+
+def test_web_holds_exactly_the_four_python_files():
+    assert {p.name for p in _web_files()} == WEB_FILES
+    assert (SRC / "web" / "index.html").is_file()
+
+
+def test_web_files_are_group_dashboard():
+    for name in WEB_FILES:
+        assert group_of(f"web/{name}") == "dashboard", name
+    assert group_of("web/index.html") is None  # data, not scanned
+
+
+def test_web_framework_imports_only_in_stream_py():
+    for path in _web_files():
+        tops = {top for top, _ in imports_of(path)}
+        if path.name != "stream.py":
+            assert not tops & {"fastapi", "starlette", "pydantic", "httpx"}, path.name
+
+
+def test_web_files_use_no_socket_process_clock_or_file_calls():
+    for path in _web_files():
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+        attrs = {f"{n.value.id}.{n.attr}" for n in ast.walk(tree)
+                 if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)}
+        imported = {top for top, _ in imports_of(path)}
+        assert not imported & {"socket", "subprocess"}, path.name
+        assert "open" not in names, path.name
+        assert not attrs & {"os.system", "time.time"}, path.name
