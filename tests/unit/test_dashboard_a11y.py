@@ -203,3 +203,12 @@ def test_rules_table_cells_keep_a_minimum_width():
     from dashboard_static import load_page
     cell = [ln for ln in load_page().splitlines() if ln.strip().startswith("table.rules th, table.rules td")]
     assert len(cell) == 1 and "min-width: 10ch" in cell[0]
+
+
+def test_live_log_filter_row_aligns_controls_and_keeps_checkbox_inline():
+    page_text = ds.load_page()
+    assert ".live-ctl { align-items: flex-end;" in page_text
+    assert re.search(r'\.live-ctl \.field\.inline \{[^}]*flex-direction: row;[^}]*align-items: center', page_text)
+    assert 'class="field inline"><label for="liveAuto">' in page_text
+    assert 'class="field"><label for="liveSev">' in page_text and 'class="field"><label for="liveText">' in page_text
+    assert re.search(r'\.live-ctl select, \.live-ctl input\[type=text\] \{[^}]*height: 40px', page_text)

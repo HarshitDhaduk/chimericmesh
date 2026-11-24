@@ -109,6 +109,9 @@
   .row.live.open .m { white-space: normal; overflow-wrap: anywhere; }
   .row.live.sys { color: var(--amber); }
   .live-ctl { align-items: flex-end; margin-bottom: 8px; }
+  .live-ctl button, .live-ctl .field.inline { min-height: 40px; }
+  .live-ctl select, .live-ctl input[type=text] { box-sizing: border-box; flex: none; height: 40px; }
+  .live-ctl .field.inline { flex-direction: row; align-items: center; gap: 8px; }
   .cand { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; border-top: 1px dashed var(--line); padding-top: 8px; }
   table.sources { border-collapse: collapse; width: 100%; }
   table.sources td { padding: 4px; vertical-align: bottom; }
@@ -328,7 +331,7 @@
             </select></div>
           <div class="field"><label for="liveText">Filter text</label>
             <input type="text" id="liveText" maxlength="100" autocomplete="off" spellcheck="false"></div>
-          <div class="field"><label for="liveAuto">Auto-scroll</label>
+          <div class="field inline"><label for="liveAuto">Auto-scroll</label>
             <input type="checkbox" id="liveAuto" checked></div>
         </div>
         <div class="meta" id="liveStatus" role="status" aria-live="polite"></div>
