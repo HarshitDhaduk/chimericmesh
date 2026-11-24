@@ -196,3 +196,10 @@ def test_returning_to_the_overview_refreshes_it_at_once():
     """L5"""
     script = ds.strip_comments(ds.script_text())
     assert re.search(r"ENTER\.overview = \(\) => \{ refresh\(\); fetchChat\(\); \};", script)
+
+
+def test_rules_table_cells_keep_a_minimum_width():
+    """Review 2 (browser check): with `overflow-wrap: anywhere` alone, "r1" and "active" wrapped letter by letter."""
+    from dashboard_static import load_page
+    cell = [ln for ln in load_page().splitlines() if ln.strip().startswith("table.rules th, table.rules td")]
+    assert len(cell) == 1 and "min-width: 10ch" in cell[0]
