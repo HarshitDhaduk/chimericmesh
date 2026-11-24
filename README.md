@@ -352,6 +352,10 @@ The page at `http://127.0.0.1:8000/` is one static file (`src/chimericmesh/web/i
 - **Discovery**: "Discover local apps" runs a scan, lists what it found with the candidate log files, and lets you accept (only the checked paths become log sources) or dismiss each suggestion.
 - **Rules**: the standing approval rules, the Pause all button, per-rule Pause and Revoke, and the audit trail with filters and "Load more". While auto-approval is paused, a banner says so on every view.
 
+![Service detail: live log, incidents and a pending proposal with locked Approve and Deny](docs/screenshots/dashboard-service.png)
+![Overview after a failure storm, page locked](docs/screenshots/dashboard-overview.png)
+![Approval rules and the audit trail](docs/screenshots/dashboard-rules.png)
+
 **The admin token.** With access control on, the page asks for the admin token once per browser session (the Unlock button; the path of the token file is shown there). The token is kept only in `sessionStorage` (not `localStorage`), is sent only as the `X-Admin-Token` header on the routes that need it, and is never shown again, put in a URL or written to the page. While locked, the controls that add or widen things (save a service, scan, accept, approve, deny, create, edit or re-enable a rule, resume) are disabled with the title "unlock first"; pause, revoke and withdraw need no token, so Pause all, per-rule Pause, Revoke and Withdraw stay enabled. A wrong token is cleared and the page says "token rejected".
 
 **Residual risk.** V1 sends no Content-Security-Policy. Any script that ran in the page's origin could read the token from `sessionStorage`. The defences are that the page never renders log text as HTML (every log line, host, service name, path and note is written with `textContent`; a hook and a test scan fail on `innerHTML` and its relatives) and that it loads nothing from another origin. Do not paste the token into a page you did not get from your own hub.
@@ -384,5 +388,7 @@ Start-Process $edge -ArgumentList '--headless=new','--disable-gpu',"--user-data-
 Select-String -Path "$env:TEMP\dom.txt" -Pattern '&lt;script&gt;x&lt;/script&gt;'     # found: shown as text
 Select-String -Path "$env:TEMP\dom.txt" -Pattern '<script>x</script>|<img src=x'      # no match: no such element
 ```
+
+`--dump-dom` with `--virtual-time-budget` can hang on a service detail page that has a live stream (the open connection keeps the virtual clock from finishing). The Overview, Services, Discovery and Rules views dump fine. For a detail page take a screenshot instead: `--screenshot=out.png --timeout=12000` (use a fresh `--user-data-dir`, or delete it between runs: Edge caches the page).
 
 (With `&lt;img src=x` in the Overview's dump for the log line.) The page never starts a scan or an approval when it loads: both need a click, and the scan also needs the token.
