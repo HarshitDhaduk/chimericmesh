@@ -4,12 +4,12 @@
     {
       "name": "Run tests on Python save",
       "trigger": "PostFileSave",
-      "description": "Runs the unit and property tests whenever the agent saves or edits a Python file.",
+      "description": "Runs a fast smoke set (parsers, event fields, innerHTML guard hook, dependency direction, Kiro assets; about 40 seconds) whenever the agent saves or edits a Python file. It does not run the full suite.",
       "matcher": "\\.py$",
-      "timeout": 120,
+      "timeout": 90,
       "action": {
         "type": "command",
-        "command": "python -m pytest -q -x"
+        "command": "python -m pytest -q -x -p no:cacheprovider tests/unit/test_parsers.py tests/unit/test_core_event_fields.py tests/unit/test_guard_hook.py tests/unit/test_dependency_direction.py tests/unit/test_kiro_assets.py"
       }
     }
   ]

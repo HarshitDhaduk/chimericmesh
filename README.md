@@ -186,7 +186,7 @@ Includes Hypothesis property tests for parser totality, IRC injection safety, an
 
 - Specs: `.kiro/specs/legacy-mesh/` (requirements, design with correctness properties, tasks)
 - Steering: `.kiro/steering/`
-- Hooks: `.kiro/hooks/` (tests on save, innerHTML guard)
+- Hooks: `.kiro/hooks/` (smoke tests on save, about 40 seconds, not the full suite; innerHTML guard)
 - MCP: `src/chimericmesh/mcp_server.py`
 - Custom agent: `.kiro/agents/mesh-responder.json`
 - Power: `powers/chimericmesh-remediation/`

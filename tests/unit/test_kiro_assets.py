@@ -162,7 +162,14 @@ def test_hook_timeout_is_on_hook_not_action():
     for name in ("guard-innerhtml.json", "test-on-save.json"):
         for hook in _hooks(name):
             assert "timeout" not in hook["action"]
-    assert _hooks("test-on-save.json")[0]["timeout"] == 120
+    assert _hooks("test-on-save.json")[0]["timeout"] == 90
+
+
+def test_test_on_save_runs_an_explicit_smoke_list_not_the_suite():
+    command = _hooks("test-on-save.json")[0]["action"]["command"]
+    assert "-p no:cacheprovider" in command
+    assert command.count("tests/unit/test_") >= 3
+    assert not command.rstrip().endswith("-x")
 
 
 def test_test_on_save_description_says_agent_saves():
