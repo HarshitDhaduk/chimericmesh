@@ -184,11 +184,13 @@ Includes Hypothesis property tests for parser totality, IRC injection safety, an
 
 ## Kiro usage
 
-- Specs: `.kiro/specs/legacy-mesh/` (requirements, design with correctness properties, tasks)
+The full write-up, with commit evidence for each claim, is in [`docs/kiro-usage.md`](docs/kiro-usage.md). Exported Kiro IDE sessions of the live agent runs are in [`docs/kiro-sessions/`](docs/kiro-sessions/).
+
+- Specs: `.kiro/specs/legacy-mesh/` (baseline) and seven V1 module specs in `.kiro/specs/<module>/` (requirements, design with correctness properties, tasks); the plan is in `docs/v1-capability-map.md`
 - Steering: `.kiro/steering/`
-- Hooks: `.kiro/hooks/` (smoke tests on save, about 40 seconds, not the full suite; innerHTML guard)
+- Hooks: `.kiro/hooks/` (smoke tests on save, about 40 seconds, not the full suite; innerHTML guard), plus the opt-in `.kiro/hooks-optional/mesh-verify-write`
 - MCP: `src/chimericmesh/mcp_server.py`
-- Custom agent: `.kiro/agents/mesh-responder.json`
+- Custom agents: `.kiro/agents/mesh-responder.json` (on demand) and `.kiro/agents/mesh-watcher.json` (watch mode); both run in Kiro IDE and Kiro CLI
 - Power: `powers/chimericmesh-remediation/`
 
 ## Kiro agent and power
