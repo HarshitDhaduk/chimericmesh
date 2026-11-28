@@ -4,25 +4,27 @@ Voice-over budget: about 2.4 words per second. The draft below has 301 spoken wo
 
 | Section | Time | Budget | Draft words |
 |---|---|---|---|
-| 1. Problem | 0:00 to 0:20 | 48 | 48 |
-| 2. Live loop | 0:20 to 2:05 | 250 | 161 |
+| 1. Cold open, then problem | 0:00 to 0:20 | 48 | 40 |
+| 2. Live loop | 0:20 to 2:05 | 250 | 162 |
 | 3. Built with Kiro | 2:05 to 2:40 | 84 | 82 |
 | 4. Close | 2:40 to 2:45 | 12 | 10 |
 
 Everything on screen is recorded on the target machine (Windows 11, Kiro IDE, a browser, a terminal). The agent steps take real time, so cut the waiting with a hard cut or a visible "sped up 4x" label. Do not edit the result: the rate must really fall.
 
-## 1. Problem (0:00 to 0:20, 48 words)
+## 1. Cold open, then the problem (0:00 to 0:20, 44 words)
+
+Judges' advice (Devpost, 26 Nov): show the project working in the first 10 to 15 seconds. So the video opens on the payoff, cut from the section 2 takes, and only then names the problem.
 
 | Time | On screen | Voice-over | Command or click |
 |---|---|---|---|
-| 0:00 to 0:08 | A terminal scrolling plain syslog lines, then a title card: "ChimericMesh". | "Old applications still log over Syslog, Telnet and IRC. Nobody watches those logs, and an AI agent cannot see them." (20) | Title card made from a still frame. Terminal: `python examples/legacy_app/run.py` output from an earlier take, or a text file. |
-| 0:08 to 0:20 | Dashboard Overview with the stats tiles and an empty incident list. | "ChimericMesh is for developers who keep a legacy service alive alone. It turns those protocols into incidents that Kiro agents can fix, with a human approving every change." (28) | Browser at `http://127.0.0.1:8000/`, Overview view. |
+| 0:00 to 0:10 | Fast montage from the section 2 footage: a `network` incident card appears, the Kiro chat shows "propose a fix to upstream.py", a click on Approve, the Events / sec tile falling to zero. On-screen text: "A legacy app breaks. A Kiro agent fixes its code. You approve." | "This legacy app is failing. A Kiro agent finds the bug in its code, I approve the fix, and the errors stop." (21) | Edit only: four 2-second cuts from section 2. Nothing is recorded for this row. |
+| 0:10 to 0:20 | Title card "ChimericMesh", then the dashboard Overview. | "Old apps still log over Syslog, Telnet and IRC, where no AI agent can see them. ChimericMesh connects them." (19) Then on-screen text only: "For developers keeping a legacy service alive." | Title card from a still frame. Browser at `http://127.0.0.1:8000/`, Overview. |
 
 ## 2. The live loop (0:20 to 2:05, 161 words)
 
 | Time | On screen | Voice-over | Command or click |
 |---|---|---|---|
-| 0:20 to 0:28 | Terminal A: hub starts. It prints the database path and the token file path (not the token). | "I start the hub. It listens for Syslog, Telnet and IRC on localhost." (13) | Terminal A: `python -m chimericmesh` (from the repo root, with `CHIMERICMESH_HOME` and `CHIMERICMESH_OPERATORS=operator` set, see the checklist). Or show a hub already started and only scroll its log. |
+| 0:20 to 0:28 | Terminal A: the hub is ALREADY running (do not film start-up or setup); scroll its log for a second. On-screen text: "Hub on localhost: Syslog, Telnet, IRC". | "The hub is running on my machine and listens for Syslog, Telnet and IRC." (14) | Start the hub before recording: `python -m chimericmesh` from the repo root, with `CHIMERICMESH_HOME` and `CHIMERICMESH_OPERATORS=operator` set (see the checklist). Register the `proxy` service beforehand (checklist item 3), but leave the page locked so the unlock happens on camera at 1:02. |
 | 0:28 to 0:42 | Terminal B runs the legacy app. Browser: Events / sec tile climbs, then a `network` incident card appears: "upstream timed out connecting to 127.0.0.1:19099". | "Here is a real legacy proxy worker. It cannot reach its upstream, and it retries as fast as it can. Within seconds the hub opens an incident." (27) | Terminal B: `python examples/legacy_app/run.py`. Browser: Overview, then click the incident card. |
 | 0:42 to 1:02 | Kiro IDE, agent `mesh-watcher` already running. It picks up the incident, reads it, searches the code. The chat shows it naming `upstream.py` and a `propose_remediation` call. | "In Kiro, the mesh-watcher agent is waiting on the hub. It picks up the incident, explains what it sees, and proposes a fix: add a bounded backoff to upstream.py. It declares the file, the size of the change and the test command." (42) | In Kiro IDE: select agent `mesh-watcher`, send "Start watching." once before recording. On screen: its `wait_for_work`, `get_incident`, `find_code_for_service`, `propose_remediation` calls. |
 | 1:02 to 1:22 | Browser: Services view, the `proxy` card, the proposal card with Approve and Deny greyed out. Click Unlock, paste the token, Save. Approve turns active. Click Approve. | "The agent cannot change anything yet. The proposal is pending, and Approve is locked until I unlock the page with the admin token. I approve it." (26) | Browser: `#/services`, open the `proxy` card. Top bar: click `Unlock`, paste from the clipboard, `Save`, then `Approve` on proposal `p1`. Alternative below. |
@@ -53,7 +55,7 @@ Optional auto-approval (10 s, only if the cut is under 2:45): after the fix, on 
 
 ## Before recording
 
-1. Restore the shipped bug. `examples/legacy_app/upstream.py` currently has a local edit (a backoff). Check `git diff examples/legacy_app/upstream.py`. If you want to keep that edit, copy the file elsewhere first. Then run `git checkout -- examples/legacy_app` and `git clean -fd examples/legacy_app`. Confirm the retry loop has no sleep after a failure (`git show HEAD:examples/legacy_app/upstream.py`).
+1. Make sure the shipped bug is in place: `git status --short examples/legacy_app` prints nothing. If the agent fixed it in an earlier take, run `git checkout -- examples/legacy_app` and `git clean -fd examples/legacy_app`. Then `python -m pytest examples/legacy_app/tests -q` shows 5 failed (the resilience tests), which is what the agent has to fix.
 2. Start from a fresh data folder: `$env:CHIMERICMESH_HOME = "$env:TEMP\cm-demo"` and `$env:CHIMERICMESH_OPERATORS = "operator"` in Terminal A, then `python -m chimericmesh`. A fresh database makes the first proposal `p1`.
 3. Register the service once before recording (it is not part of the take, or show it as a cut): browser, `#/services`, `Add service`. Id `proxy`, Name `Proxy worker`, App names `proxy-worker`, Code folder the absolute path to `examples\legacy_app`. Unlock first. The legacy app logs as app `proxy-worker`.
 4. Token ready: `Get-Content "$env:CHIMERICMESH_HOME\admin.token" | Set-Clipboard`. Never show the token file on screen. Check that the unlock field does not display the pasted value; if it does, pause the recording there.
@@ -63,6 +65,14 @@ Optional auto-approval (10 s, only if the cut is under 2:45): after the fix, on 
 8. No third-party logos or copyrighted music. Avoid showing an IRC client's branding; `scripts/irc_client.py` is plain text. Kiro's own UI is on screen, which is expected.
 9. Upload to YouTube as Public (not Unlisted), duration under 3:00, English narration or captions, and test the link in a private window.
 10. After the take, restore the bug again if you plan a second take.
+11. Recording style (Devpost's video advice, 26 Nov):
+    - Record each table row as its own short clip, so a bad clip can be redone alone.
+    - Never type live: paste prompts and the token, or cut straight to the result.
+    - Cut every wait. The 25-second `wait_for_work`, test runs and model thinking become hard cuts, or a labelled "4x" speed-up.
+    - Use jump cuts to remove pauses.
+    - Put one short on-screen caption per beat, for example "Approve is locked until a human unlocks it".
+    - Keep at least one Kiro artifact on screen: section 3 shows a spec, a hook and the steering file.
+    - Leave the team story for the written description.
 
 ## Fallback plan
 
