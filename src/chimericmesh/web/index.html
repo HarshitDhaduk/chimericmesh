@@ -151,7 +151,7 @@ button.tag { font-size: .75rem; }
   .guide-head h2 { margin: 0; }
   .bar { height: 6px; background: #08070d; border: 1px solid var(--line); border-radius: 3px; margin: 10px 0 14px; overflow: hidden; }
   .bar > i { display: block; height: 100%; background: var(--ghost); }
-  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
   .step { display: flex; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: #0f0d17; }
   .step .n { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--dim); display: grid; place-items: center; font-size: .8rem; color: var(--dim); }
   .step .t { font-weight: 700; }
@@ -240,9 +240,9 @@ button.tag { font-size: .75rem; }
   <div class="hdr-right">
     <div id="status" class="meta" role="status" aria-live="polite"></div>
     <span id="lockText" class="meta"></span>
-    <button class="ghost small" type="button" id="unlockBtn" aria-controls="tokenForm" aria-expanded="false">Unlock</button>
+    <button class="ghost small" type="button" id="unlockBtn" aria-controls="tokenForm" aria-expanded="false">Unlock to approve</button>
     <button class="ghost small" type="button" id="lockBtn" hidden>Lock</button>
-    <button id="storm" type="button">Summon a failure storm</button>
+    <button id="storm" class="ghost small" type="button">Summon a failure storm</button>
   </div>
 </header>
 <form class="unlock hidden" id="tokenForm" autocomplete="off" aria-label="Unlock">
@@ -274,6 +274,7 @@ button.tag { font-size: .75rem; }
     <div class="bar" id="guideBar" role="progressbar" aria-label="Workflow progress" aria-valuemin="0" aria-valuemax="6" aria-valuenow="0"><i id="guideFill" style="width:0%"></i></div>
     <ol class="steps" id="guideSteps"></ol>
     <div class="meta" id="guideStatus" role="status" aria-live="polite"></div>
+    <div class="meta" id="guideLockHint"></div>
   </section>
 
   <div class="grid">
@@ -292,7 +293,7 @@ button.tag { font-size: .75rem; }
       <section id="termPanel" aria-labelledby="term-h">
         <h2 id="term-h">ChimericBot terminal</h2>
         <div class="term-wrap">
-          <div class="term-log" id="transcript" role="log" aria-live="polite" aria-label="ChimericBot transcript"></div>
+          <div class="term-log" id="transcript" role="log" aria-live="polite" aria-label="ChimericBot transcript"><div class="tline system" id="termHint">ChimericBot is listening from the shadows. Try !help.</div></div>
           <button class="ghost small hidden" id="newMsgs" type="button">New messages ↓</button>
         </div>
         <form class="prompt" id="termForm" autocomplete="off">
@@ -389,16 +390,16 @@ button.tag { font-size: .75rem; }
     </div>
     <div data-slot="permissions">
       <details id="permPanel" class="perm">
-        <summary>Kiro permissions</summary>
+        <summary>Kiro permissions (optional, for hands-off edits)</summary>
         <p>ChimericMesh never writes this file; paste it yourself.</p>
         <p class="meta">The text has two sections: prompt mode (Kiro asks before each change) and autonomous mode.</p>
-        <pre id="permText" class="sample"></pre>
         <div class="actions"><button class="ghost small" type="button" id="permCopy">Copy</button></div>
+        <pre id="permText" class="sample"></pre>
         <div class="meta" id="permMsg" role="status" aria-live="polite"></div>
       </details>
     </div>
     <section id="svcGone" hidden>
-      <p>This service no longer exists.</p>
+      <p>This service is gone (or never existed). Back to services.</p>
       <button class="ghost" type="button" id="svcBack">Back to services</button>
     </section>
   </div><!-- /view-service -->
@@ -611,8 +612,8 @@ function actionToast(kind, id) {
 }
 // What to tell the user when a request failed; status 0 means the hub did not answer (UX-23).
 function friendlyError(status) {
-  if (!Number.isInteger(status) || status <= 0) return 'The mesh is not answering. Check that the hub is running, then try again.';
-  return `The mesh refused that (status ${status}). Try again or check the hub log.`;
+  if (!Number.isInteger(status) || status <= 0) return 'The mesh went quiet. Check that the hub is running, then try again.';
+  return `The mesh turned that away (status ${status}). Try again or check the hub log.`;
 }
 const TOKEN_REJECTED_TEXT = 'That token was not accepted. The ghost wants the exact line from the token file.';
 // The result of the check made when the user saves a token: ok only when the hub accepted it (UX-04).
@@ -791,6 +792,10 @@ function buildAcceptBody(form) {
   if (apps.length) body.app_names = apps;
   return body;
 }
+// The header storm button text: the same action as guide step 1, so it is a quiet ghost button, and says "Another" once an incident exists (UX-13).
+function stormLabel(count) { return Number.isInteger(count) && count > 0 ? 'Another storm' : 'Summon a failure storm'; }
+// The line under the guide while locked: step 5 (decide) needs the admin token (UX-12). '' when nothing to say.
+function guideLockText(w, locked) { return locked && w && !w.complete ? 'Step 5 needs the admin token. Unlock first.' : ''; }
 /* PURE:end */
 
 /* ==== SELFTEST ==== */
@@ -823,8 +828,6 @@ const SELFTEST_CASES = [
   { name: 'stateLabel', args: ['source', 'unreadable'], expect: 'unreadable' },
   { name: 'stateLabel', args: ['source', 'error'], expect: 'error' },
   { name: 'stateLabel', args: ['source', 'stopped'], expect: 'stopped' },
-  { name: 'stateLabel', args: ['source', 'unknown'], expect: 'unknown' },
-  { name: 'stateLabel', args: ['source', 'zzz'], expect: 'unknown' },
   { name: 'stateLabel', args: ['source', 'constructor'], expect: 'unknown' },
   { name: 'stateLabel', args: ['rule', 'suspended'], expect: 'suspended' },
   { name: 'stateLabel', args: ['proposal', 'pending'], expect: 'pending' },
@@ -837,6 +840,9 @@ const SELFTEST_CASES = [
   { name: 'nextBackoff', args: [6], expect: 30 },
   { name: 'nextBackoff', args: [7], expect: 30 },
   { name: 'nextBackoff', args: [8], expect: 30 },
+  { name: 'stormLabel', args: [0], expect: 'Summon a failure storm' },
+  { name: 'stormLabel', args: [2], expect: 'Another storm' },
+  { name: 'guideLockText', args: [{ complete: false }, true], expect: 'Step 5 needs the admin token. Unlock first.' },
   { name: 'errorText', args: [422, { detail: 'bad path', field: 'log_paths' }], expect: 'log_paths: bad path' },
   { name: 'errorText', args: [400, { detail: 'nope' }], expect: 'nope' },
   { name: 'errorText', args: [422, { detail: [{ loc: ['body', 'name'], msg: 'required' }, { loc: [], msg: 'bad' }] }], expect: 'name: required; bad' },
@@ -970,11 +976,11 @@ const SELFTEST_CASES = [
   { name: 'actionToast', args: ['withdraw', 'p4'], expect: 'Withdrew p4. Nothing will run.' },
   { name: 'actionToast', args: ['resolve', '2f9159b0aa'], expect: 'Laid 2f9159b0aa to rest. If the errors return, it can reopen.' },
   { name: 'actionToast', args: ['nothing', 'p4'], expect: '' },
-  { name: 'friendlyError', args: [0], expect: 'The mesh is not answering. Check that the hub is running, then try again.' },
-  { name: 'friendlyError', args: [500], expect: 'The mesh refused that (status 500). Try again or check the hub log.' },
+  { name: 'friendlyError', args: [0], expect: 'The mesh went quiet. Check that the hub is running, then try again.' },
+  { name: 'friendlyError', args: [500], expect: 'The mesh turned that away (status 500). Try again or check the hub log.' },
   { name: 'unlockOutcome', args: [200], expect: { ok: true, text: 'Unlocked' } },
   { name: 'unlockOutcome', args: [401], expect: { ok: false, text: 'That token was not accepted. The ghost wants the exact line from the token file.' } },
-  { name: 'unlockOutcome', args: [0], expect: { ok: false, text: 'The mesh is not answering. Check that the hub is running, then try again.' } },
+  { name: 'unlockOutcome', args: [0], expect: { ok: false, text: 'The mesh went quiet. Check that the hub is running, then try again.' } },
   { name: 'closeLoop', args: [{ status: 'done', verification_result: 'passed' }, { resolved: false }], expect: { pill: 'done, tests passed', warn: '', rest: true } },
   { name: 'closeLoop', args: [{ status: 'done', verification_result: 'passed' }, { resolved: true }], expect: { pill: 'done, tests passed', warn: '', rest: false } },
   { name: 'closeLoop', args: [{ status: 'done', verification_result: 'failed' }, null], expect: { pill: '', warn: 'Tests failed. Deny it and ask the agent for another fix.', rest: false } },
@@ -1052,7 +1058,7 @@ function actionButton(id, label, handler, cls, aria) {
 // The admin token is kept for this tab only (sessionStorage, or memory when storage is off), read only by
 // authHeaders, sent only on the PRIVILEGED routes, and never shown, logged, put in a URL or in localStorage.
 const TOKEN_KEY = 'cm.token';
-const TOKEN_PROMPT_TEXT = 'Protected actions (approve, deny, add or edit a service, scan, rules) need the admin token. Paste the contents of the token file.';
+const TOKEN_PROMPT_TEXT = 'Protected actions (approve, deny, add or edit a service, scan, rules) need the admin token. Paste the contents of the token file. Open that file, copy its single line, paste it here.';
 let memToken = null;
 function storedToken() {
   try { const t = sessionStorage.getItem(TOKEN_KEY); if (t) return t; } catch (e) { /* storage unavailable */ }
@@ -1215,6 +1221,7 @@ function appendIncidentActions(d, i, noService) {
   d.append(actions);
 }
 function renderIncidents(list, force) {
+  $('storm').textContent = stormLabel(list.length);
   if (document.querySelector('form.propose')) return; // never wipe a form being typed in
   const fixes = list.map((i) => fixLine(state.proposals, i.id));
   const key = JSON.stringify([list, fixes]);
@@ -1387,7 +1394,7 @@ function renderProposals(force) {
   lastPropKey = key;
   updatePropNote();
   const box = $('proposals'); box.replaceChildren();
-  if (!list.length) { box.append(el('p', 'empty', 'No proposals yet. An agent proposes fixes through MCP; you can simulate one from an incident card.')); return; }
+  if (!list.length) { box.append(el('p', 'empty', 'No proposals yet. Nobody has haunted a fix into being. Ask your agent to look at an incident, or press "Propose a fix" on a card.')); return; }
   for (const p of list) {
     const inc = state.incidents.find((i) => String(i.id) === String(p.incident_id));
     box.append(renderProposalCard(p, inc ? `${inc.category} on ${inc.host}` : `incident ${p.incident_id}`, 'propNote'));
@@ -1477,6 +1484,7 @@ const nearBottom = () => tlog.scrollHeight - tlog.scrollTop - tlog.clientHeight 
 function fmtTime(ts) { return new Date(ts * 1000).toLocaleTimeString([], { hour12: false }); }
 function appendMessages(msgs) {
   if (!msgs.length) return;
+  const hint = $('termHint'); if (hint) hint.remove(); // the placeholder is not a message
   const stick = nearBottom();
   for (const m of msgs) {
     const kind = ['bot', 'user', 'system'].includes(m.kind) ? m.kind : 'system';
@@ -1619,10 +1627,12 @@ const findIncident = (id) => state.incidents.concat(STATE.navInc).find((i) => St
 /* ---------- data loading ---------- */
 async function loadIncidents() { const i = await api('/api/incidents'); state.incidents = i; renderIncidents(i); renderProposals(); return i; }
 async function loadProposals() { state.proposals = await api('/api/proposals'); renderProposals(); }
+// UX-12: while locked, say why step 5 will not work (the guide's own code is pinned, so this is a separate line).
+function updateGuideLock() { $('guideLockHint').textContent = guideLockText(state.workflow, Boolean(STATE.lock && STATE.lock.locked)); }
 async function loadWorkflow() {
   try { state.workflow = await api('/api/workflow'); }
   catch (e) { state.workflow = null; }
-  renderGuide(); renderIdentity(); renderProposals();
+  renderGuide(); updateGuideLock(); renderIdentity(); renderProposals();
 }
 
 let refreshing = false;
@@ -1660,12 +1670,13 @@ function applyLock() {
   const has = Boolean(storedToken());
   const ls = lockState(STATE.uiConfig, has);
   STATE.lock = ls;
-  $('lockText').textContent = has ? 'Unlocked' : (ls.locked ? 'Locked' : '');
+  $('lockText').textContent = has ? 'Unlocked' : (ls.locked ? 'Locked: view only' : '');
   $('unlockBtn').hidden = has || ls.mode === 'off';
   $('lockBtn').hidden = !has;
   document.querySelectorAll('[data-action]').forEach(lockButton);
   updatePropNote();
   updateDiscLock();
+  updateGuideLock();
   renderIdentity();
 }
 function openUnlock(note) {

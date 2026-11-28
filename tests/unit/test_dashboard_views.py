@@ -51,7 +51,7 @@ def test_one_detail_container_with_header_and_named_slots():
         assert f'id="{ident}"' in seg, ident
     slots = re.findall(r'data-slot="([a-z-]+)"', seg)
     assert slots == ["proposals", "incidents", "live-log", "permissions"]  # UX-02, approved 2026-11-28
-    assert "service no longer exists" in seg
+    assert "This service is gone (or never existed)." in seg
 
 
 def test_detail_fetches_the_service_with_an_encoded_id_and_handles_404_without_a_toast():
@@ -154,7 +154,7 @@ def test_form_helpers_have_cases():
 
 def test_permissions_panel_markup():
     seg = segment('data-slot="permissions"', "</details>")
-    assert "<details" in seg and "<summary>Kiro permissions</summary>" in seg
+    assert "<details" in seg and "<summary>Kiro permissions (optional, for hands-off edits)</summary>" in seg
     assert "ChimericMesh never writes this file; paste it yourself." in seg
     assert re.search(r'<pre id="permText"', seg) and 'id="permCopy"' in seg
 

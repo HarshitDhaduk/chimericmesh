@@ -207,7 +207,7 @@ def test_ux03_action_toast_and_error_text_are_pure_and_have_cases():
     assert 'Approved p4. The agent will apply it; this card turns "done" when it reports back.' in text
     assert "Denied p4. The agent will not run it." in text and "Withdrew p4. Nothing will run." in text
     assert "That token was not accepted. The ghost wants the exact line from the token file." in pure_block()
-    assert "The mesh is not answering. Check that the hub is running, then try again." in text
+    assert "The mesh went quiet. Check that the hub is running, then try again." in text
 
 
 def test_ux03_approve_deny_withdraw_toast_and_keep_the_card_message():
@@ -261,7 +261,7 @@ def test_ux23_error_copy_is_friendly_but_the_pinned_strings_stay():
     pure = pure_block()
     for pinned in ("'token rejected'", "'unlock first'"):
         assert pinned in pure
-    assert "The mesh refused that (status ${" in pure and "Try again or check the hub log." in pure
+    assert "The mesh turned that away (status ${" in pure and "Try again or check the hub log." in pure
 
 
 # ---- B4 close the loop -------------------------------------------------------------------------------
@@ -421,3 +421,67 @@ def test_ux14_locked_discovery_says_why_the_scan_button_is_dimmed():
 
 def test_ux15_rule_pause_reason_shows_the_actor_in_plain_words():
     assert "String(r.status_reason).replace(" in code("ruleRow") and "actorText" in code("ruleRow")
+
+
+# ---- B7 first run and copy ---------------------------------------------------------------------------
+import json
+import shutil
+import subprocess
+import pytest
+def run_pure(expr: str):
+    """Evaluate a JS expression with the PURE block in scope (node), return the JSON result."""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    src = "(function(){" + pure_block() + "\nreturn JSON.stringify(" + expr + ");})()"
+    out = subprocess.run([node, "-e", f"process.stdout.write({src})"], capture_output=True, text=True, timeout=30, check=True)
+    return json.loads(out.stdout)
+# Coverage removed from the in-page self-test in B6 (200-line cap), restored here by running the real code.
+def test_pure_needs_token_matches_the_privileged_table():
+    r = run_pure("[needsToken('POST','/api/services'), needsToken('GET','/api/discovery/dismissals?x=1'),"
+                 " needsToken('GET','/api/incidents'), needsToken('POST','/api/proposals/p1/decide'),"
+                 " needsToken('POST','/api/demo/storm')]")
+    assert r == [True, True, False, True, False]
+def test_pure_state_label_known_unknown_and_inherited_keys():
+    assert run_pure("[stateLabel('service','never_seen'), stateLabel('proposal','done'), stateLabel('service','bogus'),"
+                    " stateLabel('nope','active'), stateLabel('service','constructor')]") == ["never seen", "done", "unknown", "unknown", "unknown"]
+def test_pure_next_backoff_doubles_to_a_cap_and_ignores_bad_input():
+    assert run_pure("[0,1,2,3,4,5,6,99,-1,2.5,'x',null].map(nextBackoff)") == [1, 2, 4, 8, 16, 30, 30, 30, 1, 1, 1, 1]
+def test_ux13_storm_button_is_demoted_once_an_incident_exists():
+    assert run_pure("[stormLabel(0), stormLabel(1), stormLabel(undefined), stormLabel(3)]") == [
+        "Summon a failure storm", "Another storm", "Summon a failure storm", "Another storm"]
+def test_ux13_header_storm_is_never_the_filled_button_and_follows_the_incident_list():
+    assert re.search(r'<button id="storm" class="ghost small"', ds.load_page())
+    assert "stormLabel(" in code("renderIncidents") and "$('storm')" in code("renderIncidents")
+def test_ux13_terminal_starts_with_a_hint_that_the_first_message_removes():
+    page = ds.load_page()
+    assert 'id="termHint"' in page and "ChimericBot is listening" in page and "Try !help." in page
+    assert page.index('id="transcript"') < page.index('id="termHint"') < page.index('id="newMsgs"')
+    assert "termHint" in code("appendMessages") and "tlog.replaceChildren()" in ds.script_text()
+def test_ux12_guide_lock_hint_is_pure_and_set_with_text_content():
+    assert run_pure("[guideLockText({complete:false}, true), guideLockText({complete:true}, true), guideLockText({complete:false}, false), guideLockText(null, true)]") == [
+        "Step 5 needs the admin token. Unlock first.", "", "", ""]
+    page = ds.load_page()
+    assert 'id="guideLockHint"' in page and page.index('id="guideSteps"') < page.index('id="guideLockHint"')
+    body = code("updateGuideLock")
+    assert "guideLockText(" in body and "textContent" in body and "innerHTML" not in body
+    assert "updateGuideLock" in code("applyLock") and "updateGuideLock" in code("loadWorkflow")
+def test_ux12_guide_grid_fits_six_steps_in_two_or_three_columns():
+    assert "minmax(180px, 1fr)" in rule(css(), ".steps")
+def test_ux24_permissions_summary_says_it_is_optional_and_copy_comes_first():
+    page = ds.load_page()
+    assert "<summary>Kiro permissions (optional, for hands-off edits)</summary>" in page
+    assert page.index('id="permCopy"') < page.index('id="permText"')
+def test_b7_empty_and_error_copy_names_the_problem_and_the_next_step():
+    s = ds.script_text()
+    for text in ("Nobody has haunted a fix into being", "The mesh went quiet. Check that the hub is running, then try again.",
+                 "The mesh turned that away (status ${status}). Try again or check the hub log."):
+        assert text in s, text
+    page = ds.load_page()
+    assert "This service is gone (or never existed)." in page and 'id="svcBack"' in page
+    assert "Locked: view only" in s and ">Unlock to approve</button>" in page
+    assert "Open that file, copy its single line, paste it here." in s
+    # security-relevant wording is unchanged
+    for pinned in ("'token rejected'", "'unlock first'"):
+        assert pinned in s
+    assert "That token was not accepted." in s
