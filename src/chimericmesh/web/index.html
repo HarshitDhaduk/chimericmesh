@@ -90,6 +90,10 @@
   [data-view] { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
   nav { display: flex; gap: 8px; flex-wrap: wrap; }
   nav button[aria-current="page"] { background: rgba(124,255,178,.18); }
+nav .count { display: inline-block; min-width: 1.4em; padding: 0 6px; margin-left: 4px; border: 1px solid var(--amber); border-radius: 10px; color: var(--amber); font-size: .75rem; text-align: center; }
+nav .count[hidden] { display: none; }
+.meta.warnline { color: var(--amber); }
+button.tag { font-size: .75rem; }
   .hdr-right { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   #status { max-width: 40ch; overflow-wrap: anywhere; }
   .banner { margin: 0; padding: 10px clamp(16px, 4vw, 48px); background: #2a1d08; color: var(--amber); border-bottom: 1px solid var(--amber); }
@@ -221,9 +225,9 @@
   </div>
   <nav aria-label="Views">
     <button class="ghost" type="button" data-nav="overview">Overview</button>
-    <button class="ghost" type="button" data-nav="services">Services</button>
+    <button class="ghost" type="button" data-nav="services">Services <span class="count" hidden></span></button>
     <button class="ghost" type="button" data-nav="discovery">Discovery</button>
-    <button class="ghost" type="button" data-nav="rules">Rules</button>
+    <button class="ghost" type="button" data-nav="rules">Rules <span class="count" hidden></span></button>
   </nav>
   <div class="hdr-right">
     <div id="status" class="meta" role="status" aria-live="polite"></div>
@@ -605,6 +609,39 @@ function unlockOutcome(status) {
   if (status === 401) return { ok: false, text: TOKEN_REJECTED_TEXT };
   return { ok: false, text: friendlyError(status) };
 }
+// What a finished proposal says about the loop (UX-18): the pill text, a warning, and whether the incident can be laid to rest.
+function closeLoop(p, inc) {
+  const done = Boolean(p) && p.status === 'done';
+  const passed = done && p.verification_result === 'passed';
+  const failed = done && p.verification_result === 'failed';
+  return {
+    pill: passed ? 'done, tests passed' : '',
+    warn: failed ? 'Tests failed. Deny it and ask the agent for another fix.' : '',
+    rest: passed && !(inc && inc.resolved),
+  };
+}
+// The line on an incident card about its newest live proposal (pending, approved or done); '' when none.
+function fixLine(proposals, incidentId) {
+  const live = (Array.isArray(proposals) ? proposals : []).filter((p) => String(p.incident_id) === String(incidentId) && ['pending', 'approved', 'done'].includes(p.status));
+  if (!live.length) return '';
+  const p = live.reduce((a, b) => ((b.created || 0) >= (a.created || 0) ? b : a));
+  return `fix #${capText(p.id, 20)} ${stateLabel('proposal', p.status)}`;
+}
+// How many pending proposals belong to one service.
+function pendingFor(proposals, serviceId) {
+  return (Array.isArray(proposals) ? proposals : []).filter((p) => p.status === 'pending' && p.service_id === serviceId).length;
+}
+// The counters on the Services and Rules tabs: visible text and the accessible name for each.
+function navBadges(incidents, proposals, rules, paused) {
+  const n = (Array.isArray(incidents) ? incidents : []).filter((i) => !i.resolved && i.service_id).length
+    + (Array.isArray(proposals) ? proposals : []).filter((p) => p.status === 'pending').length;
+  const susp = (Array.isArray(rules) ? rules : []).filter((r) => r.status === 'suspended').length;
+  const services = n > 0 ? { text: String(n), label: `Services, ${n} waiting` } : { text: '', label: 'Services' };
+  let r = { text: '', label: 'Rules' };
+  if (paused) r = { text: 'paused', label: 'Rules, auto-approval paused' };
+  else if (susp > 0) r = { text: String(susp), label: `Rules, ${susp} paused` };
+  return { services, rules: r };
+}
 function isNewer(id, lastId) { return typeof id === 'number' && Number.isFinite(id) && id > lastId; }
 function lockState(uiConfig, hasToken) {
   const flag = uiConfig ? uiConfig.enforce_access : null;
@@ -912,11 +949,23 @@ const SELFTEST_CASES = [
   { name: 'unlockOutcome', args: [200], expect: { ok: true, text: 'Unlocked' } },
   { name: 'unlockOutcome', args: [401], expect: { ok: false, text: 'That token was not accepted. The ghost wants the exact line from the token file.' } },
   { name: 'unlockOutcome', args: [0], expect: { ok: false, text: 'The mesh is not answering. Check that the hub is running, then try again.' } },
+  { name: 'closeLoop', args: [{ status: 'done', verification_result: 'passed' }, { resolved: false }], expect: { pill: 'done, tests passed', warn: '', rest: true } },
+  { name: 'closeLoop', args: [{ status: 'done', verification_result: 'passed' }, { resolved: true }], expect: { pill: 'done, tests passed', warn: '', rest: false } },
+  { name: 'closeLoop', args: [{ status: 'done', verification_result: 'failed' }, null], expect: { pill: '', warn: 'Tests failed. Deny it and ask the agent for another fix.', rest: false } },
+  { name: 'closeLoop', args: [{ status: 'approved', verification_result: 'passed' }, null], expect: { pill: '', warn: '', rest: false } },
+  { name: 'fixLine', args: [[{ id: 'p4', incident_id: 'a', status: 'approved', created: 2 }, { id: 'p3', incident_id: 'a', status: 'denied', created: 3 }], 'a'], expect: 'fix #p4 approved' },
+  { name: 'fixLine', args: [[{ id: 'p3', incident_id: 'a', status: 'withdrawn', created: 3 }], 'a'], expect: '' },
+  { name: 'fixLine', args: [null, 'a'], expect: '' },
+  { name: 'pendingFor', args: [[{ status: 'pending', service_id: 'x' }, { status: 'pending', service_id: 'y' }, { status: 'done', service_id: 'x' }], 'x'], expect: 1 },
+  { name: 'pendingFor', args: [null, 'x'], expect: 0 },
+  { name: 'navBadges', args: [[{ service_id: 'x' }, { service_id: null }, { service_id: 'x', resolved: true }], [{ status: 'pending' }], [], false], expect: { services: { text: '2', label: 'Services, 2 waiting' }, rules: { text: '', label: 'Rules' } } },
+  { name: 'navBadges', args: [[], [], [{ status: 'suspended' }, { status: 'active' }], false], expect: { services: { text: '', label: 'Services' }, rules: { text: '1', label: 'Rules, 1 paused' } } },
+  { name: 'navBadges', args: [null, null, null, true], expect: { services: { text: '', label: 'Services' }, rules: { text: 'paused', label: 'Rules, auto-approval paused' } } },
 ];
 function runSelfTest() {
   const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure,
     matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk, sortServices,
-    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText, canMakeRule, boundOf, clampInt, sevFloorText, expiryFromDays, ruleOverrides, mergeAudit, decideText, actionToast, friendlyError, unlockOutcome };
+    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText, canMakeRule, boundOf, clampInt, sevFloorText, expiryFromDays, ruleOverrides, mergeAudit, decideText, actionToast, friendlyError, unlockOutcome, closeLoop, fixLine, pendingFor, navBadges };
   const failures = [];
   for (const c of SELFTEST_CASES) {
     let got;
@@ -1034,7 +1083,7 @@ const post = (path, body) => request('POST', path, body || {});
 
 /* ==== STATE ==== */
 const COMMANDS = ['!help', '!status', '!incidents', '!explain', '!proposals', '!resolve', '!approve', '!deny'];
-const STATE = { route: { view: 'overview' }, uiConfig: UI_FALLBACK, lock: lockState(UI_FALLBACK, false), incidents: [], proposals: [], workflow: null, chatCursor: 0, history: [], histIdx: 0, flash: new Map() };
+const STATE = { route: { view: 'overview' }, uiConfig: UI_FALLBACK, lock: lockState(UI_FALLBACK, false), incidents: [], proposals: [], workflow: null, chatCursor: 0, history: [], histIdx: 0, flash: new Map(), navInc: [], navProp: [] };
 const state = STATE;
 const SEV = SEV_NAMES;
 const firstOpen = () => state.incidents.find((i) => !i.resolved);
@@ -1049,6 +1098,7 @@ const SCHED = [
   { id: 'service-detail', every: 5000, last: 0, view: 'service', run: () => loadServiceDetail() },
   { id: 'service-lists', every: 5000, last: 0, view: 'service', run: () => loadServiceLists() },
   { id: 'approvals-status', every: 5000, last: 0, view: '*', run: () => loadApprovalStatus() },
+  { id: 'nav-counts', every: 5000, last: 0, view: '*', run: () => loadNavData() },
   { id: 'rules-list', every: 5000, last: 0, view: 'rules', run: () => loadRules() },
   { id: 'audit-list', every: 5000, last: 0, view: 'rules', run: () => refreshAudit() },
   { id: 'scan-poll', every: 1000, last: 0, view: 'discovery', run: () => (scanRunning() ? pollScan() : null) },
@@ -1113,7 +1163,8 @@ function openPropose(i, card, actions, btn) {
 
 function renderIncidents(list, force) {
   if (document.querySelector('form.propose')) return; // never wipe a form being typed in
-  const key = JSON.stringify(list);
+  const fixes = list.map((i) => fixLine(state.proposals, i.id));
+  const key = JSON.stringify([list, fixes]);
   if (!force && key === lastIncKey) return;
   lastIncKey = key;
   const box = $('incidents'); box.replaceChildren();
@@ -1126,6 +1177,8 @@ function renderIncidents(list, force) {
     meta.append(`${SEV[i.severity]} · id ${i.id}${i.resolved ? ' · resolved' : ''}`); d.append(meta);
     d.append(el('div', 'sample', i.sample), el('p', '', i.hypothesis));
     const ol = el('ol'); i.remediation.forEach((s) => ol.append(el('li', '', s))); d.append(ol);
+    const fixText = fixLine(state.proposals, i.id);
+    if (fixText) d.append(el('div', 'meta fixline', fixText));
     const hint = el('div', 'meta'); d.append(hint);
     const actions = el('div', 'actions');
     const mk = (label, act, fn) => { const b = el('button', 'ghost', label); b.type = 'button'; b.dataset.act = act; b.onclick = fn; actions.append(b); return b; };
@@ -1137,6 +1190,11 @@ function renderIncidents(list, force) {
     if (!i.resolved) {
       const pb = mk('Propose a fix', 'propose', () => openPropose(i, d, actions, pb));
       mk('Lay to rest', 'resolve', () => resolveIncident(i.id));
+    }
+    if (i.service_id) {
+      const t = mk(`service: ${i.service_id}`, 'service', () => { here.hash = `#/services/${encodeURIComponent(i.service_id)}`; });
+      t.classList.add('tag');
+      t.setAttribute('aria-label', `Open service ${i.service_id}`);
     }
     d.append(actions); box.append(d);
   }
@@ -1188,7 +1246,8 @@ function renderProposalCard(p, incidentText, noteId) {
   const d = el('div', 'prop');
   const top = el('div', 'top');
   const st = ['pending', 'approved', 'denied', 'done'].includes(p.status) ? p.status : 'unknown';
-  const label = p.status === 'approved' ? 'approved - waiting for agent' : stateLabel('proposal', p.status);
+  const loop = closeLoop(p, findIncident(p.incident_id));
+  const label = loop.pill || (p.status === 'approved' ? 'approved - waiting for agent' : stateLabel('proposal', p.status));
   top.append(el('span', `pill ${st}`, label), el('span', 'meta', `#${p.id} · ${incidentText}`));
   if (p.approval && p.approval.by === 'rule') top.append(el('span', 'pill auto', 'AUTO-APPROVED'));
   d.append(top, el('div', 'act', p.action));
@@ -1216,6 +1275,17 @@ function renderProposalCard(p, incidentText, noteId) {
     if (noteId) { approve.setAttribute('aria-describedby', noteId); deny.setAttribute('aria-describedby', noteId); }
     a.append(approve, deny,
       actionButton('proposal-withdraw', 'Withdraw', () => withdrawProposal(p, msg), 'ghost small quiet', `Withdraw proposal ${p.id}`));
+    d.append(a);
+  }
+  if (loop.warn) d.append(el('div', 'meta warnline', loop.warn));
+  if (loop.rest) {
+    const a = el('div', 'actions');
+    const rest = el('button', 'small', 'Lay incident to rest');
+    rest.type = 'button';
+    rest.dataset.act = 'rest-incident';
+    rest.setAttribute('aria-label', `Lay incident ${p.incident_id} to rest`);
+    rest.onclick = async () => { rest.disabled = true; if (!(await resolveIncident(p.incident_id))) rest.disabled = false; };
+    a.append(rest);
     d.append(a);
   }
   if (canMakeRule(p)) {
@@ -1272,8 +1342,10 @@ async function withdrawProposal(p, msg) {
 }
 function renderProposals(force) {
   renderDecideStrip();
+  renderIncidents(state.incidents); // the fix line of an incident card follows the proposals
+  setNavData(state.incidents, state.proposals);
   const list = state.proposals.slice().sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 20);
-  const key = JSON.stringify([list, state.incidents.map((i) => [i.id, i.category, i.host])]);
+  const key = JSON.stringify([list, state.incidents.map((i) => [i.id, i.category, i.host, i.resolved])]);
   if (!force && key === lastPropKey) return;
   lastPropKey = key;
   updatePropNote();
@@ -1429,7 +1501,7 @@ async function resolveIncident(id) {
   const inc = state.incidents.find((i) => String(i.id) === sid);
   toast(actionToast(inc && inc.resolved ? 'resolve' : 'unconfirmed', sid));
   if (STATE.serviceDetail) STATE.serviceDetail.propKey = null;
-  if (STATE.route.view === 'service') await loadServiceLists();
+  if (STATE.route.view === 'service') { await loadNavData(); await loadServiceLists(); }
   return Boolean(inc && inc.resolved);
 }
 
@@ -1479,6 +1551,33 @@ function renderIdentity() {
   const access = STATE.lock && STATE.lock.locked ? 'locked (unlock to approve)' : 'unlocked';
   $('identity').textContent = you ? `You are ${you.nick} · ${access}` : '';
 }
+
+/* ---------- nav counters ---------- */
+function renderNav() {
+  const b = navBadges(STATE.navInc, STATE.navProp, STATE.rules, Boolean(STATE.approvalStatus && STATE.approvalStatus.paused));
+  const set = (sel, badge) => {
+    const btn = document.querySelector(sel);
+    const c = btn.querySelector('.count');
+    c.textContent = badge.text;
+    c.hidden = !badge.text;
+    btn.setAttribute('aria-label', badge.label);
+  };
+  set('nav [data-nav="services"]', b.services);
+  set('nav [data-nav="rules"]', b.rules);
+}
+function setNavData(incidents, proposals) {
+  STATE.navInc = Array.isArray(incidents) ? incidents : [];
+  STATE.navProp = Array.isArray(proposals) ? proposals : [];
+  renderNav();
+  if (STATE.route.view === 'services' && Array.isArray(STATE.services)) renderServices();
+}
+// Counters need the open incidents, the pending proposals and the rules on every view (plain reads, no token).
+async function loadNavData() {
+  const [i, p, r] = await Promise.allSettled([api('/api/incidents'), api('/api/proposals?status=pending'), api('/api/rules')]);
+  if (r.status === 'fulfilled' && Array.isArray(r.value)) STATE.rules = r.value;
+  setNavData(i.status === 'fulfilled' ? i.value : STATE.navInc, p.status === 'fulfilled' ? p.value : STATE.navProp);
+}
+const findIncident = (id) => state.incidents.concat(STATE.navInc).find((i) => String(i.id) === String(id));
 
 /* ---------- data loading ---------- */
 async function loadIncidents() { const i = await api('/api/incidents'); state.incidents = i; renderIncidents(i); renderProposals(); return i; }
@@ -1622,7 +1721,10 @@ function serviceCard(s, now) {
   top.append(el('h3', '', String(s.name)), el('span', `pill ${STATE_CLASS[s.state] || 'st-unknown'}`, stateLabel('service', s.state)));
   c.append(top, el('div', 'meta', `id ${s.id}`));
   if (s.builtin) c.append(el('div', 'meta', 'built in'));
-  c.append(el('div', 'meta', `last seen ${relTime(s.last_seen, now)} · ${Number(s.error_rate) || 0} errors/min · ${Number(s.open_incidents) || 0} open incidents`));
+  const open = Number(s.open_incidents) || 0;
+  c.append(el('div', 'meta', `last seen ${relTime(s.last_seen, now)} · ${Number(s.error_rate) || 0} errors/min · ${open} open incident${open === 1 ? '' : 's'}`));
+  const waiting = pendingFor(STATE.navProp, s.id);
+  if (waiting) top.append(el('span', 'pill pending', `${waiting} ${waiting === 1 ? 'fix' : 'fixes'} waiting`));
   const sources = Array.isArray(s.log_sources) ? s.log_sources : [];
   if (sources.length) {
     const ul = el('ul');
@@ -1645,7 +1747,7 @@ let lastSvcKey = null;
 function renderServices() {
   const list = sortServices(Array.isArray(STATE.services) ? STATE.services : []);
   const now = Date.now() / 1000;
-  const key = JSON.stringify([list, Math.floor(now / 30)]);
+  const key = JSON.stringify([list, Math.floor(now / 30), list.map((s) => pendingFor(STATE.navProp, s.id))]);
   if (key === lastSvcKey) return;
   lastSvcKey = key;
   const box = $('svcList');
@@ -2704,6 +2806,7 @@ function init() {
   applyLock();
   loadUiConfig();
   loadApprovalStatus();
+  loadNavData();
   showRoute();
   refresh(); fetchChat();
   startScheduler();

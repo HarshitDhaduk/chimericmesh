@@ -262,3 +262,58 @@ def test_ux23_error_copy_is_friendly_but_the_pinned_strings_stay():
     for pinned in ("'token rejected'", "'unlock first'"):
         assert pinned in pure
     assert "The mesh refused that (status ${" in pure and "Try again or check the hub log." in pure
+
+
+# ---- B4 close the loop -------------------------------------------------------------------------------
+def test_ux18_close_loop_helper_has_cases():
+    assert "closeLoop" in ds.functions(pure_block()) and "fixLine" in ds.functions(pure_block())
+    names = case_names()
+    assert names.count("closeLoop") >= 4 and names.count("fixLine") >= 3
+    text = cases_text()
+    assert "done, tests passed" in text and "Tests failed. Deny it and ask the agent for another fix." in text
+    assert "fix #p4 approved" in text
+
+
+def test_ux18_done_card_shows_the_pill_and_a_lay_to_rest_button_using_the_shared_resolve():
+    card = code("renderProposalCard")
+    assert "closeLoop(p, " in card and "Lay incident to rest" in card
+    assert "resolveIncident(p.incident_id)" in card
+    assert "innerHTML" not in card
+    assert "textContent" in ds.strip_comments(ds.script_text())
+    assert ".meta.warnline" in css()
+
+
+def test_ux18_incident_card_shows_the_linked_fix_and_rerenders_when_it_changes():
+    inc = code("renderIncidents")
+    assert "fixLine(" in inc and "fixline" in inc
+    assert "renderIncidents(" in code("renderProposals")
+    assert "i.resolved" in code("renderProposals")  # the proposals key follows the incident state
+
+
+def test_ux09_incident_cards_name_their_service_with_a_button_not_a_link():
+    inc = code("renderIncidents")
+    assert "i.service_id" in inc and "`service: ${" in inc
+    assert re.search(r"here\.hash = `#/services/\$\{encodeURIComponent\(i\.service_id\)\}`", inc)
+    assert "href" not in inc
+
+
+def test_ux09_service_cards_show_a_fix_waiting_pill_and_singular_incident_text():
+    card = code("serviceCard")
+    raw = ds.functions(ds.script_text())["serviceCard"]
+    assert "pendingFor(STATE.navProp, s.id)" in card
+    assert "'fix' : 'fixes'} waiting" in raw and "open incident${open === 1 ? '' : 's'}" in raw
+    assert "pendingFor" in ds.functions(pure_block())
+    assert case_names().count("pendingFor") >= 2
+
+
+def test_ux19_nav_counters_are_set_with_text_and_extend_the_accessible_name():
+    page = ds.load_page()
+    nav = re.search(r'<nav aria-label="Views">(.*?)</nav>', page, re.S).group(1)
+    assert nav.count('class="count"') == 2
+    body = code("renderNav")
+    assert "navBadges(" in body and "textContent" in body and "setAttribute('aria-label'" in body
+    assert "innerHTML" not in body
+    assert "navBadges" in ds.functions(pure_block()) and case_names().count("navBadges") >= 3
+    assert "Services, 2 waiting" in cases_text()
+    sched = ds.strip_comments(ds.section("SCHEDULER"))
+    assert re.search(r"id: 'nav-counts', every: 5000, last: 0, view: '\*'", sched)
