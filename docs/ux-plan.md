@@ -130,6 +130,10 @@ Estimates are for one developer who knows the file.
 | B1 | UX-07 | Done 2026-11-28. Deviation: the `overflow-wrap:break-word` override lives only inside the <=640 px block; the desktop `td` rule keeps `anywhere` (pinned by a test, desktop unchanged). Labels come from `RULE_COLS`/`AUDIT_COLS` (equal to the th texts, tested). |
 | B1 | UX-11(c) | Done 2026-11-28 |
 | B1 | UX-21 | Done 2026-11-28 |
+| B2 | UX-01 | Done 2026-11-28. `#decideStrip` and pure `decideText` (selftest cases). Pending proposals move up with class `has-pending` on `.col.left`; on phones (<=960 px) they come first (`order:0`, before the terminal). The strip text for several fixes is "N fixes are waiting for you. Newest: ...". |
+| B2 | UX-02 | Done 2026-11-28. Order: facts, proposals, incidents, live log, permissions. `#liveBox` max-height 260 px. design.md updated; two pinned tests updated for the new order. |
+| B2 | UX-05 | Done 2026-11-28. Deviation: note copy keeps the pinned substring "unlock first" ("Approve and Deny are locked: unlock first with the admin token. Withdraw works without it."). Note and Unlock button on both pages (`#propNote`, `#svcPropNote`); Approve/Deny get `aria-describedby`, set in `renderProposalCard` (not `lockButton`, which cannot know the page when the button is created). Withdraw is `quiet`, Approve is the filled button. Buttons stay `disabled` (R2.4). |
+| B2 | UX-20 | Done 2026-11-28: skip link (`#skip`, handler focuses `<main id="main">` without touching the hash, so the router is not triggered). The skull glyph was already `aria-hidden`. |
 
 Total about 11 hours. If time is short, ship B1, B2 and B3: together they cover all seven high findings (UX-01 to UX-07).
 
