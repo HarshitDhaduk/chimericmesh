@@ -122,6 +122,15 @@ Estimates are for one developer who knows the file.
 | B6 Rules/Audit/Discovery language | actor/action/subject display helpers, 24 h stamps, vocabulary legend, discovery empty result and lock hint. | UX-14, UX-15, UX-16 | 1.5 h | Low. Helpers are pure: add to `PURE` and `runSelfTest`. |
 | B7 First run and copy | demote storm button after first incident, terminal placeholder, guide grid and lock hint, permissions summary, spooky copy pass (section 5). | UX-12, UX-13, UX-24 | 1 h | Low. Keep six guide steps. |
 
+### Implementation status
+
+| batch | finding | status |
+|-------|---------|--------|
+| B1 | UX-06 | Done 2026-11-28. Also needed `.grid{align-items:stretch}` at <=960 px: at 320 px the Overview terminal panel was shrink-wrapped to 357 px. |
+| B1 | UX-07 | Done 2026-11-28. Deviation: the `overflow-wrap:break-word` override lives only inside the <=640 px block; the desktop `td` rule keeps `anywhere` (pinned by a test, desktop unchanged). Labels come from `RULE_COLS`/`AUDIT_COLS` (equal to the th texts, tested). |
+| B1 | UX-11(c) | Done 2026-11-28 |
+| B1 | UX-21 | Done 2026-11-28 |
+
 Total about 11 hours. If time is short, ship B1, B2 and B3: together they cover all seven high findings (UX-01 to UX-07).
 
 Suggested tests per batch: a static test for every new element id; a pure-function test for each new helper; the
