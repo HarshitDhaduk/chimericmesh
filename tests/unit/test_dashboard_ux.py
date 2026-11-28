@@ -227,7 +227,7 @@ def test_ux17_resolve_and_storm_confirm_on_the_page():
     body = code("resolveIncident")
     assert "!resolve ${" in body and "via dashboard" in body
     assert "toast(actionToast(inc && inc.resolved ? 'resolve' : 'unconfirmed'" in body
-    assert "resolveIncident(i.id)" in code("renderIncidents")
+    assert "resolveIncident(i.id)" in code("appendIncidentActions")
     st = code("storm")
     assert "toast(actionToast('storm'" in st
     assert "return true" in code("runCommand") and "return false" in code("runCommand")
@@ -291,7 +291,7 @@ def test_ux18_incident_card_shows_the_linked_fix_and_rerenders_when_it_changes()
 
 
 def test_ux09_incident_cards_name_their_service_with_a_button_not_a_link():
-    inc = code("renderIncidents")
+    inc = code("appendIncidentActions")
     assert "i.service_id" in inc and "`service: ${" in inc
     assert re.search(r"here\.hash = `#/services/\$\{encodeURIComponent\(i\.service_id\)\}`", inc)
     assert "href" not in inc
@@ -317,3 +317,49 @@ def test_ux19_nav_counters_are_set_with_text_and_extend_the_accessible_name():
     assert "Services, 2 waiting" in cases_text()
     sched = ds.strip_comments(ds.section("SCHEDULER"))
     assert re.search(r"id: 'nav-counts', every: 5000, last: 0, view: '\*'", sched)
+
+
+# ---- B5 service page and services list ---------------------------------------------------------------
+def test_ux08_service_page_has_a_crumb_back_to_the_list_and_a_state_pill():
+    page = ds.load_page()
+    assert re.search(r'<a href="#/services" id="svcCrumb">All services</a>', page)
+    assert page.index('id="svcCrumb"') < page.index('id="svcName"')
+    assert 'id="svcPill"' in page
+    body = code("renderServiceHeader")
+    assert "svcPill" in body and "STATE_CLASS" in body and "stateLabel('service', s.state)" in body
+    assert "innerHTML" not in body
+
+
+def test_ux09a_service_page_incidents_share_the_overview_actions():
+    shared = code("appendIncidentActions")
+    for act in ("'explain'", "'code'", "'propose'", "'resolve'"):
+        assert act in shared
+    assert "!i.resolved" in shared and "resolveIncident(i.id)" in shared
+    assert "appendIncidentActions(" in code("renderIncidents")
+    on_service = code("renderIncidentsFor")
+    assert "appendIncidentActions(" in on_service and "service: " not in on_service
+    assert "i.service_id" in shared and "noService" in shared
+
+
+def test_ux09a_service_page_keeps_a_propose_form_while_it_refreshes():
+    body = code("loadServiceLists")
+    assert "form.propose" in body
+    assert "key !== d.incKey" in body
+
+
+def test_ux10_service_meta_is_three_unbreakable_pieces_and_unassigned_is_explained():
+    c = css()
+    assert "white-space: nowrap" in rule(c, ".svc-card .facts-line span")
+    card = code("serviceCard")
+    assert "facts-line" in card and card.count("el('span'") >= 3
+    assert "Events no service claims yet. Add a service or run discovery to claim them." in ds.functions(ds.script_text())["serviceCard"]
+    assert "s.builtin" in card
+
+
+def test_ux22_service_form_asks_for_the_name_first_and_suggests_the_id():
+    body = code("renderServiceForm")
+    assert body.index("'svcFName'") < body.index("'svcFId'")
+    assert "slugify(" in body and "idEdited" in body
+    assert "Which feeds belong to this service. Leave empty to match by host or app name only." in ds.functions(ds.script_text())["renderServiceForm"]
+    assert "slugify" in ds.functions(pure_block())
+    assert case_names().count("slugify") >= 1  # the self-test is capped at 200 lines (test_dashboard_core)

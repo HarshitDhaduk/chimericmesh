@@ -110,7 +110,12 @@ button.tag { font-size: .75rem; }
   .svc-card h3 { margin: 0; font-size: 1rem; }
   .svc-card .top { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
   .svc-card ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
-  .svc-card .err { color: var(--blood); font-size: .8rem; }
+  #svcCrumb { font-size: .85rem; display: inline-block; margin-bottom: 6px; }
+ .svc-title { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+ .svc-title h2 { margin: 0; }
+ .svc-card .facts-line { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+ .svc-card .facts-line span { white-space: nowrap; }
+ .svc-card .err { color: var(--blood); font-size: .8rem; }
   .pill.st-active { color: var(--ghost); }
   .pill.st-idle { color: var(--amber); }
   .pill.st-never, .pill.st-unknown { color: var(--dim); }
@@ -331,7 +336,8 @@ button.tag { font-size: .75rem; }
   </div>
   <div id="view-service" data-view="service" hidden>
     <section id="svcDetail" aria-labelledby="svcName">
-      <h2 id="svcName">Service</h2>
+      <a href="#/services" id="svcCrumb">All services</a>
+      <div class="svc-title"><h2 id="svcName">Service</h2><span id="svcPill" class="pill" hidden></span></div>
       <dl class="facts">
         <dt>Id</dt><dd id="svcId"></dd>
         <dt>State</dt><dd id="svcState"></dd>
@@ -713,6 +719,12 @@ function sortServices(list) {
     return na < nb ? -1 : na > nb ? 1 : 0;
   });
 }
+// A service id suggested from a name: lower case letters and digits joined by single hyphens, at most 40 characters.
+// Empty when nothing usable is left or the result is the reserved id.
+function slugify(name) {
+  const s = String(name === null || name === undefined ? '' : name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
+  return s === 'unassigned' ? '' : s;
+}
 function splitList(text) { return String(text === null || text === undefined ? '' : text).split(',').map((x) => x.trim()).filter((x) => x); }
 // The create body: code_folder only when given (the server treats a missing key as "none").
 function serviceCreateBody(form) {
@@ -958,6 +970,7 @@ const SELFTEST_CASES = [
   { name: 'fixLine', args: [null, 'a'], expect: '' },
   { name: 'pendingFor', args: [[{ status: 'pending', service_id: 'x' }, { status: 'pending', service_id: 'y' }, { status: 'done', service_id: 'x' }], 'x'], expect: 1 },
   { name: 'pendingFor', args: [null, 'x'], expect: 0 },
+{ name: 'slugify', args: ['Web Proxy (prod)'], expect: 'web-proxy-prod' },
   { name: 'navBadges', args: [[{ service_id: 'x' }, { service_id: null }, { service_id: 'x', resolved: true }], [{ status: 'pending' }], [], false], expect: { services: { text: '2', label: 'Services, 2 waiting' }, rules: { text: '', label: 'Rules' } } },
   { name: 'navBadges', args: [[], [], [{ status: 'suspended' }, { status: 'active' }], false], expect: { services: { text: '', label: 'Services' }, rules: { text: '1', label: 'Rules, 1 paused' } } },
   { name: 'navBadges', args: [null, null, null, true], expect: { services: { text: '', label: 'Services' }, rules: { text: 'paused', label: 'Rules, auto-approval paused' } } },
@@ -1150,7 +1163,7 @@ function openPropose(i, card, actions, btn) {
     try {
       await post('/api/proposals', { incident_id: i.id, action: action.slice(0, 200) });
       f.remove(); msg.remove(); btn.focus();
-      await Promise.allSettled([loadProposals(), fetchChat(), loadWorkflow()]);
+      await Promise.allSettled([loadProposals(), fetchChat(), loadWorkflow(), STATE.route.view === 'service' ? loadServiceLists() : null]);
     } catch (err) {
       msg.textContent = err.message === '404' ? 'Incident no longer exists (404).' : friendlyError(err.status);
       ok.disabled = false;
@@ -1161,6 +1174,28 @@ function openPropose(i, card, actions, btn) {
   inp.focus(); inp.select();
 }
 
+// The action row of an incident card, shared by the Overview and the service page. noService leaves out the
+// "service: x" button (the service page already is that service).
+function appendIncidentActions(d, i, noService) {
+  const hint = el('div', 'meta'); d.append(hint);
+  const actions = el('div', 'actions');
+  const mk = (label, act, fn) => { const b = el('button', 'ghost', label); b.type = 'button'; b.dataset.act = act; b.onclick = fn; actions.append(b); return b; };
+  mk('Explain', 'explain', () => { runCommand(`!explain ${i.id}`); $('termInput').focus(); });
+  mk('Find in code', 'code', async () => {
+    try { const h = await api(`/api/incidents/${i.id}/code`); hint.textContent = h.length ? h.map((x) => `${x.file}:${x.line}`).join('  ') : 'No matching source found.'; }
+    catch (e) { hint.textContent = 'Could not look up code.'; }
+  });
+  if (!i.resolved) {
+    const pb = mk('Propose a fix', 'propose', () => openPropose(i, d, actions, pb));
+    mk('Lay to rest', 'resolve', () => resolveIncident(i.id));
+  }
+  if (i.service_id && !noService) {
+    const t = mk(`service: ${i.service_id}`, 'service', () => { here.hash = `#/services/${encodeURIComponent(i.service_id)}`; });
+    t.classList.add('tag');
+    t.setAttribute('aria-label', `Open service ${i.service_id}`);
+  }
+  d.append(actions);
+}
 function renderIncidents(list, force) {
   if (document.querySelector('form.propose')) return; // never wipe a form being typed in
   const fixes = list.map((i) => fixLine(state.proposals, i.id));
@@ -1179,24 +1214,8 @@ function renderIncidents(list, force) {
     const ol = el('ol'); i.remediation.forEach((s) => ol.append(el('li', '', s))); d.append(ol);
     const fixText = fixLine(state.proposals, i.id);
     if (fixText) d.append(el('div', 'meta fixline', fixText));
-    const hint = el('div', 'meta'); d.append(hint);
-    const actions = el('div', 'actions');
-    const mk = (label, act, fn) => { const b = el('button', 'ghost', label); b.type = 'button'; b.dataset.act = act; b.onclick = fn; actions.append(b); return b; };
-    mk('Explain', 'explain', () => { runCommand(`!explain ${i.id}`); $('termInput').focus(); });
-    mk('Find in code', 'code', async () => {
-      try { const h = await api(`/api/incidents/${i.id}/code`); hint.textContent = h.length ? h.map((x) => `${x.file}:${x.line}`).join('  ') : 'No matching source found.'; }
-      catch (e) { hint.textContent = 'Could not look up code.'; }
-    });
-    if (!i.resolved) {
-      const pb = mk('Propose a fix', 'propose', () => openPropose(i, d, actions, pb));
-      mk('Lay to rest', 'resolve', () => resolveIncident(i.id));
-    }
-    if (i.service_id) {
-      const t = mk(`service: ${i.service_id}`, 'service', () => { here.hash = `#/services/${encodeURIComponent(i.service_id)}`; });
-      t.classList.add('tag');
-      t.setAttribute('aria-label', `Open service ${i.service_id}`);
-    }
-    d.append(actions); box.append(d);
+    appendIncidentActions(d, i, false);
+    box.append(d);
   }
 }
 
@@ -1722,7 +1741,10 @@ function serviceCard(s, now) {
   c.append(top, el('div', 'meta', `id ${s.id}`));
   if (s.builtin) c.append(el('div', 'meta', 'built in'));
   const open = Number(s.open_incidents) || 0;
-  c.append(el('div', 'meta', `last seen ${relTime(s.last_seen, now)} · ${Number(s.error_rate) || 0} errors/min · ${open} open incident${open === 1 ? '' : 's'}`));
+  const facts = el('div', 'meta facts-line');
+  facts.append(el('span', '', `last seen ${relTime(s.last_seen, now)}`), el('span', '', `${Number(s.error_rate) || 0} errors/min`), el('span', '', `${open} open incident${open === 1 ? '' : 's'}`));
+  c.append(facts);
+  if (s.builtin) c.append(el('div', 'meta', 'Events no service claims yet. Add a service or run discovery to claim them.'));
   const waiting = pendingFor(STATE.navProp, s.id);
   if (waiting) top.append(el('span', 'pill pending', `${waiting} ${waiting === 1 ? 'fix' : 'fixes'} waiting`));
   const sources = Array.isArray(s.log_sources) ? s.log_sources : [];
@@ -1811,8 +1833,16 @@ function renderServiceForm(s) {
   const f = el('form', 'svc-form');
   f.setAttribute('aria-label', create ? 'Add service' : 'Edit service');
   f.append(el('h3', '', create ? 'Add service' : `Edit ${s.name}`));
-  if (create) f.append(field('Id', textInput('svcFId', '', 40)));
-  f.append(field('Name', textInput('svcFName', s ? s.name : '', 200)));
+  const nameIn = textInput('svcFName', s ? s.name : '', 200);
+  f.append(field('Name', nameIn));
+  if (create) {
+    // The id follows the name until the user types in it.
+    const idIn = textInput('svcFId', '', 40);
+    let idEdited = false;
+    idIn.addEventListener('input', () => { idEdited = true; });
+    nameIn.addEventListener('input', () => { if (!idEdited) idIn.value = slugify(nameIn.value); });
+    f.append(field('Id', idIn));
+  }
   f.append(field('Hosts (comma separated)', textInput('svcFHosts', s ? (s.hosts || []).join(', ') : '', 4000)));
   f.append(field('App names (comma separated)', textInput('svcFApps', s ? (s.app_names || []).join(', ') : '', 4000)));
   const protos = el('fieldset');
@@ -1822,6 +1852,7 @@ function renderServiceForm(s) {
     c.type = 'checkbox'; c.id = `svcFProto${i}`; c.value = p; c.checked = Boolean(s && (s.protocols || []).includes(p));
     protos.append(field(p, c));
   });
+  protos.append(el('div', 'meta', 'Which feeds belong to this service. Leave empty to match by host or app name only.'));
   f.append(protos);
   f.append(field('Code folder', textInput('svcFCode', s ? s.code_folder || '' : '', 1024)));
   f.append(el('h4', '', 'Log files'));
@@ -1846,7 +1877,7 @@ function renderServiceForm(s) {
   f.onsubmit = (ev) => { ev.preventDefault(); if (!save.disabled) saveService(); };
   f.append(actions, msg);
   box.append(f);
-  (create ? $('svcFId') : $('svcFName')).focus();
+  $('svcFName').focus();
 }
 function readServiceForm() {
   const idIn = $('svcFId');
@@ -1934,6 +1965,10 @@ function renderServiceHeader(s) {
   $('svcGone').hidden = true;
   setSlotsHidden(false);
   $('svcName').textContent = String(s.name);
+  const pill = $('svcPill');
+  pill.className = `pill ${STATE_CLASS[s.state] || 'st-unknown'}`;
+  pill.textContent = stateLabel('service', s.state);
+  pill.hidden = false;
   $('svcId').textContent = String(s.id);
   $('svcState').textContent = stateLabel('service', s.state);
   $('svcSeen').textContent = relTime(s.last_seen, Date.now() / 1000);
@@ -1965,6 +2000,7 @@ function renderIncidentsFor(list) {
     d.append(el('h3', '', `${String(i.category).toUpperCase()} on ${i.host} ×${i.count}`));
     d.append(el('div', 'meta', `${sevName(sev)} · id ${i.id}${i.resolved ? ' · resolved' : ' · open'}`));
     d.append(el('div', 'sample', i.sample), el('p', '', i.hypothesis));
+    appendIncidentActions(d, i, true);
     box.append(d);
   }
 }
@@ -1993,7 +2029,8 @@ async function loadServiceLists() {
   if (STATE.serviceDetail !== d) return;
   if (inc.status === 'fulfilled' && Array.isArray(inc.value)) {
     const key = JSON.stringify(inc.value);
-    if (key !== d.incKey) { d.incKey = key; renderIncidentsFor(inc.value); }
+    // never wipe a propose form being typed in; the next poll renders the list
+    if (key !== d.incKey && !document.querySelector('#svcIncidents form.propose')) { d.incKey = key; renderIncidentsFor(inc.value); }
   }
   if (prop.status === 'fulfilled' && Array.isArray(prop.value)) {
     const key = JSON.stringify(prop.value);
@@ -2007,6 +2044,7 @@ function openServiceDetail(id) {
   resetServiceLists();
   loadServiceLists();
   $('svcName').textContent = id;
+  $('svcPill').hidden = true;
   for (const k of ['svcId', 'svcState', 'svcSeen', 'svcRate', 'svcOpen']) $(k).textContent = '';
   $('svcGone').hidden = true;
   $('svcDetail').hidden = false;
