@@ -107,3 +107,82 @@ def test_ux06_stacked_grid_stretches_its_panels():
     """At 320 px the Overview terminal panel was shrink-wrapped to its min-content (357 px) by `align-items: start`."""
     m = media("max-width: 960px")
     assert "align-items: stretch" in rule(m, ".grid")
+
+
+# ---- B2 approve path first ---------------------------------------------------------------------------
+
+def page_ids() -> dict[str, dict]:
+    return {a.get("id"): a for _, a in ds.html_parser().tags if a.get("id")}
+
+
+def test_ux01_decide_strip_sits_between_stats_and_guide():
+    page = ds.load_page()
+    assert page.index('id="stats"') < page.index('id="decideStrip"') < page.index('id="guide"')
+    attrs = page_ids()["decideStrip"]
+    assert attrs.get("role") == "status" and "hidden" in attrs
+    assert 'id="decideReview"' in page and 'id="decideText"' in page
+
+
+def test_ux01_strip_is_filled_with_text_and_review_focuses_the_proposals():
+    body = code("renderDecideStrip")
+    assert "decideText(" in body and "textContent" in body and "has-pending" in body
+    assert "innerHTML" not in body
+    script = ds.strip_comments(ds.script_text())
+    assert re.search(r"\$\('decideReview'\)\.onclick = [^;]*scrollFocus\(\$\('propPanel'\)\)", script)
+    assert "renderDecideStrip(" in code("renderProposals")
+    assert "decideText" in ds.functions(pure_block())
+
+
+def test_ux01_decide_text_has_cases():
+    assert case_names().count("decideText") >= 4
+    text = cases_text()
+    assert "A fix is waiting for you: Add bounded backoff" in text
+    assert "2 fixes are waiting for you. Newest: " in text
+
+
+def test_ux01_pending_proposals_move_above_the_incidents():
+    c = css()
+    assert re.search(r"\.col\.left\.has-pending #propPanel \{ order: -1; \}", c)
+    narrow = media("max-width: 960px")
+    assert re.search(r"\.col\.left\.has-pending #propPanel\s*\{[^}]*order: 0", narrow)
+
+
+def test_ux02_service_page_puts_proposals_before_the_live_log():
+    page = ds.load_page()
+    seg = page[page.index('id="view-service"'): page.index("<!-- /view-service -->")]
+    assert re.findall(r'data-slot="([a-z-]+)"', seg) == ["proposals", "incidents", "live-log", "permissions"]
+    assert seg.index('id="svcDetail"') < seg.index('data-slot="proposals"')
+    assert "max-height: 260px" in rule(css(), "#liveBox.log")
+
+
+def test_ux05_both_pages_have_a_visible_lock_note_with_an_unlock_button():
+    ids = page_ids()
+    assert "propNote" in ids and "svcPropNote" in ids
+    body = code("renderLockNote")
+    assert "openUnlock" in body and "el('span', '', text)" in body and "replaceChildren" in body
+    upd = code("updatePropNote")
+    assert "renderLockNote($('propNote')" in upd and "renderLockNote($('svcPropNote')" in upd
+    assert "unlock first" in upd and "Withdraw works without it" in upd
+    assert "updatePropNote(" in code("renderServiceProposals")
+
+
+def test_ux05_approve_and_deny_point_at_the_note_and_withdraw_is_quiet():
+    card = code("renderProposalCard")
+    assert "setAttribute('aria-describedby', noteId)" in card
+    assert re.search(r"actionButton\('proposal-withdraw'[^\n]*'ghost small quiet'", card)
+    assert re.search(r"actionButton\('proposal-approve'[^\n]*'small'", card)
+    assert "renderProposalCard(p, " in code("renderProposals") and "'propNote'" in code("renderProposals")
+    assert "'svcPropNote'" in code("renderServiceProposals")
+    assert "button.quiet" in css()
+    # R2.4: still disabled, never aria-disabled
+    assert "b.disabled = true" in code("lockButton") and "aria-disabled" not in ds.script_text()
+
+
+def test_ux20_skip_link_and_main_target():
+    page = ds.load_page()
+    assert page.index('class="skip"') < page.index("<header>")
+    assert re.search(r'<main id="main" tabindex="-1">', page)
+    script = ds.strip_comments(ds.script_text())
+    assert re.search(r"\$\('skip'\)\.onclick = [^;]*preventDefault\(\)[^}]*\$\('main'\)\.focus\(\)", script)
+    assert ".skip:focus" in css()
+    assert 'class="pulse" aria-hidden="true"' in page

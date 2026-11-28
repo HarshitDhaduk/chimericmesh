@@ -48,6 +48,7 @@
     .col.right { position: static; max-height: none; overflow: visible; padding: 0; margin: 0; }
     #termPanel { order: 1; }
     #incPanel { order: 2; } #propPanel { order: 3; } #evPanel { order: 4; }
+    .col.left.has-pending #propPanel { order: 0; }
   }
   section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px; min-width: 0; }
   h2 { margin: 0 0 14px; font-size: .9rem; letter-spacing: .14em; text-transform: uppercase; color: var(--violet); }
@@ -63,6 +64,15 @@
   ol { margin: 6px 0 10px 18px; padding: 0; }
   .src { display: inline-block; padding: 0 6px; margin-right: 4px; border: 1px solid var(--line); border-radius: 3px; font-size: .75rem; color: var(--ghost); }
   .log { max-height: 520px; overflow: auto; }
+  #liveBox.log { max-height: 260px; }
+  .skip { position: absolute; left: -9999px; top: 8px; }
+  .skip:focus { left: 8px; z-index: 20; padding: 8px 12px; background: var(--panel); color: var(--ghost); border: 1px solid var(--ghost); border-radius: 4px; }
+  .decide { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 20px;
+    background: #2a1d08; border: 1px solid var(--amber); border-radius: 8px; color: var(--amber); }
+  .decide span { min-width: 0; overflow-wrap: anywhere; }
+  button.quiet { color: var(--dim); border-color: var(--line); }
+  .col.left.has-pending #propPanel { order: -1; }
+  .lock-note { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
   .row { display: grid; grid-template-columns: 62px 70px 1fr; gap: 10px; padding: 4px 0; border-bottom: 1px dashed #221f33; font-size: .85rem; }
   .row .m { overflow-wrap: anywhere; }
   .sev-err, .sev-crit, .sev-alert, .sev-emerg { color: var(--blood); }
@@ -203,6 +213,7 @@
 </style>
 </head>
 <body>
+<a class="skip" id="skip" href="#main">Skip to content</a>
 <header>
   <div>
     <h1><span>CHIMERIC</span>MESH <span class="pulse" aria-hidden="true">☠</span></h1>
@@ -233,9 +244,14 @@
   </div>
 </form>
 <div id="pausedBanner" class="banner" role="status" hidden></div>
-<main>
+<main id="main" tabindex="-1">
   <div id="view-overview" data-view="overview">
   <section class="stats" aria-label="Statistics" id="stats"></section>
+
+  <div id="decideStrip" class="decide" role="status" hidden>
+    <span id="decideText"></span>
+    <button type="button" id="decideReview">Review</button>
+  </div>
 
   <section id="guide" aria-labelledby="guide-h" class="hidden">
     <div class="guide-head">
@@ -320,15 +336,18 @@
         <dt>Open incidents</dt><dd id="svcOpen"></dd>
       </dl>
     </section>
-    <div data-slot="permissions">
-      <details id="permPanel" class="perm">
-        <summary>Kiro permissions</summary>
-        <p>ChimericMesh never writes this file; paste it yourself.</p>
-        <p class="meta">The text has two sections: prompt mode (Kiro asks before each change) and autonomous mode.</p>
-        <pre id="permText" class="sample"></pre>
-        <div class="actions"><button class="ghost small" type="button" id="permCopy">Copy</button></div>
-        <div class="meta" id="permMsg" role="status" aria-live="polite"></div>
-      </details>
+    <div data-slot="proposals">
+      <section aria-labelledby="svcProp-h">
+        <h2 id="svcProp-h">Proposals</h2>
+        <div class="meta" id="svcPropNote"></div>
+        <div id="svcProposals"></div>
+      </section>
+    </div>
+    <div data-slot="incidents">
+      <section aria-labelledby="svcInc-h">
+        <h2 id="svcInc-h">Incidents</h2>
+        <div id="svcIncidents" aria-live="polite"></div>
+      </section>
     </div>
     <div data-slot="live-log">
       <section id="liveLog" aria-labelledby="live-h">
@@ -355,17 +374,15 @@
         <div class="log" id="liveBox" role="log" aria-label="Live log rows"></div>
       </section>
     </div>
-    <div data-slot="incidents">
-      <section aria-labelledby="svcInc-h">
-        <h2 id="svcInc-h">Incidents</h2>
-        <div id="svcIncidents" aria-live="polite"></div>
-      </section>
-    </div>
-    <div data-slot="proposals">
-      <section aria-labelledby="svcProp-h">
-        <h2 id="svcProp-h">Proposals</h2>
-        <div id="svcProposals"></div>
-      </section>
+    <div data-slot="permissions">
+      <details id="permPanel" class="perm">
+        <summary>Kiro permissions</summary>
+        <p>ChimericMesh never writes this file; paste it yourself.</p>
+        <p class="meta">The text has two sections: prompt mode (Kiro asks before each change) and autonomous mode.</p>
+        <pre id="permText" class="sample"></pre>
+        <div class="actions"><button class="ghost small" type="button" id="permCopy">Copy</button></div>
+        <div class="meta" id="permMsg" role="status" aria-live="polite"></div>
+      </details>
     </div>
     <section id="svcGone" hidden>
       <p>This service no longer exists.</p>
@@ -556,6 +573,14 @@ function mergeAudit(existing, incoming) {
   for (const r of existing || []) byId.set(r.id, r);
   for (const r of incoming || []) byId.set(r.id, r);
   return Array.from(byId.values()).sort((a, b) => b.id - a.id);
+}
+// The text of the decide strip (UX-01): how many fixes wait and, for the newest, what it does. '' when none waits.
+function decideText(pending) {
+  const list = Array.isArray(pending) ? pending : [];
+  if (!list.length) return '';
+  const newest = list.reduce((a, b) => ((b.created || 0) >= (a.created || 0) ? b : a));
+  const what = capText(newest.action, 80);
+  return list.length === 1 ? `A fix is waiting for you: ${what}` : `${list.length} fixes are waiting for you. Newest: ${what}`;
 }
 function isNewer(id, lastId) { return typeof id === 'number' && Number.isFinite(id) && id > lastId; }
 function lockState(uiConfig, hasToken) {
@@ -793,6 +818,11 @@ const SELFTEST_CASES = [
   { name: 'mergeAudit', args: [[{ id: 5 }, { id: 4 }, { id: 3 }], [{ id: 6 }, { id: 5 }]], expect: [{ id: 6 }, { id: 5 }, { id: 4 }, { id: 3 }] },
   { name: 'mergeAudit', args: [[{ id: 1 }, { id: 3 }], [{ id: 2 }]], expect: [{ id: 3 }, { id: 2 }, { id: 1 }] },
   { name: 'mergeAudit', args: [null, [{ id: 1 }]], expect: [{ id: 1 }] },
+  { name: 'decideText', args: [[]], expect: '' },
+  { name: 'decideText', args: [null], expect: '' },
+  { name: 'decideText', args: [[{ action: 'Add bounded backoff to upstream.py', created: 5 }]], expect: 'A fix is waiting for you: Add bounded backoff to upstream.py' },
+  { name: 'decideText', args: [[{ action: 'old', created: 1 }, { action: 'new', created: 9 }]], expect: '2 fixes are waiting for you. Newest: new' },
+  { name: 'decideText', args: [[{ action: 'x'.repeat(90), created: 1 }]], expect: `A fix is waiting for you: ${'x'.repeat(80)}?` },
   { name: 'isNewer', args: [5, 4], expect: true },
   { name: 'isNewer', args: [4, 4], expect: false },
   { name: 'isNewer', args: [3, 4], expect: false },
@@ -853,7 +883,7 @@ const SELFTEST_CASES = [
 function runSelfTest() {
   const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure,
     matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk, sortServices,
-    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText, canMakeRule, boundOf, clampInt, sevFloorText, expiryFromDays, ruleOverrides, mergeAudit };
+    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText, canMakeRule, boundOf, clampInt, sevFloorText, expiryFromDays, ruleOverrides, mergeAudit, decideText };
   const failures = [];
   for (const c of SELFTEST_CASES) {
     let got;
@@ -1092,11 +1122,35 @@ function renderEvents(list) {
 /* ---------- proposals ---------- */
 let lastPropKey = null;
 // The hint under the Proposals heading: Approve and Deny need the token while the page is locked.
-function updatePropNote() {
-  $('propNote').textContent = STATE.lock && STATE.lock.locked ? 'Approve and Deny need the admin token: unlock first. Withdraw works without it.' : '';
+function renderLockNote(box, locked, text) {
+  box.replaceChildren();
+  if (!locked) return;
+  const wrap = el('span', 'lock-note');
+  wrap.append(el('span', '', text));
+  const b = el('button', 'ghost small', 'Unlock');
+  b.type = 'button';
+  b.onclick = () => openUnlock();
+  wrap.append(b);
+  box.append(wrap);
 }
+function updatePropNote() {
+  const locked = Boolean(STATE.lock && STATE.lock.locked);
+  const text = 'Approve and Deny are locked: unlock first with the admin token. Withdraw works without it.';
+  renderLockNote($('propNote'), locked, text);
+  renderLockNote($('svcPropNote'), locked, text);
+}
+// The strip above the guide that says a decision is waiting, and the class that lifts the proposals above the incidents (UX-01).
+function renderDecideStrip() {
+  const pending = state.proposals.filter((p) => p.status === 'pending');
+  const text = decideText(pending);
+  $('decideStrip').hidden = !text;
+  $('decideText').textContent = text;
+  document.querySelector('.col.left').classList.toggle('has-pending', pending.length > 0);
+}
+$('decideReview').onclick = () => scrollFocus($('propPanel'));
+$('skip').onclick = (ev) => { ev.preventDefault(); $('main').focus(); };
 // The one proposal renderer: used by the Overview panel and by the service detail. Every string is text.
-function renderProposalCard(p, incidentText) {
+function renderProposalCard(p, incidentText, noteId) {
   const d = el('div', 'prop');
   const top = el('div', 'top');
   const st = ['pending', 'approved', 'denied', 'done'].includes(p.status) ? p.status : 'unknown';
@@ -1121,9 +1175,11 @@ function renderProposalCard(p, incidentText) {
   msg.setAttribute('role', 'status');
   if (p.status === 'pending') {
     const a = el('div', 'actions');
-    a.append(actionButton('proposal-approve', 'Approve', () => decideProposal(p, true, msg), undefined, `Approve proposal ${p.id}`),
-      actionButton('proposal-deny', 'Deny', () => decideProposal(p, false, msg), 'ghost small warn', `Deny proposal ${p.id}`),
-      actionButton('proposal-withdraw', 'Withdraw', () => withdrawProposal(p, msg), undefined, `Withdraw proposal ${p.id}`));
+    const approve = actionButton('proposal-approve', 'Approve', () => decideProposal(p, true, msg), 'small', `Approve proposal ${p.id}`);
+    const deny = actionButton('proposal-deny', 'Deny', () => decideProposal(p, false, msg), 'ghost small warn', `Deny proposal ${p.id}`);
+    if (noteId) { approve.setAttribute('aria-describedby', noteId); deny.setAttribute('aria-describedby', noteId); }
+    a.append(approve, deny,
+      actionButton('proposal-withdraw', 'Withdraw', () => withdrawProposal(p, msg), 'ghost small quiet', `Withdraw proposal ${p.id}`));
     d.append(a);
   }
   if (canMakeRule(p)) {
@@ -1159,6 +1215,7 @@ async function withdrawProposal(p, msg) {
   await refreshProposalViews();
 }
 function renderProposals(force) {
+  renderDecideStrip();
   const list = state.proposals.slice().sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 20);
   const key = JSON.stringify([list, state.incidents.map((i) => [i.id, i.category, i.host])]);
   if (!force && key === lastPropKey) return;
@@ -1168,7 +1225,7 @@ function renderProposals(force) {
   if (!list.length) { box.append(el('p', 'empty', 'No proposals yet. An agent proposes fixes through MCP; you can simulate one from an incident card.')); return; }
   for (const p of list) {
     const inc = state.incidents.find((i) => String(i.id) === String(p.incident_id));
-    box.append(renderProposalCard(p, inc ? `${inc.category} on ${inc.host}` : `incident ${p.incident_id}`));
+    box.append(renderProposalCard(p, inc ? `${inc.category} on ${inc.host}` : `incident ${p.incident_id}`, 'propNote'));
   }
 }
 
@@ -1722,9 +1779,10 @@ function renderIncidentsFor(list) {
 function renderServiceProposals(list) {
   const box = $('svcProposals');
   box.replaceChildren();
+  updatePropNote();
   const sorted = list.slice().sort((a, b) => (b.created || 0) - (a.created || 0));
   if (!sorted.length) { box.append(el('p', 'empty', 'No proposals for this service.')); return; }
-  for (const p of sorted) box.append(renderProposalCard(p, `incident ${p.incident_id}`));
+  for (const p of sorted) box.append(renderProposalCard(p, `incident ${p.incident_id}`, 'svcPropNote'));
 }
 function resetServiceLists() {
   const d = STATE.serviceDetail;

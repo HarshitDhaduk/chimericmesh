@@ -50,7 +50,7 @@ def test_one_detail_container_with_header_and_named_slots():
     for ident in ("svcName", "svcId", "svcState", "svcSeen", "svcRate", "svcOpen", "svcGone", "svcBack"):
         assert f'id="{ident}"' in seg, ident
     slots = re.findall(r'data-slot="([a-z-]+)"', seg)
-    assert slots == ["permissions", "live-log", "incidents", "proposals"]
+    assert slots == ["proposals", "incidents", "live-log", "permissions"]  # UX-02, approved 2026-11-28
     assert "service no longer exists" in seg
 
 
@@ -291,7 +291,7 @@ def test_accept_body_cases_cover_the_documented_inputs():
 
 # ---- 7.1 service detail: live log ------------------------------------------------------------------------
 def live_markup() -> str:
-    return segment('data-slot="live-log"', 'data-slot="incidents"')
+    return segment('data-slot="live-log"', 'data-slot="permissions"')
 def test_live_log_markup_has_labelled_controls():
     seg = live_markup()
     for ident in ("livePause", "liveAuto", "liveSev", "liveText", "liveStatus", "liveBox"):
