@@ -418,3 +418,6 @@ def test_ux14_locked_discovery_says_why_the_scan_button_is_dimmed():
     assert page.index('id="discExplainer"') < page.index('id="discLockHint"') < page.index('id="discScanSlot"')
     assert "Scanning needs the admin token. Unlock first." in ds.script_text()
     assert "updateDiscLock" in code("applyLock") and "updateDiscLock" in code("renderDiscovery")
+
+def test_ux15_rule_pause_reason_shows_the_actor_in_plain_words():
+    assert "String(r.status_reason).replace(" in code("ruleRow") and "actorText" in code("ruleRow")

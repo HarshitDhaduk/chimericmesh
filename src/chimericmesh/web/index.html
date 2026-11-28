@@ -2420,7 +2420,7 @@ function ruleRow(r, now) {
   cell(`${r.max_per_hour}/hour · ${r.max_per_incident}/incident · ${r.max_files} files · ${r.max_lines} lines`);
   cell(`${r.uses_last_hour} / ${r.use_count}`);
   const st = cell(stateLabel('rule', r.status));
-  if (r.status === 'suspended' && r.status_reason) st.append(el('div', 'meta', String(r.status_reason)));
+  if (r.status === 'suspended' && r.status_reason) st.append(el('div', 'meta', String(r.status_reason).replace(/\b(?:rest|client):\S+/g, actorText)));
   cell(r.source_proposal_id ? String(r.source_proposal_id) : '');
   const td = el('td');
   td.setAttribute('data-label', RULE_COLS[col]);
