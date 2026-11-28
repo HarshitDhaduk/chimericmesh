@@ -845,7 +845,7 @@ const SELFTEST_CASES = [
   { name: 'decideText', args: [null], expect: '' },
   { name: 'decideText', args: [[{ action: 'Add bounded backoff to upstream.py', created: 5 }]], expect: 'A fix is waiting for you: Add bounded backoff to upstream.py' },
   { name: 'decideText', args: [[{ action: 'old', created: 1 }, { action: 'new', created: 9 }]], expect: '2 fixes are waiting for you. Newest: new' },
-  { name: 'decideText', args: [[{ action: 'x'.repeat(90), created: 1 }]], expect: `A fix is waiting for you: ${'x'.repeat(80)}?` },
+  { name: 'decideText', args: [[{ action: 'x'.repeat(90), created: 1 }]], expect: `A fix is waiting for you: ${'x'.repeat(80)}…` },
   { name: 'isNewer', args: [5, 4], expect: true },
   { name: 'isNewer', args: [4, 4], expect: false },
   { name: 'isNewer', args: [3, 4], expect: false },
