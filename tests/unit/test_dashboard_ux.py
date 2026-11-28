@@ -363,3 +363,58 @@ def test_ux22_service_form_asks_for_the_name_first_and_suggests_the_id():
     assert "Which feeds belong to this service. Leave empty to match by host or app name only." in ds.functions(ds.script_text())["renderServiceForm"]
     assert "slugify" in ds.functions(pure_block())
     assert case_names().count("slugify") >= 1  # the self-test is capped at 200 lines (test_dashboard_core)
+
+
+# ---- B6 rules, audit and discovery wording -----------------------------------------------------------
+def test_ux15_actor_action_subject_helpers_are_pure_and_have_cases():
+    pure = ds.functions(pure_block())
+    for name in ("actorText", "actionText", "subjectText"):
+        assert name in pure
+        assert case_names().count(name) >= 1
+    body = ds.strip_comments(pure["actorText"])
+    assert "'API'" in body and "'browser'" in body and "rest:" in body and "client:" in body
+
+
+def test_ux15_audit_rows_show_the_helpers_and_keep_the_raw_value_as_a_tooltip():
+    body = code("auditRow")
+    for helper in ("actorText(r.actor)", "actionText(r.action)", "subjectText(r.subject)"):
+        assert helper in body
+    assert "innerHTML" not in body
+    assert ".title" in body  # the raw actor stays reachable
+    assert 'class="rules audit"' in ds.load_page()
+    assert "white-space: nowrap" in rule(css(), "table.audit td:nth-child(1), table.audit td:nth-child(3)")
+    assert "white-space: normal" in media("max-width: 640px")
+
+
+def test_ux15_stamps_use_a_24_hour_clock():
+    body = code("fmtStamp")
+    assert "hour12: false" in body and "toLocaleString([]" in body
+
+
+def test_ux15_rules_page_has_a_legend_and_the_preview_asks_for_a_signature():
+    page = ds.load_page()
+    assert 'id="rulesLegend"' in page and "Paused rules can be resumed. Revoked rules are gone." in page
+    assert page.index('id="rulesLegend"') < page.index('id="rulesMsg"')
+    assert "Type the signature to match." in ds.functions(ds.script_text())["renderRuleForm"]
+
+
+def test_ux16_event_times_are_24_hour_and_do_not_wrap():
+    body = code("renderEvents")
+    assert "fmtTime(e.ts)" in body and "toLocaleTimeString" not in body
+    assert "white-space: nowrap" in rule(css(), ".row .t")
+
+
+def test_ux14_empty_scan_explains_and_offers_a_manual_add():
+    body = code("renderDiscovery")
+    assert "No apps found. Nothing visible is listening here. Add your service by hand." in ds.functions(ds.script_text())["renderDiscovery"]
+    assert "discEmptySlot" in body and "renderServiceForm(null)" in body and "'#/services'" in body
+    assert "no apps found" not in body
+    assert "innerHTML" not in body
+
+
+def test_ux14_locked_discovery_says_why_the_scan_button_is_dimmed():
+    page = ds.load_page()
+    assert 'id="discLockHint"' in page
+    assert page.index('id="discExplainer"') < page.index('id="discLockHint"') < page.index('id="discScanSlot"')
+    assert "Scanning needs the admin token. Unlock first." in ds.script_text()
+    assert "updateDiscLock" in code("applyLock") and "updateDiscLock" in code("renderDiscovery")

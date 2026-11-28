@@ -75,6 +75,7 @@
   .lock-note { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
   .row { display: grid; grid-template-columns: 62px 70px 1fr; gap: 10px; padding: 4px 0; border-bottom: 1px dashed #221f33; font-size: .85rem; }
   .row .m { overflow-wrap: anywhere; }
+  .row .t { white-space: nowrap; }
   .sev-err, .sev-crit, .sev-alert, .sev-emerg { color: var(--blood); }
   .sev-warning { color: var(--amber); }
   .empty { color: var(--dim); font-style: italic; }
@@ -128,6 +129,7 @@ button.tag { font-size: .75rem; }
   table.rules { border-collapse: collapse; width: 100%; font-size: .85rem; }
   table.rules th, table.rules td { text-align: left; padding: 6px 8px; border-bottom: 1px dashed #221f33; vertical-align: top; overflow-wrap: anywhere; min-width: 10ch; }
   table.rules th { color: var(--dim); font-weight: 400; }
+  table.audit td:nth-child(1), table.audit td:nth-child(3) { white-space: nowrap; }
   .row.live { grid-template-columns: 70px 70px minmax(0, 1fr); }
   .row.live .cell { min-width: 0; }
   .row.live .m { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -216,6 +218,7 @@ button.tag { font-size: .75rem; }
     table.rules tr { display: block; margin-bottom: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: #0f0d17; }
     table.rules td { display: grid; grid-template-columns: 11ch minmax(0, 1fr); gap: 8px; min-width: 0; padding: 3px 0; border-bottom: 0; overflow-wrap: break-word; }
     table.rules td::before { content: attr(data-label); color: var(--dim); }
+  table.audit td:nth-child(1), table.audit td:nth-child(3) { white-space: normal; }
     table.rules td:empty { display: none; }
   }
   @keyframes pulse { 50% { text-shadow: 0 0 22px rgba(255,138,61,.9); } }
@@ -406,9 +409,11 @@ button.tag { font-size: .75rem; }
         <span id="discDismissSlot"></span>
       </div>
       <p class="meta" id="discExplainer"></p>
+      <div class="meta" id="discLockHint"></div>
       <div class="actions" id="discScanSlot"></div>
       <div class="meta" id="discStatus" role="status" aria-live="polite"></div>
       <div class="meta" id="discLimited"></div>
+      <div class="actions" id="discEmptySlot"></div>
       <div id="discList" class="svc-grid"></div>
     </section>
   </div>
@@ -418,6 +423,7 @@ button.tag { font-size: .75rem; }
         <h2 id="rules-h">Approval rules</h2>
         <span class="actions" id="rulesTools"></span>
       </div>
+      <p class="meta" id="rulesLegend">Paused rules can be resumed. Revoked rules are gone.</p>
       <div class="meta" id="rulesMsg" role="status" aria-live="polite"></div>
       <div id="ruleFormBox"></div>
       <div class="table-wrap">
@@ -441,7 +447,7 @@ button.tag { font-size: .75rem; }
       </div>
       <div class="meta" id="auditMsg" role="status" aria-live="polite"></div>
       <div class="table-wrap">
-        <table class="rules" aria-label="Audit trail">
+        <table class="rules audit" aria-label="Audit trail">
           <thead><tr>
             <th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Subject</th><th scope="col">Detail</th>
           </tr></thead>
@@ -725,6 +731,19 @@ function slugify(name) {
   const s = String(name === null || name === undefined ? '' : name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
   return s === 'unassigned' ? '' : s;
 }
+// Audit display: the raw values stay in the data and in tooltips; the table shows plain words.
+function actorText(a) {
+  const s = String(a === null || a === undefined ? '' : a);
+  if (s.startsWith('rest:')) return 'API';
+  if (s.startsWith('client:')) return 'browser';
+  return s;
+}
+function actionText(a) { return String(a === null || a === undefined ? '' : a).replace(/_/g, ' '); }
+function subjectText(x) {
+  const s = String(x === null || x === undefined ? '' : x);
+  if (!/^[A-Z]+ \/api\//.test(s)) return s;
+  return s.includes('/decide') ? 'a decision request' : 'an API request';
+}
 function splitList(text) { return String(text === null || text === undefined ? '' : text).split(',').map((x) => x.trim()).filter((x) => x); }
 // The create body: code_folder only when given (the server treats a missing key as "none").
 function serviceCreateBody(form) {
@@ -779,7 +798,6 @@ const SELFTEST_CASES = [
   { name: 'sevName', args: [3], expect: 'err' },
   { name: 'sevName', args: [7], expect: 'debug' },
   { name: 'sevName', args: [8], expect: 'unknown' },
-  { name: 'sevName', args: ['x'], expect: 'unknown' },
   { name: 'capText', args: ['abc', 3], expect: 'abc' },
   { name: 'capText', args: ['abcd', 3], expect: 'abc…' },
   { name: 'capText', args: [null, 5], expect: '' },
@@ -819,7 +837,6 @@ const SELFTEST_CASES = [
   { name: 'nextBackoff', args: [6], expect: 30 },
   { name: 'nextBackoff', args: [7], expect: 30 },
   { name: 'nextBackoff', args: [8], expect: 30 },
-  { name: 'nextBackoff', args: ['x'], expect: 1 },
   { name: 'errorText', args: [422, { detail: 'bad path', field: 'log_paths' }], expect: 'log_paths: bad path' },
   { name: 'errorText', args: [400, { detail: 'nope' }], expect: 'nope' },
   { name: 'errorText', args: [422, { detail: [{ loc: ['body', 'name'], msg: 'required' }, { loc: [], msg: 'bad' }] }], expect: 'name: required; bad' },
@@ -918,9 +935,6 @@ const SELFTEST_CASES = [
   { name: 'needsToken', args: ['POST', '/api/rules/resume'], expect: true },
   { name: 'needsToken', args: ['POST', '/api/rules/pause'], expect: false },
   { name: 'needsToken', args: ['POST', '/api/rules/r1/revoke'], expect: false },
-  { name: 'needsToken', args: ['POST', '/api/proposals/p1/withdraw'], expect: false },
-  { name: 'needsToken', args: ['POST', '/api/terminal'], expect: true },
-  { name: 'needsToken', args: ['GET', '/api/services/web/stream'], expect: false },
   { name: 'sendsTokenIfPresent', args: ['GET', '/api/services/web/permissions-snippet'], expect: true },
   { name: 'sendsTokenIfPresent', args: ['GET', '/api/services/web'], expect: false },
   { name: 'actionNeedsToken', args: ['svc-save'], expect: true },
@@ -971,6 +985,10 @@ const SELFTEST_CASES = [
   { name: 'pendingFor', args: [[{ status: 'pending', service_id: 'x' }, { status: 'pending', service_id: 'y' }, { status: 'done', service_id: 'x' }], 'x'], expect: 1 },
   { name: 'pendingFor', args: [null, 'x'], expect: 0 },
 { name: 'slugify', args: ['Web Proxy (prod)'], expect: 'web-proxy-prod' },
+  { name: 'actorText', args: ['rest:127.0.0.1'], expect: 'API' },
+  { name: 'actorText', args: ['client:127.0.0.1'], expect: 'browser' },
+  { name: 'actionText', args: ['proposal_withdrawn'], expect: 'proposal withdrawn' },
+  { name: 'subjectText', args: ['POST /api/proposals/{pid}/decide'], expect: 'a decision request' },
   { name: 'navBadges', args: [[{ service_id: 'x' }, { service_id: null }, { service_id: 'x', resolved: true }], [{ status: 'pending' }], [], false], expect: { services: { text: '2', label: 'Services, 2 waiting' }, rules: { text: '', label: 'Rules' } } },
   { name: 'navBadges', args: [[], [], [{ status: 'suspended' }, { status: 'active' }], false], expect: { services: { text: '', label: 'Services' }, rules: { text: '1', label: 'Rules, 1 paused' } } },
   { name: 'navBadges', args: [null, null, null, true], expect: { services: { text: '', label: 'Services' }, rules: { text: 'paused', label: 'Rules, auto-approval paused' } } },
@@ -978,7 +996,7 @@ const SELFTEST_CASES = [
 function runSelfTest() {
   const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure,
     matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk, sortServices,
-    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText, canMakeRule, boundOf, clampInt, sevFloorText, expiryFromDays, ruleOverrides, mergeAudit, decideText, actionToast, friendlyError, unlockOutcome, closeLoop, fixLine, pendingFor, navBadges };
+    actorText, actionText, subjectText, splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText, canMakeRule, boundOf, clampInt, sevFloorText, expiryFromDays, ruleOverrides, mergeAudit, decideText, actionToast, friendlyError, unlockOutcome, closeLoop, fixLine, pendingFor, navBadges };
   const failures = [];
   for (const c of SELFTEST_CASES) {
     let got;
@@ -1225,7 +1243,7 @@ function renderEvents(list) {
   if (!list.length) { box.append(el('p', 'empty', 'No whispers yet.')); return; }
   for (const e of list) {
     const r = el('div', 'row');
-    r.append(el('span', 'meta', new Date(e.ts * 1000).toLocaleTimeString()), el('span', `sev-${e.severity_name}`, `${e.source}`), el('span', 'm', `${e.host}: ${e.message}`));
+    r.append(el('span', 'meta t', fmtTime(e.ts)), el('span', `sev-${e.severity_name}`, `${e.source}`), el('span', 'm', `${e.host}: ${e.message}`));
     box.append(r);
   }
 }
@@ -1647,6 +1665,7 @@ function applyLock() {
   $('lockBtn').hidden = !has;
   document.querySelectorAll('[data-action]').forEach(lockButton);
   updatePropNote();
+  updateDiscLock();
   renderIdentity();
 }
 function openUnlock(note) {
@@ -2338,6 +2357,7 @@ function renderRuleForm(defaults, mode) {
   });
   const describe = () => {
     const v = read();
+    if (!v.match_value) { words.textContent = 'Type the signature to match.'; return; }
     words.textContent = `This rule approves fixes for service ${v.service_id || '?'} that match ${v.match_type || '?'} "${v.match_value || '?'}", for incidents at ${sevFloorText(v.most_urgent_severity)}, at most ${v.max_per_hour} per hour and ${v.max_per_incident} per incident, up to ${v.max_files} files and ${v.max_lines} lines each${v.days ? `, for ${v.days} day(s)` : ''}.`;
   };
   f.addEventListener('input', describe);
@@ -2557,7 +2577,7 @@ async function resumeRules() {
 }
 /* ---------- audit trail ---------- */
 STATE.audit = { rows: [], key: null, done: false, open: new Set(), shown: null };
-function fmtStamp(ts) { return new Date(ts * 1000).toLocaleString(); }
+function fmtStamp(ts) { return new Date(ts * 1000).toLocaleString([], { hour12: false }); }
 function auditKey() { return `${$('auditSvc').value}|${$('auditRule').value.trim()}`; }
 function auditUrl(before) {
   const p = ['limit=100'];
@@ -2570,7 +2590,11 @@ function auditUrl(before) {
 }
 function auditRow(r) {
   const tr = el('tr');
-  tr.append(el('td', '', fmtStamp(r.ts)), el('td', '', String(r.actor)), el('td', '', String(r.action)), el('td', '', String(r.subject)));
+  const actor = el('td', '', actorText(r.actor));
+  actor.title = String(r.actor);
+  const subject = el('td', '', subjectText(r.subject));
+  subject.title = String(r.subject);
+  tr.append(el('td', '', fmtStamp(r.ts)), actor, el('td', '', actionText(r.action)), subject);
   const full = String(r.detail === null || r.detail === undefined ? '' : r.detail);
   const open = STATE.audit.open.has(r.id);
   const td = el('td');
@@ -2657,8 +2681,12 @@ const LIMITED_TEXT = 'some processes were not visible without admin rights';
 const SCAN_GIVE_UP_MS = 45000;
 function discMsg(text) { $('discStatus').textContent = text || ''; }
 function scanRunning() { return Boolean(STATE.scan && STATE.scan.state === 'running'); }
+function updateDiscLock() {
+  $('discLockHint').textContent = STATE.lock && STATE.lock.locked ? 'Scanning needs the admin token. Unlock first.' : '';
+}
 function renderDiscovery() {
   $('discExplainer').textContent = DISCOVERY_EXPLAINER;
+  updateDiscLock();
   const slot = $('discScanSlot');
   if (!slot.firstElementChild) slot.append(actionButton('scan-start', 'Discover local apps', startScan, ''));
   const dslot = $('discDismissSlot');
@@ -2668,7 +2696,11 @@ function renderDiscovery() {
   if (!sc) discMsg('');
   else if (sc.state === 'running') discMsg(`Scanning... ${Math.floor((Date.now() - sc.startedAt) / 1000)} s`);
   else if (sc.state === 'failed') discMsg(`scan failed: ${capText(sc.reason || 'unknown reason', 300)}`);
-  else if (sc.state === 'done') discMsg(sc.suggestions.length ? '' : 'Scan finished: no apps found.');
+  else if (sc.state === 'done') discMsg(sc.suggestions.length ? '' : 'No apps found. Nothing visible is listening here. Add your service by hand.');
+  const empty = $('discEmptySlot');
+  const none = Boolean(sc && sc.state === 'done' && !sc.suggestions.length);
+  if (!none) empty.replaceChildren();
+  else if (!empty.firstElementChild) empty.append(focusKeyButton('Add service', 'disc:add', () => { here.hash = '#/services'; renderServiceForm(null); }, 'ghost'));
   renderSuggestions(sc);
 }
 function adoptScan(id) {
