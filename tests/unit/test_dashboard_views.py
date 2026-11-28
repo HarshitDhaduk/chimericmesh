@@ -50,8 +50,8 @@ def test_one_detail_container_with_header_and_named_slots():
     for ident in ("svcName", "svcId", "svcState", "svcSeen", "svcRate", "svcOpen", "svcGone", "svcBack"):
         assert f'id="{ident}"' in seg, ident
     slots = re.findall(r'data-slot="([a-z-]+)"', seg)
-    assert slots == ["permissions", "live-log", "incidents", "proposals"]
-    assert "service no longer exists" in seg
+    assert slots == ["proposals", "incidents", "live-log", "permissions"]  # UX-02, approved 2026-11-28
+    assert "This service is gone (or never existed)." in seg
 
 
 def test_detail_fetches_the_service_with_an_encoded_id_and_handles_404_without_a_toast():
@@ -154,7 +154,7 @@ def test_form_helpers_have_cases():
 
 def test_permissions_panel_markup():
     seg = segment('data-slot="permissions"', "</details>")
-    assert "<details" in seg and "<summary>Kiro permissions</summary>" in seg
+    assert "<details" in seg and "<summary>Kiro permissions (optional, for hands-off edits)</summary>" in seg
     assert "ChimericMesh never writes this file; paste it yourself." in seg
     assert re.search(r'<pre id="permText"', seg) and 'id="permCopy"' in seg
 
@@ -291,7 +291,7 @@ def test_accept_body_cases_cover_the_documented_inputs():
 
 # ---- 7.1 service detail: live log ------------------------------------------------------------------------
 def live_markup() -> str:
-    return segment('data-slot="live-log"', 'data-slot="incidents"')
+    return segment('data-slot="live-log"', 'data-slot="permissions"')
 def test_live_log_markup_has_labelled_controls():
     seg = live_markup()
     for ident in ("livePause", "liveAuto", "liveSev", "liveText", "liveStatus", "liveBox"):

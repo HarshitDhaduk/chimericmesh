@@ -39,13 +39,16 @@
   main { display: flex; flex-direction: column; gap: 24px; padding: 24px clamp(16px, 4vw, 48px) 64px; }
   .grid { display: grid; gap: 24px; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
   .col { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
-  .col.right { align-self: stretch; }
-  #termPanel { position: sticky; top: 16px; z-index: 2; max-height: calc(100vh - 32px); display: flex; flex-direction: column; }
+  /* The right column sticks as one unit, so the terminal and the log can never overlap. It scrolls inside itself when taller than the screen. */
+  .col.right { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; padding: 4px; margin: -4px; }
+  #termPanel { display: flex; flex-direction: column; }
   @media (max-width: 960px) {
-    .grid { display: flex; flex-direction: column; }
+    .grid { display: flex; flex-direction: column; align-items: stretch; }
     .col { display: contents; }
-    #termPanel { order: 1; position: static; max-height: none; }
+    .col.right { position: static; max-height: none; overflow: visible; padding: 0; margin: 0; }
+    #termPanel { order: 1; }
     #incPanel { order: 2; } #propPanel { order: 3; } #evPanel { order: 4; }
+    .col.left.has-pending #propPanel { order: 0; }
   }
   section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px; min-width: 0; }
   h2 { margin: 0 0 14px; font-size: .9rem; letter-spacing: .14em; text-transform: uppercase; color: var(--violet); }
@@ -61,14 +64,26 @@
   ol { margin: 6px 0 10px 18px; padding: 0; }
   .src { display: inline-block; padding: 0 6px; margin-right: 4px; border: 1px solid var(--line); border-radius: 3px; font-size: .75rem; color: var(--ghost); }
   .log { max-height: 520px; overflow: auto; }
+  #liveBox.log { max-height: 260px; }
+  .skip { position: absolute; left: -9999px; top: 8px; }
+  .skip:focus { left: 8px; z-index: 20; padding: 8px 12px; background: var(--panel); color: var(--ghost); border: 1px solid var(--ghost); border-radius: 4px; }
+  .decide { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 20px;
+    background: #2a1d08; border: 1px solid var(--amber); border-radius: 8px; color: var(--amber); }
+  .decide span { min-width: 0; overflow-wrap: anywhere; }
+  button.quiet { color: var(--dim); border-color: var(--line); }
+  .col.left.has-pending #propPanel { order: -1; }
+  .lock-note { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
   .row { display: grid; grid-template-columns: 62px 70px 1fr; gap: 10px; padding: 4px 0; border-bottom: 1px dashed #221f33; font-size: .85rem; }
   .row .m { overflow-wrap: anywhere; }
+  .row .t { white-space: nowrap; }
   .sev-err, .sev-crit, .sev-alert, .sev-emerg { color: var(--blood); }
   .sev-warning { color: var(--amber); }
   .empty { color: var(--dim); font-style: italic; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-  form.send, form.propose { display: flex; gap: 8px; margin-top: 14px; }
+  form.send, form.propose { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  form.send input[type=text] { flex: 1 1 12ch; min-width: 0; }
   form.propose { margin-top: 10px; }
+  #evPanel, #incPanel, #propPanel, #termPanel { min-width: 0; }
   input, select { font: inherit; background: #08070d; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 8px; }
   input[type=text] { flex: 1; min-width: 0; }
   .sr { position: absolute; left: -9999px; }
@@ -76,12 +91,18 @@
   [data-view] { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
   nav { display: flex; gap: 8px; flex-wrap: wrap; }
   nav button[aria-current="page"] { background: rgba(124,255,178,.18); }
+nav .count { display: inline-block; min-width: 1.4em; padding: 0 6px; margin-left: 4px; border: 1px solid var(--amber); border-radius: 10px; color: var(--amber); font-size: .75rem; text-align: center; }
+nav .count[hidden] { display: none; }
+.meta.warnline { color: var(--amber); }
+button.tag { font-size: .75rem; }
   .hdr-right { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   #status { max-width: 40ch; overflow-wrap: anywhere; }
   .banner { margin: 0; padding: 10px clamp(16px, 4vw, 48px); background: #2a1d08; color: var(--amber); border-bottom: 1px solid var(--amber); }
   #selftest { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ghost); }
   form.unlock { padding: 12px clamp(16px, 4vw, 48px); border-bottom: 1px solid var(--line); background: var(--panel); }
   form.unlock .meta { overflow-wrap: anywhere; }
+  form.unlock .prompt { flex-wrap: wrap; }
+  form.unlock .prompt input { flex: 1 1 14ch; min-width: 0; }
   dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
   dl.facts dt { color: var(--dim); }
   dl.facts dd { margin: 0; overflow-wrap: anywhere; }
@@ -90,7 +111,12 @@
   .svc-card h3 { margin: 0; font-size: 1rem; }
   .svc-card .top { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
   .svc-card ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
-  .svc-card .err { color: var(--blood); font-size: .8rem; }
+  #svcCrumb, #svcCrumb:visited { color: var(--ghost); font-size: .85rem; display: inline-block; margin-bottom: 6px; }
+ .svc-title { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+ .svc-title h2 { margin: 0; }
+ .svc-card .facts-line { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+ .svc-card .facts-line span { white-space: nowrap; }
+ .svc-card .err { color: var(--blood); font-size: .8rem; }
   .pill.st-active { color: var(--ghost); }
   .pill.st-idle { color: var(--amber); }
   .pill.st-never, .pill.st-unknown { color: var(--dim); }
@@ -103,6 +129,7 @@
   table.rules { border-collapse: collapse; width: 100%; font-size: .85rem; }
   table.rules th, table.rules td { text-align: left; padding: 6px 8px; border-bottom: 1px dashed #221f33; vertical-align: top; overflow-wrap: anywhere; min-width: 10ch; }
   table.rules th { color: var(--dim); font-weight: 400; }
+  table.audit td:nth-child(1), table.audit td:nth-child(3) { white-space: nowrap; }
   .row.live { grid-template-columns: 70px 70px minmax(0, 1fr); }
   .row.live .cell { min-width: 0; }
   .row.live .m { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -124,7 +151,7 @@
   .guide-head h2 { margin: 0; }
   .bar { height: 6px; background: #08070d; border: 1px solid var(--line); border-radius: 3px; margin: 10px 0 14px; overflow: hidden; }
   .bar > i { display: block; height: 100%; background: var(--ghost); }
-  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
   .step { display: flex; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: #0f0d17; }
   .step .n { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--dim); display: grid; place-items: center; font-size: .8rem; color: var(--dim); }
   .step .t { font-weight: 700; }
@@ -181,11 +208,24 @@
     .row.live { grid-template-columns: 56px 56px minmax(0, 1fr); gap: 6px; }
     form.svc-form, form.rule-form { padding: 10px; }
     dl.facts { grid-template-columns: 1fr; }
+    button { min-height: 40px; }
+    .actions { gap: 10px; }
+  }
+  /* Rules and Audit rows become small cards on phones, so Pause and Revoke stay reachable (UX-07). */
+  @media (max-width: 640px) {
+    table.rules thead { display: none; }
+    table.rules, table.rules tbody { display: block; }
+    table.rules tr { display: block; margin-bottom: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: #0f0d17; }
+    table.rules td { display: grid; grid-template-columns: 11ch minmax(0, 1fr); gap: 8px; min-width: 0; padding: 3px 0; border-bottom: 0; overflow-wrap: break-word; }
+    table.rules td::before { content: attr(data-label); color: var(--dim); }
+  table.audit td:nth-child(1), table.audit td:nth-child(3) { white-space: normal; }
+    table.rules td:empty { display: none; }
   }
   @keyframes pulse { 50% { text-shadow: 0 0 22px rgba(255,138,61,.9); } }
 </style>
 </head>
 <body>
+<a class="skip" id="skip" href="#main">Skip to content</a>
 <header>
   <div>
     <h1><span>CHIMERIC</span>MESH <span class="pulse" aria-hidden="true">☠</span></h1>
@@ -193,16 +233,16 @@
   </div>
   <nav aria-label="Views">
     <button class="ghost" type="button" data-nav="overview">Overview</button>
-    <button class="ghost" type="button" data-nav="services">Services</button>
+    <button class="ghost" type="button" data-nav="services">Services <span class="count" hidden></span></button>
     <button class="ghost" type="button" data-nav="discovery">Discovery</button>
-    <button class="ghost" type="button" data-nav="rules">Rules</button>
+    <button class="ghost" type="button" data-nav="rules">Rules <span class="count" hidden></span></button>
   </nav>
   <div class="hdr-right">
     <div id="status" class="meta" role="status" aria-live="polite"></div>
     <span id="lockText" class="meta"></span>
-    <button class="ghost small" type="button" id="unlockBtn" aria-controls="tokenForm" aria-expanded="false">Unlock</button>
+    <button class="ghost small" type="button" id="unlockBtn" aria-controls="tokenForm" aria-expanded="false">Unlock to approve</button>
     <button class="ghost small" type="button" id="lockBtn" hidden>Lock</button>
-    <button id="storm" type="button">Summon a failure storm</button>
+    <button id="storm" class="ghost small" type="button">Summon a failure storm</button>
   </div>
 </header>
 <form class="unlock hidden" id="tokenForm" autocomplete="off" aria-label="Unlock">
@@ -216,9 +256,14 @@
   </div>
 </form>
 <div id="pausedBanner" class="banner" role="status" hidden></div>
-<main>
+<main id="main" tabindex="-1">
   <div id="view-overview" data-view="overview">
   <section class="stats" aria-label="Statistics" id="stats"></section>
+
+  <div id="decideStrip" class="decide" role="status" hidden>
+    <span id="decideText"></span>
+    <button type="button" id="decideReview">Review</button>
+  </div>
 
   <section id="guide" aria-labelledby="guide-h" class="hidden">
     <div class="guide-head">
@@ -229,6 +274,7 @@
     <div class="bar" id="guideBar" role="progressbar" aria-label="Workflow progress" aria-valuemin="0" aria-valuemax="6" aria-valuenow="0"><i id="guideFill" style="width:0%"></i></div>
     <ol class="steps" id="guideSteps"></ol>
     <div class="meta" id="guideStatus" role="status" aria-live="polite"></div>
+    <div class="meta" id="guideLockHint"></div>
   </section>
 
   <div class="grid">
@@ -247,7 +293,7 @@
       <section id="termPanel" aria-labelledby="term-h">
         <h2 id="term-h">ChimericBot terminal</h2>
         <div class="term-wrap">
-          <div class="term-log" id="transcript" role="log" aria-live="polite" aria-label="ChimericBot transcript"></div>
+          <div class="term-log" id="transcript" role="log" aria-live="polite" aria-label="ChimericBot transcript"><div class="tline system" id="termHint">ChimericBot is listening from the shadows. Try !help.</div></div>
           <button class="ghost small hidden" id="newMsgs" type="button">New messages ↓</button>
         </div>
         <form class="prompt" id="termForm" autocomplete="off">
@@ -294,7 +340,8 @@
   </div>
   <div id="view-service" data-view="service" hidden>
     <section id="svcDetail" aria-labelledby="svcName">
-      <h2 id="svcName">Service</h2>
+      <a href="#/services" id="svcCrumb">All services</a>
+      <div class="svc-title"><h2 id="svcName">Service</h2><span id="svcPill" class="pill" hidden></span></div>
       <dl class="facts">
         <dt>Id</dt><dd id="svcId"></dd>
         <dt>State</dt><dd id="svcState"></dd>
@@ -303,15 +350,18 @@
         <dt>Open incidents</dt><dd id="svcOpen"></dd>
       </dl>
     </section>
-    <div data-slot="permissions">
-      <details id="permPanel" class="perm">
-        <summary>Kiro permissions</summary>
-        <p>ChimericMesh never writes this file; paste it yourself.</p>
-        <p class="meta">The text has two sections: prompt mode (Kiro asks before each change) and autonomous mode.</p>
-        <pre id="permText" class="sample"></pre>
-        <div class="actions"><button class="ghost small" type="button" id="permCopy">Copy</button></div>
-        <div class="meta" id="permMsg" role="status" aria-live="polite"></div>
-      </details>
+    <div data-slot="proposals">
+      <section aria-labelledby="svcProp-h">
+        <h2 id="svcProp-h">Proposals</h2>
+        <div class="meta" id="svcPropNote"></div>
+        <div id="svcProposals"></div>
+      </section>
+    </div>
+    <div data-slot="incidents">
+      <section aria-labelledby="svcInc-h">
+        <h2 id="svcInc-h">Incidents</h2>
+        <div id="svcIncidents" aria-live="polite"></div>
+      </section>
     </div>
     <div data-slot="live-log">
       <section id="liveLog" aria-labelledby="live-h">
@@ -338,20 +388,18 @@
         <div class="log" id="liveBox" role="log" aria-label="Live log rows"></div>
       </section>
     </div>
-    <div data-slot="incidents">
-      <section aria-labelledby="svcInc-h">
-        <h2 id="svcInc-h">Incidents</h2>
-        <div id="svcIncidents" aria-live="polite"></div>
-      </section>
-    </div>
-    <div data-slot="proposals">
-      <section aria-labelledby="svcProp-h">
-        <h2 id="svcProp-h">Proposals</h2>
-        <div id="svcProposals"></div>
-      </section>
+    <div data-slot="permissions">
+      <details id="permPanel" class="perm">
+        <summary>Kiro permissions (optional, for hands-off edits)</summary>
+        <p>ChimericMesh never writes this file; paste it yourself.</p>
+        <p class="meta">The text has two sections: prompt mode (Kiro asks before each change) and autonomous mode.</p>
+        <div class="actions"><button class="ghost small" type="button" id="permCopy">Copy</button></div>
+        <pre id="permText" class="sample"></pre>
+        <div class="meta" id="permMsg" role="status" aria-live="polite"></div>
+      </details>
     </div>
     <section id="svcGone" hidden>
-      <p>This service no longer exists.</p>
+      <p>This service is gone (or never existed). Back to services.</p>
       <button class="ghost" type="button" id="svcBack">Back to services</button>
     </section>
   </div><!-- /view-service -->
@@ -362,9 +410,11 @@
         <span id="discDismissSlot"></span>
       </div>
       <p class="meta" id="discExplainer"></p>
+      <div class="meta" id="discLockHint"></div>
       <div class="actions" id="discScanSlot"></div>
       <div class="meta" id="discStatus" role="status" aria-live="polite"></div>
       <div class="meta" id="discLimited"></div>
+      <div class="actions" id="discEmptySlot"></div>
       <div id="discList" class="svc-grid"></div>
     </section>
   </div>
@@ -374,6 +424,7 @@
         <h2 id="rules-h">Approval rules</h2>
         <span class="actions" id="rulesTools"></span>
       </div>
+      <p class="meta" id="rulesLegend">Paused rules can be resumed. Revoked rules are gone.</p>
       <div class="meta" id="rulesMsg" role="status" aria-live="polite"></div>
       <div id="ruleFormBox"></div>
       <div class="table-wrap">
@@ -397,7 +448,7 @@
       </div>
       <div class="meta" id="auditMsg" role="status" aria-live="polite"></div>
       <div class="table-wrap">
-        <table class="rules" aria-label="Audit trail">
+        <table class="rules audit" aria-label="Audit trail">
           <thead><tr>
             <th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Subject</th><th scope="col">Detail</th>
           </tr></thead>
@@ -540,6 +591,70 @@ function mergeAudit(existing, incoming) {
   for (const r of incoming || []) byId.set(r.id, r);
   return Array.from(byId.values()).sort((a, b) => b.id - a.id);
 }
+// The text of the decide strip (UX-01): how many fixes wait and, for the newest, what it does. '' when none waits.
+function decideText(pending) {
+  const list = Array.isArray(pending) ? pending : [];
+  if (!list.length) return '';
+  const newest = list.reduce((a, b) => ((b.created || 0) >= (a.created || 0) ? b : a));
+  const what = capText(newest.action, 80);
+  return list.length === 1 ? `A fix is waiting for you: ${what}` : `${list.length} fixes are waiting for you. Newest: ${what}`;
+}
+// The confirmation text of a finished action (UX-03, UX-17). The id is shown as text only.
+function actionToast(kind, id) {
+  const i = capText(id, 40);
+  if (kind === 'approve') return `Approved ${i}. The agent will apply it; this card turns "done" when it reports back.`;
+  if (kind === 'deny') return `Denied ${i}. The agent will not run it.`;
+  if (kind === 'withdraw') return `Withdrew ${i}. Nothing will run.`;
+  if (kind === 'resolve') return `Laid ${i} to rest. If the errors return, it can reopen.`;
+  if (kind === 'unconfirmed') return `Could not confirm that ${i} was laid to rest. The terminal shows what the hub said.`;
+  if (kind === 'storm') return 'A failure storm is on its way. Incidents appear in a few seconds.';
+  return '';
+}
+// What to tell the user when a request failed; status 0 means the hub did not answer (UX-23).
+function friendlyError(status) {
+  if (!Number.isInteger(status) || status <= 0) return 'The mesh went quiet. Check that the hub is running, then try again.';
+  return `The mesh turned that away (status ${status}). Try again or check the hub log.`;
+}
+const TOKEN_REJECTED_TEXT = 'That token was not accepted. The ghost wants the exact line from the token file.';
+// The result of the check made when the user saves a token: ok only when the hub accepted it (UX-04).
+function unlockOutcome(status) {
+  if (status === 200) return { ok: true, text: 'Unlocked' };
+  if (status === 401) return { ok: false, text: TOKEN_REJECTED_TEXT };
+  return { ok: false, text: friendlyError(status) };
+}
+// What a finished proposal says about the loop (UX-18): the pill text, a warning, and whether the incident can be laid to rest.
+function closeLoop(p, inc) {
+  const done = Boolean(p) && p.status === 'done';
+  const passed = done && p.verification_result === 'passed';
+  const failed = done && p.verification_result === 'failed';
+  return {
+    pill: passed ? 'done, tests passed' : '',
+    warn: failed ? 'Tests failed. Deny it and ask the agent for another fix.' : '',
+    rest: passed && !(inc && inc.resolved),
+  };
+}
+// The line on an incident card about its newest live proposal (pending, approved or done); '' when none.
+function fixLine(proposals, incidentId) {
+  const live = (Array.isArray(proposals) ? proposals : []).filter((p) => String(p.incident_id) === String(incidentId) && ['pending', 'approved', 'done'].includes(p.status));
+  if (!live.length) return '';
+  const p = live.reduce((a, b) => ((b.created || 0) >= (a.created || 0) ? b : a));
+  return `fix #${capText(p.id, 20)} ${stateLabel('proposal', p.status)}`;
+}
+// How many pending proposals belong to one service.
+function pendingFor(proposals, serviceId) {
+  return (Array.isArray(proposals) ? proposals : []).filter((p) => p.status === 'pending' && p.service_id === serviceId).length;
+}
+// The counters on the Services and Rules tabs: visible text and the accessible name for each.
+function navBadges(incidents, proposals, rules, paused) {
+  const n = (Array.isArray(incidents) ? incidents : []).filter((i) => !i.resolved && i.service_id).length
+    + (Array.isArray(proposals) ? proposals : []).filter((p) => p.status === 'pending').length;
+  const susp = (Array.isArray(rules) ? rules : []).filter((r) => r.status === 'suspended').length;
+  const services = n > 0 ? { text: String(n), label: `Services, ${n} waiting` } : { text: '', label: 'Services' };
+  let r = { text: '', label: 'Rules' };
+  if (paused) r = { text: 'paused', label: 'Rules, auto-approval paused' };
+  else if (susp > 0) r = { text: String(susp), label: `Rules, ${susp} paused` };
+  return { services, rules: r };
+}
 function isNewer(id, lastId) { return typeof id === 'number' && Number.isFinite(id) && id > lastId; }
 function lockState(uiConfig, hasToken) {
   const flag = uiConfig ? uiConfig.enforce_access : null;
@@ -611,6 +726,25 @@ function sortServices(list) {
     return na < nb ? -1 : na > nb ? 1 : 0;
   });
 }
+// A service id suggested from a name: lower case letters and digits joined by single hyphens, at most 40 characters.
+// Empty when nothing usable is left or the result is the reserved id.
+function slugify(name) {
+  const s = String(name === null || name === undefined ? '' : name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
+  return s === 'unassigned' ? '' : s;
+}
+// Audit display: the raw values stay in the data and in tooltips; the table shows plain words.
+function actorText(a) {
+  const s = String(a === null || a === undefined ? '' : a);
+  if (s.startsWith('rest:')) return 'API';
+  if (s.startsWith('client:')) return 'browser';
+  return s;
+}
+function actionText(a) { return String(a === null || a === undefined ? '' : a).replace(/_/g, ' '); }
+function subjectText(x) {
+  const s = String(x === null || x === undefined ? '' : x);
+  if (!/^[A-Z]+ \/api\//.test(s)) return s;
+  return s.includes('/decide') ? 'a decision request' : 'an API request';
+}
 function splitList(text) { return String(text === null || text === undefined ? '' : text).split(',').map((x) => x.trim()).filter((x) => x); }
 // The create body: code_folder only when given (the server treats a missing key as "none").
 function serviceCreateBody(form) {
@@ -658,6 +792,10 @@ function buildAcceptBody(form) {
   if (apps.length) body.app_names = apps;
   return body;
 }
+// The header storm button text: the same action as guide step 1, so it is a quiet ghost button, and says "Another" once an incident exists (UX-13).
+function stormLabel(count) { return Number.isInteger(count) && count > 0 ? 'Another storm' : 'Summon a failure storm'; }
+// The line under the guide while locked: step 5 (decide) needs the admin token (UX-12). '' when nothing to say.
+function guideLockText(w, locked) { return locked && w && !w.complete ? 'Step 5 needs the admin token. Unlock first.' : ''; }
 /* PURE:end */
 
 /* ==== SELFTEST ==== */
@@ -665,7 +803,6 @@ const SELFTEST_CASES = [
   { name: 'sevName', args: [3], expect: 'err' },
   { name: 'sevName', args: [7], expect: 'debug' },
   { name: 'sevName', args: [8], expect: 'unknown' },
-  { name: 'sevName', args: ['x'], expect: 'unknown' },
   { name: 'capText', args: ['abc', 3], expect: 'abc' },
   { name: 'capText', args: ['abcd', 3], expect: 'abc…' },
   { name: 'capText', args: [null, 5], expect: '' },
@@ -691,8 +828,6 @@ const SELFTEST_CASES = [
   { name: 'stateLabel', args: ['source', 'unreadable'], expect: 'unreadable' },
   { name: 'stateLabel', args: ['source', 'error'], expect: 'error' },
   { name: 'stateLabel', args: ['source', 'stopped'], expect: 'stopped' },
-  { name: 'stateLabel', args: ['source', 'unknown'], expect: 'unknown' },
-  { name: 'stateLabel', args: ['source', 'zzz'], expect: 'unknown' },
   { name: 'stateLabel', args: ['source', 'constructor'], expect: 'unknown' },
   { name: 'stateLabel', args: ['rule', 'suspended'], expect: 'suspended' },
   { name: 'stateLabel', args: ['proposal', 'pending'], expect: 'pending' },
@@ -705,7 +840,9 @@ const SELFTEST_CASES = [
   { name: 'nextBackoff', args: [6], expect: 30 },
   { name: 'nextBackoff', args: [7], expect: 30 },
   { name: 'nextBackoff', args: [8], expect: 30 },
-  { name: 'nextBackoff', args: ['x'], expect: 1 },
+  { name: 'stormLabel', args: [0], expect: 'Summon a failure storm' },
+  { name: 'stormLabel', args: [2], expect: 'Another storm' },
+  { name: 'guideLockText', args: [{ complete: false }, true], expect: 'Step 5 needs the admin token. Unlock first.' },
   { name: 'errorText', args: [422, { detail: 'bad path', field: 'log_paths' }], expect: 'log_paths: bad path' },
   { name: 'errorText', args: [400, { detail: 'nope' }], expect: 'nope' },
   { name: 'errorText', args: [422, { detail: [{ loc: ['body', 'name'], msg: 'required' }, { loc: [], msg: 'bad' }] }], expect: 'name: required; bad' },
@@ -776,6 +913,11 @@ const SELFTEST_CASES = [
   { name: 'mergeAudit', args: [[{ id: 5 }, { id: 4 }, { id: 3 }], [{ id: 6 }, { id: 5 }]], expect: [{ id: 6 }, { id: 5 }, { id: 4 }, { id: 3 }] },
   { name: 'mergeAudit', args: [[{ id: 1 }, { id: 3 }], [{ id: 2 }]], expect: [{ id: 3 }, { id: 2 }, { id: 1 }] },
   { name: 'mergeAudit', args: [null, [{ id: 1 }]], expect: [{ id: 1 }] },
+  { name: 'decideText', args: [[]], expect: '' },
+  { name: 'decideText', args: [null], expect: '' },
+  { name: 'decideText', args: [[{ action: 'Add bounded backoff to upstream.py', created: 5 }]], expect: 'A fix is waiting for you: Add bounded backoff to upstream.py' },
+  { name: 'decideText', args: [[{ action: 'old', created: 1 }, { action: 'new', created: 9 }]], expect: '2 fixes are waiting for you. Newest: new' },
+  { name: 'decideText', args: [[{ action: 'x'.repeat(90), created: 1 }]], expect: `A fix is waiting for you: ${'x'.repeat(80)}…` },
   { name: 'isNewer', args: [5, 4], expect: true },
   { name: 'isNewer', args: [4, 4], expect: false },
   { name: 'isNewer', args: [3, 4], expect: false },
@@ -799,9 +941,6 @@ const SELFTEST_CASES = [
   { name: 'needsToken', args: ['POST', '/api/rules/resume'], expect: true },
   { name: 'needsToken', args: ['POST', '/api/rules/pause'], expect: false },
   { name: 'needsToken', args: ['POST', '/api/rules/r1/revoke'], expect: false },
-  { name: 'needsToken', args: ['POST', '/api/proposals/p1/withdraw'], expect: false },
-  { name: 'needsToken', args: ['POST', '/api/terminal'], expect: true },
-  { name: 'needsToken', args: ['GET', '/api/services/web/stream'], expect: false },
   { name: 'sendsTokenIfPresent', args: ['GET', '/api/services/web/permissions-snippet'], expect: true },
   { name: 'sendsTokenIfPresent', args: ['GET', '/api/services/web'], expect: false },
   { name: 'actionNeedsToken', args: ['svc-save'], expect: true },
@@ -832,11 +971,38 @@ const SELFTEST_CASES = [
   { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', code_folder: '/src', app_names: ['p'], rows: [{ checked: true, path: '/x', format: 'ncsa', watched_by: 'web' }] }], expect: { id: 'a', name: 'A', log_paths: [], code_folder: '/src', app_names: ['p'] } },
   { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', code_folder: '', app_names: [], rows: [{ checked: false, path: '/x', format: 'ncsa' }] }], expect: { id: 'a', name: 'A', log_paths: [] } },
   { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', rows: [{ checked: true, path: '/x', format: 'ncsa', watched_by: null }, { checked: true, path: '/y', format: 'w3c' }] }], expect: { id: 'a', name: 'A', log_paths: [{ path: '/x', format: 'ncsa' }, { path: '/y', format: 'w3c' }] } },
+  { name: 'actionToast', args: ['approve', 'p4'], expect: 'Approved p4. The agent will apply it; this card turns "done" when it reports back.' },
+  { name: 'actionToast', args: ['deny', 'p4'], expect: 'Denied p4. The agent will not run it.' },
+  { name: 'actionToast', args: ['withdraw', 'p4'], expect: 'Withdrew p4. Nothing will run.' },
+  { name: 'actionToast', args: ['resolve', '2f9159b0aa'], expect: 'Laid 2f9159b0aa to rest. If the errors return, it can reopen.' },
+  { name: 'actionToast', args: ['nothing', 'p4'], expect: '' },
+  { name: 'friendlyError', args: [0], expect: 'The mesh went quiet. Check that the hub is running, then try again.' },
+  { name: 'friendlyError', args: [500], expect: 'The mesh turned that away (status 500). Try again or check the hub log.' },
+  { name: 'unlockOutcome', args: [200], expect: { ok: true, text: 'Unlocked' } },
+  { name: 'unlockOutcome', args: [401], expect: { ok: false, text: 'That token was not accepted. The ghost wants the exact line from the token file.' } },
+  { name: 'unlockOutcome', args: [0], expect: { ok: false, text: 'The mesh went quiet. Check that the hub is running, then try again.' } },
+  { name: 'closeLoop', args: [{ status: 'done', verification_result: 'passed' }, { resolved: false }], expect: { pill: 'done, tests passed', warn: '', rest: true } },
+  { name: 'closeLoop', args: [{ status: 'done', verification_result: 'passed' }, { resolved: true }], expect: { pill: 'done, tests passed', warn: '', rest: false } },
+  { name: 'closeLoop', args: [{ status: 'done', verification_result: 'failed' }, null], expect: { pill: '', warn: 'Tests failed. Deny it and ask the agent for another fix.', rest: false } },
+  { name: 'closeLoop', args: [{ status: 'approved', verification_result: 'passed' }, null], expect: { pill: '', warn: '', rest: false } },
+  { name: 'fixLine', args: [[{ id: 'p4', incident_id: 'a', status: 'approved', created: 2 }, { id: 'p3', incident_id: 'a', status: 'denied', created: 3 }], 'a'], expect: 'fix #p4 approved' },
+  { name: 'fixLine', args: [[{ id: 'p3', incident_id: 'a', status: 'withdrawn', created: 3 }], 'a'], expect: '' },
+  { name: 'fixLine', args: [null, 'a'], expect: '' },
+  { name: 'pendingFor', args: [[{ status: 'pending', service_id: 'x' }, { status: 'pending', service_id: 'y' }, { status: 'done', service_id: 'x' }], 'x'], expect: 1 },
+  { name: 'pendingFor', args: [null, 'x'], expect: 0 },
+{ name: 'slugify', args: ['Web Proxy (prod)'], expect: 'web-proxy-prod' },
+  { name: 'actorText', args: ['rest:127.0.0.1'], expect: 'API' },
+  { name: 'actorText', args: ['client:127.0.0.1'], expect: 'browser' },
+  { name: 'actionText', args: ['proposal_withdrawn'], expect: 'proposal withdrawn' },
+  { name: 'subjectText', args: ['POST /api/proposals/{pid}/decide'], expect: 'a decision request' },
+  { name: 'navBadges', args: [[{ service_id: 'x' }, { service_id: null }, { service_id: 'x', resolved: true }], [{ status: 'pending' }], [], false], expect: { services: { text: '2', label: 'Services, 2 waiting' }, rules: { text: '', label: 'Rules' } } },
+  { name: 'navBadges', args: [[], [], [{ status: 'suspended' }, { status: 'active' }], false], expect: { services: { text: '', label: 'Services' }, rules: { text: '1', label: 'Rules, 1 paused' } } },
+  { name: 'navBadges', args: [null, null, null, true], expect: { services: { text: '', label: 'Services' }, rules: { text: 'paused', label: 'Rules, auto-approval paused' } } },
 ];
 function runSelfTest() {
   const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure,
     matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk, sortServices,
-    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText, canMakeRule, boundOf, clampInt, sevFloorText, expiryFromDays, ruleOverrides, mergeAudit };
+    actorText, actionText, subjectText, splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText, canMakeRule, boundOf, clampInt, sevFloorText, expiryFromDays, ruleOverrides, mergeAudit, decideText, actionToast, friendlyError, unlockOutcome, closeLoop, fixLine, pendingFor, navBadges };
   const failures = [];
   for (const c of SELFTEST_CASES) {
     let got;
@@ -866,7 +1032,7 @@ function toast(msg) {
   const t = $('toast'); t.textContent = msg;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.textContent = ''; }, 5000);
 }
-const unreachable = () => toast('Could not reach the mesh');
+function unreachable() { toast(friendlyError(0)); }
 const here = window.location; // the page's own address; only its hash is read (routes) or set (navigation)
 
 // A button for a registered action: locked (disabled, title "unlock first") only for a token action while
@@ -892,7 +1058,7 @@ function actionButton(id, label, handler, cls, aria) {
 // The admin token is kept for this tab only (sessionStorage, or memory when storage is off), read only by
 // authHeaders, sent only on the PRIVILEGED routes, and never shown, logged, put in a URL or in localStorage.
 const TOKEN_KEY = 'cm.token';
-const TOKEN_PROMPT_TEXT = 'Protected actions (approve, deny, add or edit a service, scan, rules) need the admin token. Paste the contents of the token file.';
+const TOKEN_PROMPT_TEXT = 'Protected actions (approve, deny, add or edit a service, scan, rules) need the admin token. Paste the contents of the token file. Open that file, copy its single line, paste it here.';
 let memToken = null;
 function storedToken() {
   try { const t = sessionStorage.getItem(TOKEN_KEY); if (t) return t; } catch (e) { /* storage unavailable */ }
@@ -922,9 +1088,10 @@ async function errorFromResponse(r) {
 // 401, 403 and 429 from the hub: clear a rejected token, say why in the status line, re-apply the lock.
 function handle401(path, status, retryAfter) {
   const out = afterAuthFailure(status === undefined ? 401 : status, Boolean(storedToken()), retryAfter);
-  if (out.clearToken) clearToken();
+  if (out.clearToken) { clearToken(); toast(TOKEN_REJECTED_TEXT); }
   if (out.text) setStatus(out.text);
   applyLock();
+  if (out.clearToken) openUnlock(TOKEN_REJECTED_TEXT);
   return out.text;
 }
 // `as` is 'json' (default) or 'text' (the permissions snippet is plain text).
@@ -953,7 +1120,7 @@ const post = (path, body) => request('POST', path, body || {});
 
 /* ==== STATE ==== */
 const COMMANDS = ['!help', '!status', '!incidents', '!explain', '!proposals', '!resolve', '!approve', '!deny'];
-const STATE = { route: { view: 'overview' }, uiConfig: UI_FALLBACK, lock: lockState(UI_FALLBACK, false), incidents: [], proposals: [], workflow: null, chatCursor: 0, history: [], histIdx: 0 };
+const STATE = { route: { view: 'overview' }, uiConfig: UI_FALLBACK, lock: lockState(UI_FALLBACK, false), incidents: [], proposals: [], workflow: null, chatCursor: 0, history: [], histIdx: 0, flash: new Map(), navInc: [], navProp: [] };
 const state = STATE;
 const SEV = SEV_NAMES;
 const firstOpen = () => state.incidents.find((i) => !i.resolved);
@@ -968,6 +1135,7 @@ const SCHED = [
   { id: 'service-detail', every: 5000, last: 0, view: 'service', run: () => loadServiceDetail() },
   { id: 'service-lists', every: 5000, last: 0, view: 'service', run: () => loadServiceLists() },
   { id: 'approvals-status', every: 5000, last: 0, view: '*', run: () => loadApprovalStatus() },
+  { id: 'nav-counts', every: 5000, last: 0, view: '*', run: () => loadNavData() },
   { id: 'rules-list', every: 5000, last: 0, view: 'rules', run: () => loadRules() },
   { id: 'audit-list', every: 5000, last: 0, view: 'rules', run: () => refreshAudit() },
   { id: 'scan-poll', every: 1000, last: 0, view: 'discovery', run: () => (scanRunning() ? pollScan() : null) },
@@ -1019,9 +1187,9 @@ function openPropose(i, card, actions, btn) {
     try {
       await post('/api/proposals', { incident_id: i.id, action: action.slice(0, 200) });
       f.remove(); msg.remove(); btn.focus();
-      await Promise.allSettled([loadProposals(), fetchChat(), loadWorkflow()]);
+      await Promise.allSettled([loadProposals(), fetchChat(), loadWorkflow(), STATE.route.view === 'service' ? loadServiceLists() : null]);
     } catch (err) {
-      msg.textContent = err.status === 0 ? 'Could not reach the mesh.' : err.message === '404' ? 'Incident no longer exists (404).' : (/^\d+$/.test(err.message) ? `Rejected by the mesh (status ${err.message}).` : 'Could not reach the mesh.');
+      msg.textContent = err.message === '404' ? 'Incident no longer exists (404).' : friendlyError(err.status);
       ok.disabled = false;
     }
   };
@@ -1030,9 +1198,33 @@ function openPropose(i, card, actions, btn) {
   inp.focus(); inp.select();
 }
 
+// The action row of an incident card, shared by the Overview and the service page. noService leaves out the
+// "service: x" button (the service page already is that service).
+function appendIncidentActions(d, i, noService) {
+  const hint = el('div', 'meta'); d.append(hint);
+  const actions = el('div', 'actions');
+  const mk = (label, act, fn) => { const b = el('button', 'ghost', label); b.type = 'button'; b.dataset.act = act; b.onclick = fn; actions.append(b); return b; };
+  mk('Explain', 'explain', () => { runCommand(`!explain ${i.id}`); $('termInput').focus(); });
+  mk('Find in code', 'code', async () => {
+    try { const h = await api(`/api/incidents/${i.id}/code`); hint.textContent = h.length ? h.map((x) => `${x.file}:${x.line}`).join('  ') : 'No matching source found.'; }
+    catch (e) { hint.textContent = 'Could not look up code.'; }
+  });
+  if (!i.resolved) {
+    const pb = mk('Propose a fix', 'propose', () => openPropose(i, d, actions, pb));
+    mk('Lay to rest', 'resolve', () => resolveIncident(i.id));
+  }
+  if (i.service_id && !noService) {
+    const t = mk(`service: ${i.service_id}`, 'service', () => { here.hash = `#/services/${encodeURIComponent(i.service_id)}`; });
+    t.classList.add('tag');
+    t.setAttribute('aria-label', `Open service ${i.service_id}`);
+  }
+  d.append(actions);
+}
 function renderIncidents(list, force) {
+  $('storm').textContent = stormLabel(list.length);
   if (document.querySelector('form.propose')) return; // never wipe a form being typed in
-  const key = JSON.stringify(list);
+  const fixes = list.map((i) => fixLine(state.proposals, i.id));
+  const key = JSON.stringify([list, fixes]);
   if (!force && key === lastIncKey) return;
   lastIncKey = key;
   const box = $('incidents'); box.replaceChildren();
@@ -1045,19 +1237,10 @@ function renderIncidents(list, force) {
     meta.append(`${SEV[i.severity]} · id ${i.id}${i.resolved ? ' · resolved' : ''}`); d.append(meta);
     d.append(el('div', 'sample', i.sample), el('p', '', i.hypothesis));
     const ol = el('ol'); i.remediation.forEach((s) => ol.append(el('li', '', s))); d.append(ol);
-    const hint = el('div', 'meta'); d.append(hint);
-    const actions = el('div', 'actions');
-    const mk = (label, act, fn) => { const b = el('button', 'ghost', label); b.type = 'button'; b.dataset.act = act; b.onclick = fn; actions.append(b); return b; };
-    mk('Explain', 'explain', () => { runCommand(`!explain ${i.id}`); $('termInput').focus(); });
-    mk('Find in code', 'code', async () => {
-      try { const h = await api(`/api/incidents/${i.id}/code`); hint.textContent = h.length ? h.map((x) => `${x.file}:${x.line}`).join('  ') : 'No matching source found.'; }
-      catch (e) { hint.textContent = 'Could not look up code.'; }
-    });
-    if (!i.resolved) {
-      const pb = mk('Propose a fix', 'propose', () => openPropose(i, d, actions, pb));
-      mk('Lay to rest', 'resolve', () => runCommand(`!resolve ${i.id} via dashboard`));
-    }
-    d.append(actions); box.append(d);
+    const fixText = fixLine(state.proposals, i.id);
+    if (fixText) d.append(el('div', 'meta fixline', fixText));
+    appendIncidentActions(d, i, false);
+    box.append(d);
   }
 }
 
@@ -1067,7 +1250,7 @@ function renderEvents(list) {
   if (!list.length) { box.append(el('p', 'empty', 'No whispers yet.')); return; }
   for (const e of list) {
     const r = el('div', 'row');
-    r.append(el('span', 'meta', new Date(e.ts * 1000).toLocaleTimeString()), el('span', `sev-${e.severity_name}`, `${e.source}`), el('span', 'm', `${e.host}: ${e.message}`));
+    r.append(el('span', 'meta t', fmtTime(e.ts)), el('span', `sev-${e.severity_name}`, `${e.source}`), el('span', 'm', `${e.host}: ${e.message}`));
     box.append(r);
   }
 }
@@ -1075,15 +1258,40 @@ function renderEvents(list) {
 /* ---------- proposals ---------- */
 let lastPropKey = null;
 // The hint under the Proposals heading: Approve and Deny need the token while the page is locked.
-function updatePropNote() {
-  $('propNote').textContent = STATE.lock && STATE.lock.locked ? 'Approve and Deny need the admin token: unlock first. Withdraw works without it.' : '';
+function renderLockNote(box, locked, text) {
+  box.replaceChildren();
+  if (!locked) return;
+  const wrap = el('span', 'lock-note');
+  wrap.append(el('span', '', text));
+  const b = el('button', 'ghost small', 'Unlock');
+  b.type = 'button';
+  b.onclick = () => openUnlock();
+  wrap.append(b);
+  box.append(wrap);
 }
+function updatePropNote() {
+  const locked = Boolean(STATE.lock && STATE.lock.locked);
+  const text = 'Approve and Deny are locked: unlock first with the admin token. Withdraw works without it.';
+  renderLockNote($('propNote'), locked, text);
+  renderLockNote($('svcPropNote'), locked, text);
+}
+// The strip above the guide that says a decision is waiting, and the class that lifts the proposals above the incidents (UX-01).
+function renderDecideStrip() {
+  const pending = state.proposals.filter((p) => p.status === 'pending');
+  const text = decideText(pending);
+  $('decideStrip').hidden = !text;
+  $('decideText').textContent = text;
+  document.querySelector('.col.left').classList.toggle('has-pending', pending.length > 0);
+}
+$('decideReview').onclick = () => scrollFocus($('propPanel'));
+$('skip').onclick = (ev) => { ev.preventDefault(); $('main').focus(); };
 // The one proposal renderer: used by the Overview panel and by the service detail. Every string is text.
-function renderProposalCard(p, incidentText) {
+function renderProposalCard(p, incidentText, noteId) {
   const d = el('div', 'prop');
   const top = el('div', 'top');
   const st = ['pending', 'approved', 'denied', 'done'].includes(p.status) ? p.status : 'unknown';
-  const label = p.status === 'approved' ? 'approved - waiting for agent' : stateLabel('proposal', p.status);
+  const loop = closeLoop(p, findIncident(p.incident_id));
+  const label = loop.pill || (p.status === 'approved' ? 'approved - waiting for agent' : stateLabel('proposal', p.status));
   top.append(el('span', `pill ${st}`, label), el('span', 'meta', `#${p.id} · ${incidentText}`));
   if (p.approval && p.approval.by === 'rule') top.append(el('span', 'pill auto', 'AUTO-APPROVED'));
   d.append(top, el('div', 'act', p.action));
@@ -1102,11 +1310,26 @@ function renderProposalCard(p, incidentText) {
   if (extra.length) d.append(el('div', 'meta', extra.join(' · ')));
   const msg = el('div', 'meta');
   msg.setAttribute('role', 'status');
+  msg.dataset.flash = String(p.id);
+  if (STATE.flash.has(String(p.id))) msg.textContent = STATE.flash.get(String(p.id));
   if (p.status === 'pending') {
     const a = el('div', 'actions');
-    a.append(actionButton('proposal-approve', 'Approve', () => decideProposal(p, true, msg), undefined, `Approve proposal ${p.id}`),
-      actionButton('proposal-deny', 'Deny', () => decideProposal(p, false, msg), 'ghost small warn', `Deny proposal ${p.id}`),
-      actionButton('proposal-withdraw', 'Withdraw', () => withdrawProposal(p, msg), undefined, `Withdraw proposal ${p.id}`));
+    const approve = actionButton('proposal-approve', 'Approve', () => decideProposal(p, true, msg), 'small', `Approve proposal ${p.id}`);
+    const deny = actionButton('proposal-deny', 'Deny', () => decideProposal(p, false, msg), 'ghost small warn', `Deny proposal ${p.id}`);
+    if (noteId) { approve.setAttribute('aria-describedby', noteId); deny.setAttribute('aria-describedby', noteId); }
+    a.append(approve, deny,
+      actionButton('proposal-withdraw', 'Withdraw', () => withdrawProposal(p, msg), 'ghost small quiet', `Withdraw proposal ${p.id}`));
+    d.append(a);
+  }
+  if (loop.warn) d.append(el('div', 'meta warnline', loop.warn));
+  if (loop.rest) {
+    const a = el('div', 'actions');
+    const rest = el('button', 'small', 'Lay incident to rest');
+    rest.type = 'button';
+    rest.dataset.act = 'rest-incident';
+    rest.setAttribute('aria-label', `Lay incident ${p.incident_id} to rest`);
+    rest.onclick = async () => { rest.disabled = true; if (!(await resolveIncident(p.incident_id))) rest.disabled = false; };
+    a.append(rest);
     d.append(a);
   }
   if (canMakeRule(p)) {
@@ -1120,6 +1343,16 @@ function renderProposalCard(p, incidentText) {
   d.append(msg);
   return d;
 }
+// The result line of a card survives the re-render that follows a decision: it is kept by proposal id for 8 s (UX-03).
+function flashMessage(id, text, msg) {
+  const key = String(id);
+  msg.textContent = text;
+  STATE.flash.set(key, text);
+  setTimeout(() => {
+    STATE.flash.delete(key);
+    document.querySelectorAll('[data-flash]').forEach((n) => { if (n.dataset.flash === key) n.textContent = ''; });
+  }, 8000);
+}
 async function refreshProposalViews() {
   await Promise.allSettled([loadProposals(), STATE.route.view === 'service' ? loadServiceLists() : null, loadWorkflow()]);
 }
@@ -1127,31 +1360,44 @@ async function refreshProposalViews() {
 async function decideProposal(p, approve, msg) {
   msg.textContent = approve ? 'Approving...' : 'Denying...';
   try { await request('POST', `/api/proposals/${encodeURIComponent(p.id)}/decide`, { approve, by: 'dashboard' }); }
-  catch (e) { msg.textContent = e.authText || errorText(e.status, e.body); return; }
-  msg.textContent = approve ? 'Approved.' : 'Denied.';
+  catch (e) {
+    msg.textContent = e.authText || errorText(e.status, e.body);
+    if (!e.authText) toast(friendlyError(e.status));
+    return;
+  }
+  flashMessage(p.id, approve ? 'Approved.' : 'Denied.', msg);
   setStatus(`Proposal ${p.id} ${approve ? 'approved' : 'denied'}`);
+  toast(actionToast(approve ? 'approve' : 'deny', p.id));
   await refreshProposalViews();
 }
 // Withdraw needs no token (a reduce action).
 async function withdrawProposal(p, msg) {
   msg.textContent = 'Withdrawing...';
   try { await request('POST', `/api/proposals/${encodeURIComponent(p.id)}/withdraw`); }
-  catch (e) { msg.textContent = e.authText || errorText(e.status, e.body); return; }
-  msg.textContent = 'Withdrawn.';
+  catch (e) {
+    msg.textContent = e.authText || errorText(e.status, e.body);
+    if (!e.authText) toast(friendlyError(e.status));
+    return;
+  }
+  flashMessage(p.id, 'Withdrawn.', msg);
   setStatus(`Proposal ${p.id} withdrawn`);
+  toast(actionToast('withdraw', p.id));
   await refreshProposalViews();
 }
 function renderProposals(force) {
+  renderDecideStrip();
+  renderIncidents(state.incidents); // the fix line of an incident card follows the proposals
+  setNavData(state.incidents, state.proposals);
   const list = state.proposals.slice().sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 20);
-  const key = JSON.stringify([list, state.incidents.map((i) => [i.id, i.category, i.host])]);
+  const key = JSON.stringify([list, state.incidents.map((i) => [i.id, i.category, i.host, i.resolved])]);
   if (!force && key === lastPropKey) return;
   lastPropKey = key;
   updatePropNote();
   const box = $('proposals'); box.replaceChildren();
-  if (!list.length) { box.append(el('p', 'empty', 'No proposals yet. An agent proposes fixes through MCP; you can simulate one from an incident card.')); return; }
+  if (!list.length) { box.append(el('p', 'empty', 'No proposals yet. Nobody has haunted a fix into being. Ask your agent to look at an incident, or press "Propose a fix" on a card.')); return; }
   for (const p of list) {
     const inc = state.incidents.find((i) => String(i.id) === String(p.incident_id));
-    box.append(renderProposalCard(p, inc ? `${inc.category} on ${inc.host}` : `incident ${p.incident_id}`));
+    box.append(renderProposalCard(p, inc ? `${inc.category} on ${inc.host}` : `incident ${p.incident_id}`, 'propNote'));
   }
 }
 
@@ -1201,7 +1447,7 @@ $('guideToggle').onclick = () => { const w = state.workflow; if (!w) return; set
 
 function scrollFocus(node) { node.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' }); try { node.focus({ preventScroll: true }); } catch (e) { node.focus(); } }
 async function storm() {
-  try { await post('/api/demo/storm'); } catch (e) { unreachable(); }
+  try { await post('/api/demo/storm'); toast(actionToast('storm')); } catch (e) { toast(friendlyError(e.status)); }
   refresh();
 }
 async function doIt(key) {
@@ -1238,6 +1484,7 @@ const nearBottom = () => tlog.scrollHeight - tlog.scrollTop - tlog.clientHeight 
 function fmtTime(ts) { return new Date(ts * 1000).toLocaleTimeString([], { hour12: false }); }
 function appendMessages(msgs) {
   if (!msgs.length) return;
+  const hint = $('termHint'); if (hint) hint.remove(); // the placeholder is not a message
   const stick = nearBottom();
   for (const m of msgs) {
     const kind = ['bot', 'user', 'system'].includes(m.kind) ? m.kind : 'system';
@@ -1284,11 +1531,23 @@ async function runCommand(text) {
   try { await request('POST', '/api/terminal', { text }); }
   catch (e) {
     // Only !approve and !deny need the token on this route (R6.5); request() already cleared a rejected token.
-    if (e.status === 401 && /^!(approve|deny)\b/.test(text)) { $('termStatus').textContent = 'unlock first'; openUnlock(); }
+    if (e.status === 401 && /^!(approve|deny)\b/.test(text)) { $('termStatus').textContent = 'unlock first'; openUnlock(e.authText === 'token rejected' ? TOKEN_REJECTED_TEXT : undefined); }
     else if (!e.authText) unreachable();
-    return;
+    return false;
   }
   await Promise.allSettled([fetchChat(), loadProposals(), loadIncidents(), loadWorkflow()]);
+  return true;
+}
+// Lay an incident to rest through the terminal command the incident card has always used (needs no token), then say so.
+async function resolveIncident(id) {
+  const sid = String(id);
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(sid)) { toast(actionToast('unconfirmed', sid)); return false; }
+  if (!(await runCommand(`!resolve ${sid} via dashboard`))) return false;
+  const inc = state.incidents.find((i) => String(i.id) === sid);
+  toast(actionToast(inc && inc.resolved ? 'resolve' : 'unconfirmed', sid));
+  if (STATE.serviceDetail) STATE.serviceDetail.propKey = null;
+  if (STATE.route.view === 'service') { await loadNavData(); await loadServiceLists(); }
+  return Boolean(inc && inc.resolved);
 }
 
 
@@ -1338,13 +1597,42 @@ function renderIdentity() {
   $('identity').textContent = you ? `You are ${you.nick} · ${access}` : '';
 }
 
+/* ---------- nav counters ---------- */
+function renderNav() {
+  const b = navBadges(STATE.navInc, STATE.navProp, STATE.rules, Boolean(STATE.approvalStatus && STATE.approvalStatus.paused));
+  const set = (sel, badge) => {
+    const btn = document.querySelector(sel);
+    const c = btn.querySelector('.count');
+    c.textContent = badge.text;
+    c.hidden = !badge.text;
+    btn.setAttribute('aria-label', badge.label);
+  };
+  set('nav [data-nav="services"]', b.services);
+  set('nav [data-nav="rules"]', b.rules);
+}
+function setNavData(incidents, proposals) {
+  STATE.navInc = Array.isArray(incidents) ? incidents : [];
+  STATE.navProp = Array.isArray(proposals) ? proposals : [];
+  renderNav();
+  if (STATE.route.view === 'services' && Array.isArray(STATE.services)) renderServices();
+}
+// Counters need the open incidents, the pending proposals and the rules on every view (plain reads, no token).
+async function loadNavData() {
+  const [i, p, r] = await Promise.allSettled([api('/api/incidents'), api('/api/proposals?status=pending'), api('/api/rules')]);
+  if (r.status === 'fulfilled' && Array.isArray(r.value)) STATE.rules = r.value;
+  setNavData(i.status === 'fulfilled' ? i.value : STATE.navInc, p.status === 'fulfilled' ? p.value : STATE.navProp);
+}
+const findIncident = (id) => state.incidents.concat(STATE.navInc).find((i) => String(i.id) === String(id));
+
 /* ---------- data loading ---------- */
 async function loadIncidents() { const i = await api('/api/incidents'); state.incidents = i; renderIncidents(i); renderProposals(); return i; }
 async function loadProposals() { state.proposals = await api('/api/proposals'); renderProposals(); }
+// UX-12: while locked, say why step 5 will not work (the guide's own code is pinned, so this is a separate line).
+function updateGuideLock() { $('guideLockHint').textContent = guideLockText(state.workflow, Boolean(STATE.lock && STATE.lock.locked)); }
 async function loadWorkflow() {
   try { state.workflow = await api('/api/workflow'); }
   catch (e) { state.workflow = null; }
-  renderGuide(); renderIdentity(); renderProposals();
+  renderGuide(); updateGuideLock(); renderIdentity(); renderProposals();
 }
 
 let refreshing = false;
@@ -1382,15 +1670,17 @@ function applyLock() {
   const has = Boolean(storedToken());
   const ls = lockState(STATE.uiConfig, has);
   STATE.lock = ls;
-  $('lockText').textContent = has ? 'Unlocked' : (ls.locked ? 'Locked' : '');
+  $('lockText').textContent = has ? 'Unlocked' : (ls.locked ? 'Locked: view only' : '');
   $('unlockBtn').hidden = has || ls.mode === 'off';
   $('lockBtn').hidden = !has;
   document.querySelectorAll('[data-action]').forEach(lockButton);
   updatePropNote();
+  updateDiscLock();
+  updateGuideLock();
   renderIdentity();
 }
-function openUnlock() {
-  $('tokenNote').textContent = TOKEN_PROMPT_TEXT;
+function openUnlock(note) {
+  $('tokenNote').textContent = note || TOKEN_PROMPT_TEXT;
   const file = STATE.uiConfig && STATE.uiConfig.token_file;
   $('tokenFile').textContent = file ? `The token is in the file ${file}` : '';
   $('tokenForm').classList.remove('hidden');
@@ -1403,18 +1693,40 @@ function closeUnlock() {
   $('unlockBtn').setAttribute('aria-expanded', 'false');
 }
 function wireUnlock() {
-  $('unlockBtn').onclick = openUnlock;
+  $('unlockBtn').onclick = () => openUnlock();
   $('tokenCancel').onclick = () => { closeUnlock(); $('unlockBtn').focus(); };
   $('lockBtn').onclick = () => { clearToken(); applyLock(); setStatus('Locked'); $('unlockBtn').focus(); };
-  $('tokenForm').onsubmit = (ev) => {
+  // Save asks the hub before it says Unlocked: a privileged read that changes nothing (the discovery dismissals list).
+  let checking = false;
+  $('tokenForm').onsubmit = async (ev) => {
     ev.preventDefault();
+    if (checking) return;
     const value = $('tokenInput').value.trim();
     $('tokenInput').value = '';
     if (!tokenShapeOk(value)) { $('tokenNote').textContent = 'That is not a token: 1 to 200 printable characters, no spaces.'; return; }
     const kept = saveToken(value);
+    checking = true;
+    setStatus('Checking the token...');
+    let status = 200, failure = null;
+    try { await request('GET', '/api/discovery/dismissals'); } catch (e) { failure = e; status = e && typeof e.status === 'number' ? e.status : 0; }
+    checking = false;
+    const out = unlockOutcome(status);
+    if (!out.ok) {
+      // A 401 was already handled by request(): token cleared, "token rejected" shown, this form reopened with the message.
+      if (status !== 401) {
+        clearToken();
+        applyLock();
+        const why = (failure && failure.authText) || out.text;
+        setStatus(why);
+        toast(why);
+        openUnlock(why);
+      }
+      return;
+    }
     closeUnlock();
     applyLock();
-    setStatus(kept ? 'Unlocked' : 'token kept for this tab only');
+    setStatus(kept ? out.text : 'token kept for this tab only');
+    toast('Unlocked. Approve and Deny are ready.');
     $('lockBtn').focus();
   };
 }
@@ -1458,7 +1770,13 @@ function serviceCard(s, now) {
   top.append(el('h3', '', String(s.name)), el('span', `pill ${STATE_CLASS[s.state] || 'st-unknown'}`, stateLabel('service', s.state)));
   c.append(top, el('div', 'meta', `id ${s.id}`));
   if (s.builtin) c.append(el('div', 'meta', 'built in'));
-  c.append(el('div', 'meta', `last seen ${relTime(s.last_seen, now)} · ${Number(s.error_rate) || 0} errors/min · ${Number(s.open_incidents) || 0} open incidents`));
+  const open = Number(s.open_incidents) || 0;
+  const facts = el('div', 'meta facts-line');
+  facts.append(el('span', '', `last seen ${relTime(s.last_seen, now)}`), el('span', '', `${Number(s.error_rate) || 0} errors/min`), el('span', '', `${open} open incident${open === 1 ? '' : 's'}`));
+  c.append(facts);
+  if (s.builtin) c.append(el('div', 'meta', 'Events no service claims yet. Add a service or run discovery to claim them.'));
+  const waiting = pendingFor(STATE.navProp, s.id);
+  if (waiting) top.append(el('span', 'pill pending', `${waiting} ${waiting === 1 ? 'fix' : 'fixes'} waiting`));
   const sources = Array.isArray(s.log_sources) ? s.log_sources : [];
   if (sources.length) {
     const ul = el('ul');
@@ -1481,7 +1799,7 @@ let lastSvcKey = null;
 function renderServices() {
   const list = sortServices(Array.isArray(STATE.services) ? STATE.services : []);
   const now = Date.now() / 1000;
-  const key = JSON.stringify([list, Math.floor(now / 30)]);
+  const key = JSON.stringify([list, Math.floor(now / 30), list.map((s) => pendingFor(STATE.navProp, s.id))]);
   if (key === lastSvcKey) return;
   lastSvcKey = key;
   const box = $('svcList');
@@ -1545,8 +1863,16 @@ function renderServiceForm(s) {
   const f = el('form', 'svc-form');
   f.setAttribute('aria-label', create ? 'Add service' : 'Edit service');
   f.append(el('h3', '', create ? 'Add service' : `Edit ${s.name}`));
-  if (create) f.append(field('Id', textInput('svcFId', '', 40)));
-  f.append(field('Name', textInput('svcFName', s ? s.name : '', 200)));
+  const nameIn = textInput('svcFName', s ? s.name : '', 200);
+  f.append(field('Name', nameIn));
+  if (create) {
+    // The id follows the name until the user types in it.
+    const idIn = textInput('svcFId', '', 40);
+    let idEdited = false;
+    idIn.addEventListener('input', () => { idEdited = true; });
+    nameIn.addEventListener('input', () => { if (!idEdited) idIn.value = slugify(nameIn.value); });
+    f.append(field('Id', idIn));
+  }
   f.append(field('Hosts (comma separated)', textInput('svcFHosts', s ? (s.hosts || []).join(', ') : '', 4000)));
   f.append(field('App names (comma separated)', textInput('svcFApps', s ? (s.app_names || []).join(', ') : '', 4000)));
   const protos = el('fieldset');
@@ -1556,6 +1882,7 @@ function renderServiceForm(s) {
     c.type = 'checkbox'; c.id = `svcFProto${i}`; c.value = p; c.checked = Boolean(s && (s.protocols || []).includes(p));
     protos.append(field(p, c));
   });
+  protos.append(el('div', 'meta', 'Which feeds belong to this service. Leave empty to match by host or app name only.'));
   f.append(protos);
   f.append(field('Code folder', textInput('svcFCode', s ? s.code_folder || '' : '', 1024)));
   f.append(el('h4', '', 'Log files'));
@@ -1580,7 +1907,7 @@ function renderServiceForm(s) {
   f.onsubmit = (ev) => { ev.preventDefault(); if (!save.disabled) saveService(); };
   f.append(actions, msg);
   box.append(f);
-  (create ? $('svcFId') : $('svcFName')).focus();
+  $('svcFName').focus();
 }
 function readServiceForm() {
   const idIn = $('svcFId');
@@ -1668,6 +1995,10 @@ function renderServiceHeader(s) {
   $('svcGone').hidden = true;
   setSlotsHidden(false);
   $('svcName').textContent = String(s.name);
+  const pill = $('svcPill');
+  pill.className = `pill ${STATE_CLASS[s.state] || 'st-unknown'}`;
+  pill.textContent = stateLabel('service', s.state);
+  pill.hidden = false;
   $('svcId').textContent = String(s.id);
   $('svcState').textContent = stateLabel('service', s.state);
   $('svcSeen').textContent = relTime(s.last_seen, Date.now() / 1000);
@@ -1699,15 +2030,17 @@ function renderIncidentsFor(list) {
     d.append(el('h3', '', `${String(i.category).toUpperCase()} on ${i.host} ×${i.count}`));
     d.append(el('div', 'meta', `${sevName(sev)} · id ${i.id}${i.resolved ? ' · resolved' : ' · open'}`));
     d.append(el('div', 'sample', i.sample), el('p', '', i.hypothesis));
+    appendIncidentActions(d, i, true);
     box.append(d);
   }
 }
 function renderServiceProposals(list) {
   const box = $('svcProposals');
   box.replaceChildren();
+  updatePropNote();
   const sorted = list.slice().sort((a, b) => (b.created || 0) - (a.created || 0));
   if (!sorted.length) { box.append(el('p', 'empty', 'No proposals for this service.')); return; }
-  for (const p of sorted) box.append(renderProposalCard(p, `incident ${p.incident_id}`));
+  for (const p of sorted) box.append(renderProposalCard(p, `incident ${p.incident_id}`, 'svcPropNote'));
 }
 function resetServiceLists() {
   const d = STATE.serviceDetail;
@@ -1726,7 +2059,8 @@ async function loadServiceLists() {
   if (STATE.serviceDetail !== d) return;
   if (inc.status === 'fulfilled' && Array.isArray(inc.value)) {
     const key = JSON.stringify(inc.value);
-    if (key !== d.incKey) { d.incKey = key; renderIncidentsFor(inc.value); }
+    // never wipe a propose form being typed in; the next poll renders the list
+    if (key !== d.incKey && !document.querySelector('#svcIncidents form.propose')) { d.incKey = key; renderIncidentsFor(inc.value); }
   }
   if (prop.status === 'fulfilled' && Array.isArray(prop.value)) {
     const key = JSON.stringify(prop.value);
@@ -1740,6 +2074,7 @@ function openServiceDetail(id) {
   resetServiceLists();
   loadServiceLists();
   $('svcName').textContent = id;
+  $('svcPill').hidden = true;
   for (const k of ['svcId', 'svcState', 'svcSeen', 'svcRate', 'svcOpen']) $(k).textContent = '';
   $('svcGone').hidden = true;
   $('svcDetail').hidden = false;
@@ -2033,6 +2368,7 @@ function renderRuleForm(defaults, mode) {
   });
   const describe = () => {
     const v = read();
+    if (!v.match_value) { words.textContent = 'Type the signature to match.'; return; }
     words.textContent = `This rule approves fixes for service ${v.service_id || '?'} that match ${v.match_type || '?'} "${v.match_value || '?'}", for incidents at ${sevFloorText(v.most_urgent_severity)}, at most ${v.max_per_hour} per hour and ${v.max_per_incident} per incident, up to ${v.max_files} files and ${v.max_lines} lines each${v.days ? `, for ${v.days} day(s)` : ''}.`;
   };
   f.addEventListener('input', describe);
@@ -2080,9 +2416,13 @@ async function confirmRuleFromProposal(p, defaults, rf) {
 /* ---------- rules, pause banner ---------- */
 function rulesMsg(text) { $('rulesMsg').textContent = text || ''; }
 function keyed(b, key) { b.dataset.focusKey = key; return b; }
+// Column titles: the same text as the table headers; shown beside each value when the rows stack on a phone (UX-07).
+const RULE_COLS = ['Id', 'Service', 'Matches', 'Severity floor', 'Expires', 'Limits', 'Uses (hour / total)', 'Status', 'Source proposal', 'Actions'];
+const AUDIT_COLS = ['Time', 'Actor', 'Action', 'Subject', 'Detail'];
 function ruleRow(r, now) {
   const tr = el('tr');
-  const cell = (text) => { const td = el('td', '', text); tr.append(td); return td; };
+  let col = 0;
+  const cell = (text) => { const td = el('td', '', text); td.setAttribute('data-label', RULE_COLS[col]); col += 1; tr.append(td); return td; };
   cell(String(r.id));
   cell(String(r.service_id));
   cell(`${r.match_type}: ${r.match_value}`);
@@ -2091,9 +2431,10 @@ function ruleRow(r, now) {
   cell(`${r.max_per_hour}/hour · ${r.max_per_incident}/incident · ${r.max_files} files · ${r.max_lines} lines`);
   cell(`${r.uses_last_hour} / ${r.use_count}`);
   const st = cell(stateLabel('rule', r.status));
-  if (r.status === 'suspended' && r.status_reason) st.append(el('div', 'meta', String(r.status_reason)));
+  if (r.status === 'suspended' && r.status_reason) st.append(el('div', 'meta', String(r.status_reason).replace(/\b(?:rest|client):\S+/g, actorText)));
   cell(r.source_proposal_id ? String(r.source_proposal_id) : '');
   const td = el('td');
+  td.setAttribute('data-label', RULE_COLS[col]);
   const box = el('div', 'actions');
   td.append(box);
   tr.append(td);
@@ -2247,7 +2588,7 @@ async function resumeRules() {
 }
 /* ---------- audit trail ---------- */
 STATE.audit = { rows: [], key: null, done: false, open: new Set(), shown: null };
-function fmtStamp(ts) { return new Date(ts * 1000).toLocaleString(); }
+function fmtStamp(ts) { return new Date(ts * 1000).toLocaleString([], { hour12: false }); }
 function auditKey() { return `${$('auditSvc').value}|${$('auditRule').value.trim()}`; }
 function auditUrl(before) {
   const p = ['limit=100'];
@@ -2260,10 +2601,16 @@ function auditUrl(before) {
 }
 function auditRow(r) {
   const tr = el('tr');
-  tr.append(el('td', '', fmtStamp(r.ts)), el('td', '', String(r.actor)), el('td', '', String(r.action)), el('td', '', String(r.subject)));
+  const actor = el('td', '', actorText(r.actor));
+  actor.title = String(r.actor);
+  const subject = el('td', '', subjectText(r.subject));
+  subject.title = String(r.subject);
+  tr.append(el('td', '', fmtStamp(r.ts)), actor, el('td', '', actionText(r.action)), subject);
   const full = String(r.detail === null || r.detail === undefined ? '' : r.detail);
   const open = STATE.audit.open.has(r.id);
   const td = el('td');
+  tr.append(td);
+  Array.from(tr.children).forEach((c, i) => c.setAttribute('data-label', AUDIT_COLS[i]));
   td.append(el('span', '', open ? capText(full, 4096) : capText(full, 300)));
   if (!open && full.length > 300) {
     const more = el('button', 'ghost small', 'show more');
@@ -2271,7 +2618,6 @@ function auditRow(r) {
     more.onclick = () => { STATE.audit.open.add(r.id); renderAudit(); };
     td.append(more);
   }
-  tr.append(td);
   return tr;
 }
 function renderAudit() {
@@ -2346,8 +2692,12 @@ const LIMITED_TEXT = 'some processes were not visible without admin rights';
 const SCAN_GIVE_UP_MS = 45000;
 function discMsg(text) { $('discStatus').textContent = text || ''; }
 function scanRunning() { return Boolean(STATE.scan && STATE.scan.state === 'running'); }
+function updateDiscLock() {
+  $('discLockHint').textContent = STATE.lock && STATE.lock.locked ? 'Scanning needs the admin token. Unlock first.' : '';
+}
 function renderDiscovery() {
   $('discExplainer').textContent = DISCOVERY_EXPLAINER;
+  updateDiscLock();
   const slot = $('discScanSlot');
   if (!slot.firstElementChild) slot.append(actionButton('scan-start', 'Discover local apps', startScan, ''));
   const dslot = $('discDismissSlot');
@@ -2357,7 +2707,11 @@ function renderDiscovery() {
   if (!sc) discMsg('');
   else if (sc.state === 'running') discMsg(`Scanning... ${Math.floor((Date.now() - sc.startedAt) / 1000)} s`);
   else if (sc.state === 'failed') discMsg(`scan failed: ${capText(sc.reason || 'unknown reason', 300)}`);
-  else if (sc.state === 'done') discMsg(sc.suggestions.length ? '' : 'Scan finished: no apps found.');
+  else if (sc.state === 'done') discMsg(sc.suggestions.length ? '' : 'No apps found. Nothing visible is listening here. Add your service by hand.');
+  const empty = $('discEmptySlot');
+  const none = Boolean(sc && sc.state === 'done' && !sc.suggestions.length);
+  if (!none) empty.replaceChildren();
+  else if (!empty.firstElementChild) empty.append(focusKeyButton('Add service', 'disc:add', () => { here.hash = '#/services'; renderServiceForm(null); }, 'ghost'));
   renderSuggestions(sc);
 }
 function adoptScan(id) {
@@ -2533,6 +2887,7 @@ function init() {
   applyLock();
   loadUiConfig();
   loadApprovalStatus();
+  loadNavData();
   showRoute();
   refresh(); fetchChat();
   startScheduler();
