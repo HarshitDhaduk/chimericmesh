@@ -122,8 +122,7 @@ Estimates are for one developer who knows the file.
 | B6 Rules/Audit/Discovery language | actor/action/subject display helpers, 24 h stamps, vocabulary legend, discovery empty result and lock hint. | UX-14, UX-15, UX-16 | 1.5 h | Low. Helpers are pure: add to `PURE` and `runSelfTest`. |
 | B7 First run and copy | demote storm button after first incident, terminal placeholder, guide grid and lock hint, permissions summary, spooky copy pass (section 5). | UX-12, UX-13, UX-24 | 1 h | Low. Keep six guide steps. |
 
-Total about 11 hours. If time is short, ship B1, B2, B3: they fix every high finding except none left (UX-01 to UX-07 are
-all in B1 to B3).
+Total about 11 hours. If time is short, ship B1, B2 and B3: together they cover all seven high findings (UX-01 to UX-07).
 
 Suggested tests per batch: a static test for every new element id; a pure-function test for each new helper; the
 existing `guard-innerhtml` hook and static `textContent` test must pass (all new text uses `textContent`); a headless
