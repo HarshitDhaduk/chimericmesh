@@ -186,3 +186,79 @@ def test_ux20_skip_link_and_main_target():
     assert re.search(r"\$\('skip'\)\.onclick = [^;]*preventDefault\(\)[^}]*\$\('main'\)\.focus\(\)", script)
     assert ".skip:focus" in css()
     assert 'class="pulse" aria-hidden="true"' in page
+
+
+# ---- B3 feedback and errors --------------------------------------------------------------------------
+def test_ux03_toast_is_a_polite_live_region_that_never_takes_focus():
+    attrs = page_ids()["toast"]
+    assert attrs.get("role") == "status" and attrs.get("aria-live") == "polite"
+    body = code("toast")
+    assert "textContent" in body and "focus" not in body and "innerHTML" not in body
+    assert "position: fixed" in css().split("#toast {")[1].split("}")[0]
+
+
+def test_ux03_action_toast_and_error_text_are_pure_and_have_cases():
+    pure = ds.functions(pure_block())
+    for name in ("actionToast", "friendlyError", "unlockOutcome"):
+        assert name in pure, name
+    names = case_names()
+    assert names.count("actionToast") >= 4 and names.count("friendlyError") >= 2 and names.count("unlockOutcome") >= 3
+    text = cases_text()
+    assert 'Approved p4. The agent will apply it; this card turns "done" when it reports back.' in text
+    assert "Denied p4. The agent will not run it." in text and "Withdrew p4. Nothing will run." in text
+    assert "That token was not accepted. The ghost wants the exact line from the token file." in pure_block()
+    assert "The mesh is not answering. Check that the hub is running, then try again." in text
+
+
+def test_ux03_approve_deny_withdraw_toast_and_keep_the_card_message():
+    for name, kinds in (("decideProposal", ("'approve'", "'deny'")), ("withdrawProposal", ("'withdraw'",))):
+        body = code(name)
+        assert "toast(actionToast(" in body and all(k in body for k in kinds), name
+        assert "flashMessage(" in body, name
+        assert "setStatus(" in body, name  # R2.3: the header text stays
+    card = code("renderProposalCard")
+    assert "STATE.flash" in card and "dataset.flash" in card
+    flash = code("flashMessage")
+    assert "STATE.flash.set(" in flash and "setTimeout(" in flash and "8000" in flash
+    assert "flash: new Map()" in ds.strip_comments(ds.section("STATE"))
+
+
+def test_ux17_resolve_and_storm_confirm_on_the_page():
+    body = code("resolveIncident")
+    assert "!resolve ${" in body and "via dashboard" in body
+    assert "toast(actionToast(inc && inc.resolved ? 'resolve' : 'unconfirmed'" in body
+    assert "resolveIncident(i.id)" in code("renderIncidents")
+    st = code("storm")
+    assert "toast(actionToast('storm'" in st
+    assert "return true" in code("runCommand") and "return false" in code("runCommand")
+
+
+def test_ux04_unlock_checks_the_token_with_a_privileged_read_before_saying_unlocked():
+    wire = code("wireUnlock")
+    assert "async (ev)" in wire
+    assert "request('GET', '/api/discovery/dismissals')" in wire
+    assert wire.index("request('GET', '/api/discovery/dismissals')") < wire.index("setStatus(kept ? out.text")
+    assert "'Unlocked'" in pure_block()  # the only place the word is produced is unlockOutcome(200)
+    assert "unlockOutcome(" in wire and "clearToken()" in wire
+    assert "'Token saved" not in ds.script_text()
+    # that route is on the privileged table, so request() sends the token with it and the hub checks it
+    assert "['GET', '^/api/discovery/dismissals$']" in pure_block()
+
+
+def test_ux04_a_rejected_token_toasts_and_reopens_the_unlock_form_with_a_message():
+    h = code("handle401")
+    assert "toast(TOKEN_REJECTED_TEXT)" in h and "openUnlock(TOKEN_REJECTED_TEXT)" in h
+    assert h.index("clearToken()") < h.index("openUnlock(")
+    assert "setStatus(out.text)" in h  # R2.3: "token rejected" stays in the status area
+    op = code("openUnlock")
+    assert re.search(r"function openUnlock\(note\)", ds.script_text()) and "note || TOKEN_PROMPT_TEXT" in op
+    assert "$('unlockBtn').onclick = () => openUnlock();" in ds.script_text()  # the click event is not a note
+
+
+def test_ux23_error_copy_is_friendly_but_the_pinned_strings_stay():
+    assert "friendlyError(0)" in code("unreachable")
+    assert "friendlyError(" in code("openPropose")
+    pure = pure_block()
+    for pinned in ("'token rejected'", "'unlock first'"):
+        assert pinned in pure
+    assert "The mesh refused that (status ${" in pure and "Try again or check the hub log." in pure

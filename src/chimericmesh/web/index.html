@@ -582,6 +582,29 @@ function decideText(pending) {
   const what = capText(newest.action, 80);
   return list.length === 1 ? `A fix is waiting for you: ${what}` : `${list.length} fixes are waiting for you. Newest: ${what}`;
 }
+// The confirmation text of a finished action (UX-03, UX-17). The id is shown as text only.
+function actionToast(kind, id) {
+  const i = capText(id, 40);
+  if (kind === 'approve') return `Approved ${i}. The agent will apply it; this card turns "done" when it reports back.`;
+  if (kind === 'deny') return `Denied ${i}. The agent will not run it.`;
+  if (kind === 'withdraw') return `Withdrew ${i}. Nothing will run.`;
+  if (kind === 'resolve') return `Laid ${i} to rest. If the errors return, it can reopen.`;
+  if (kind === 'unconfirmed') return `Could not confirm that ${i} was laid to rest. The terminal shows what the hub said.`;
+  if (kind === 'storm') return 'A failure storm is on its way. Incidents appear in a few seconds.';
+  return '';
+}
+// What to tell the user when a request failed; status 0 means the hub did not answer (UX-23).
+function friendlyError(status) {
+  if (!Number.isInteger(status) || status <= 0) return 'The mesh is not answering. Check that the hub is running, then try again.';
+  return `The mesh refused that (status ${status}). Try again or check the hub log.`;
+}
+const TOKEN_REJECTED_TEXT = 'That token was not accepted. The ghost wants the exact line from the token file.';
+// The result of the check made when the user saves a token: ok only when the hub accepted it (UX-04).
+function unlockOutcome(status) {
+  if (status === 200) return { ok: true, text: 'Unlocked' };
+  if (status === 401) return { ok: false, text: TOKEN_REJECTED_TEXT };
+  return { ok: false, text: friendlyError(status) };
+}
 function isNewer(id, lastId) { return typeof id === 'number' && Number.isFinite(id) && id > lastId; }
 function lockState(uiConfig, hasToken) {
   const flag = uiConfig ? uiConfig.enforce_access : null;
@@ -879,11 +902,21 @@ const SELFTEST_CASES = [
   { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', code_folder: '/src', app_names: ['p'], rows: [{ checked: true, path: '/x', format: 'ncsa', watched_by: 'web' }] }], expect: { id: 'a', name: 'A', log_paths: [], code_folder: '/src', app_names: ['p'] } },
   { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', code_folder: '', app_names: [], rows: [{ checked: false, path: '/x', format: 'ncsa' }] }], expect: { id: 'a', name: 'A', log_paths: [] } },
   { name: 'buildAcceptBody', args: [{ id: 'a', name: 'A', rows: [{ checked: true, path: '/x', format: 'ncsa', watched_by: null }, { checked: true, path: '/y', format: 'w3c' }] }], expect: { id: 'a', name: 'A', log_paths: [{ path: '/x', format: 'ncsa' }, { path: '/y', format: 'w3c' }] } },
+  { name: 'actionToast', args: ['approve', 'p4'], expect: 'Approved p4. The agent will apply it; this card turns "done" when it reports back.' },
+  { name: 'actionToast', args: ['deny', 'p4'], expect: 'Denied p4. The agent will not run it.' },
+  { name: 'actionToast', args: ['withdraw', 'p4'], expect: 'Withdrew p4. Nothing will run.' },
+  { name: 'actionToast', args: ['resolve', '2f9159b0aa'], expect: 'Laid 2f9159b0aa to rest. If the errors return, it can reopen.' },
+  { name: 'actionToast', args: ['nothing', 'p4'], expect: '' },
+  { name: 'friendlyError', args: [0], expect: 'The mesh is not answering. Check that the hub is running, then try again.' },
+  { name: 'friendlyError', args: [500], expect: 'The mesh refused that (status 500). Try again or check the hub log.' },
+  { name: 'unlockOutcome', args: [200], expect: { ok: true, text: 'Unlocked' } },
+  { name: 'unlockOutcome', args: [401], expect: { ok: false, text: 'That token was not accepted. The ghost wants the exact line from the token file.' } },
+  { name: 'unlockOutcome', args: [0], expect: { ok: false, text: 'The mesh is not answering. Check that the hub is running, then try again.' } },
 ];
 function runSelfTest() {
   const fns = { sevName, capText, relTime, countdown, stateLabel, nextBackoff, errorText, parseRoute, dueTasks, isNewer, lockState, afterAuthFailure,
     matchesTable, needsToken, sendsTokenIfPresent, actionNeedsToken, tokenShapeOk, sortServices,
-    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText, canMakeRule, boundOf, clampInt, sevFloorText, expiryFromDays, ruleOverrides, mergeAudit, decideText };
+    splitList, serviceCreateBody, servicePatch, diffSources, buildAcceptBody, rowMatches, approvalText, canMakeRule, boundOf, clampInt, sevFloorText, expiryFromDays, ruleOverrides, mergeAudit, decideText, actionToast, friendlyError, unlockOutcome };
   const failures = [];
   for (const c of SELFTEST_CASES) {
     let got;
@@ -913,7 +946,7 @@ function toast(msg) {
   const t = $('toast'); t.textContent = msg;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.textContent = ''; }, 5000);
 }
-const unreachable = () => toast('Could not reach the mesh');
+function unreachable() { toast(friendlyError(0)); }
 const here = window.location; // the page's own address; only its hash is read (routes) or set (navigation)
 
 // A button for a registered action: locked (disabled, title "unlock first") only for a token action while
@@ -969,9 +1002,10 @@ async function errorFromResponse(r) {
 // 401, 403 and 429 from the hub: clear a rejected token, say why in the status line, re-apply the lock.
 function handle401(path, status, retryAfter) {
   const out = afterAuthFailure(status === undefined ? 401 : status, Boolean(storedToken()), retryAfter);
-  if (out.clearToken) clearToken();
+  if (out.clearToken) { clearToken(); toast(TOKEN_REJECTED_TEXT); }
   if (out.text) setStatus(out.text);
   applyLock();
+  if (out.clearToken) openUnlock(TOKEN_REJECTED_TEXT);
   return out.text;
 }
 // `as` is 'json' (default) or 'text' (the permissions snippet is plain text).
@@ -1000,7 +1034,7 @@ const post = (path, body) => request('POST', path, body || {});
 
 /* ==== STATE ==== */
 const COMMANDS = ['!help', '!status', '!incidents', '!explain', '!proposals', '!resolve', '!approve', '!deny'];
-const STATE = { route: { view: 'overview' }, uiConfig: UI_FALLBACK, lock: lockState(UI_FALLBACK, false), incidents: [], proposals: [], workflow: null, chatCursor: 0, history: [], histIdx: 0 };
+const STATE = { route: { view: 'overview' }, uiConfig: UI_FALLBACK, lock: lockState(UI_FALLBACK, false), incidents: [], proposals: [], workflow: null, chatCursor: 0, history: [], histIdx: 0, flash: new Map() };
 const state = STATE;
 const SEV = SEV_NAMES;
 const firstOpen = () => state.incidents.find((i) => !i.resolved);
@@ -1068,7 +1102,7 @@ function openPropose(i, card, actions, btn) {
       f.remove(); msg.remove(); btn.focus();
       await Promise.allSettled([loadProposals(), fetchChat(), loadWorkflow()]);
     } catch (err) {
-      msg.textContent = err.status === 0 ? 'Could not reach the mesh.' : err.message === '404' ? 'Incident no longer exists (404).' : (/^\d+$/.test(err.message) ? `Rejected by the mesh (status ${err.message}).` : 'Could not reach the mesh.');
+      msg.textContent = err.message === '404' ? 'Incident no longer exists (404).' : friendlyError(err.status);
       ok.disabled = false;
     }
   };
@@ -1102,7 +1136,7 @@ function renderIncidents(list, force) {
     });
     if (!i.resolved) {
       const pb = mk('Propose a fix', 'propose', () => openPropose(i, d, actions, pb));
-      mk('Lay to rest', 'resolve', () => runCommand(`!resolve ${i.id} via dashboard`));
+      mk('Lay to rest', 'resolve', () => resolveIncident(i.id));
     }
     d.append(actions); box.append(d);
   }
@@ -1173,6 +1207,8 @@ function renderProposalCard(p, incidentText, noteId) {
   if (extra.length) d.append(el('div', 'meta', extra.join(' · ')));
   const msg = el('div', 'meta');
   msg.setAttribute('role', 'status');
+  msg.dataset.flash = String(p.id);
+  if (STATE.flash.has(String(p.id))) msg.textContent = STATE.flash.get(String(p.id));
   if (p.status === 'pending') {
     const a = el('div', 'actions');
     const approve = actionButton('proposal-approve', 'Approve', () => decideProposal(p, true, msg), 'small', `Approve proposal ${p.id}`);
@@ -1193,6 +1229,16 @@ function renderProposalCard(p, incidentText, noteId) {
   d.append(msg);
   return d;
 }
+// The result line of a card survives the re-render that follows a decision: it is kept by proposal id for 8 s (UX-03).
+function flashMessage(id, text, msg) {
+  const key = String(id);
+  msg.textContent = text;
+  STATE.flash.set(key, text);
+  setTimeout(() => {
+    STATE.flash.delete(key);
+    document.querySelectorAll('[data-flash]').forEach((n) => { if (n.dataset.flash === key) n.textContent = ''; });
+  }, 8000);
+}
 async function refreshProposalViews() {
   await Promise.allSettled([loadProposals(), STATE.route.view === 'service' ? loadServiceLists() : null, loadWorkflow()]);
 }
@@ -1200,18 +1246,28 @@ async function refreshProposalViews() {
 async function decideProposal(p, approve, msg) {
   msg.textContent = approve ? 'Approving...' : 'Denying...';
   try { await request('POST', `/api/proposals/${encodeURIComponent(p.id)}/decide`, { approve, by: 'dashboard' }); }
-  catch (e) { msg.textContent = e.authText || errorText(e.status, e.body); return; }
-  msg.textContent = approve ? 'Approved.' : 'Denied.';
+  catch (e) {
+    msg.textContent = e.authText || errorText(e.status, e.body);
+    if (!e.authText) toast(friendlyError(e.status));
+    return;
+  }
+  flashMessage(p.id, approve ? 'Approved.' : 'Denied.', msg);
   setStatus(`Proposal ${p.id} ${approve ? 'approved' : 'denied'}`);
+  toast(actionToast(approve ? 'approve' : 'deny', p.id));
   await refreshProposalViews();
 }
 // Withdraw needs no token (a reduce action).
 async function withdrawProposal(p, msg) {
   msg.textContent = 'Withdrawing...';
   try { await request('POST', `/api/proposals/${encodeURIComponent(p.id)}/withdraw`); }
-  catch (e) { msg.textContent = e.authText || errorText(e.status, e.body); return; }
-  msg.textContent = 'Withdrawn.';
+  catch (e) {
+    msg.textContent = e.authText || errorText(e.status, e.body);
+    if (!e.authText) toast(friendlyError(e.status));
+    return;
+  }
+  flashMessage(p.id, 'Withdrawn.', msg);
   setStatus(`Proposal ${p.id} withdrawn`);
+  toast(actionToast('withdraw', p.id));
   await refreshProposalViews();
 }
 function renderProposals(force) {
@@ -1275,7 +1331,7 @@ $('guideToggle').onclick = () => { const w = state.workflow; if (!w) return; set
 
 function scrollFocus(node) { node.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' }); try { node.focus({ preventScroll: true }); } catch (e) { node.focus(); } }
 async function storm() {
-  try { await post('/api/demo/storm'); } catch (e) { unreachable(); }
+  try { await post('/api/demo/storm'); toast(actionToast('storm')); } catch (e) { toast(friendlyError(e.status)); }
   refresh();
 }
 async function doIt(key) {
@@ -1358,11 +1414,23 @@ async function runCommand(text) {
   try { await request('POST', '/api/terminal', { text }); }
   catch (e) {
     // Only !approve and !deny need the token on this route (R6.5); request() already cleared a rejected token.
-    if (e.status === 401 && /^!(approve|deny)\b/.test(text)) { $('termStatus').textContent = 'unlock first'; openUnlock(); }
+    if (e.status === 401 && /^!(approve|deny)\b/.test(text)) { $('termStatus').textContent = 'unlock first'; openUnlock(e.authText === 'token rejected' ? TOKEN_REJECTED_TEXT : undefined); }
     else if (!e.authText) unreachable();
-    return;
+    return false;
   }
   await Promise.allSettled([fetchChat(), loadProposals(), loadIncidents(), loadWorkflow()]);
+  return true;
+}
+// Lay an incident to rest through the terminal command the incident card has always used (needs no token), then say so.
+async function resolveIncident(id) {
+  const sid = String(id);
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(sid)) { toast(actionToast('unconfirmed', sid)); return false; }
+  if (!(await runCommand(`!resolve ${sid} via dashboard`))) return false;
+  const inc = state.incidents.find((i) => String(i.id) === sid);
+  toast(actionToast(inc && inc.resolved ? 'resolve' : 'unconfirmed', sid));
+  if (STATE.serviceDetail) STATE.serviceDetail.propKey = null;
+  if (STATE.route.view === 'service') await loadServiceLists();
+  return Boolean(inc && inc.resolved);
 }
 
 
@@ -1463,8 +1531,8 @@ function applyLock() {
   updatePropNote();
   renderIdentity();
 }
-function openUnlock() {
-  $('tokenNote').textContent = TOKEN_PROMPT_TEXT;
+function openUnlock(note) {
+  $('tokenNote').textContent = note || TOKEN_PROMPT_TEXT;
   const file = STATE.uiConfig && STATE.uiConfig.token_file;
   $('tokenFile').textContent = file ? `The token is in the file ${file}` : '';
   $('tokenForm').classList.remove('hidden');
@@ -1477,18 +1545,40 @@ function closeUnlock() {
   $('unlockBtn').setAttribute('aria-expanded', 'false');
 }
 function wireUnlock() {
-  $('unlockBtn').onclick = openUnlock;
+  $('unlockBtn').onclick = () => openUnlock();
   $('tokenCancel').onclick = () => { closeUnlock(); $('unlockBtn').focus(); };
   $('lockBtn').onclick = () => { clearToken(); applyLock(); setStatus('Locked'); $('unlockBtn').focus(); };
-  $('tokenForm').onsubmit = (ev) => {
+  // Save asks the hub before it says Unlocked: a privileged read that changes nothing (the discovery dismissals list).
+  let checking = false;
+  $('tokenForm').onsubmit = async (ev) => {
     ev.preventDefault();
+    if (checking) return;
     const value = $('tokenInput').value.trim();
     $('tokenInput').value = '';
     if (!tokenShapeOk(value)) { $('tokenNote').textContent = 'That is not a token: 1 to 200 printable characters, no spaces.'; return; }
     const kept = saveToken(value);
+    checking = true;
+    setStatus('Checking the token...');
+    let status = 200, failure = null;
+    try { await request('GET', '/api/discovery/dismissals'); } catch (e) { failure = e; status = e && typeof e.status === 'number' ? e.status : 0; }
+    checking = false;
+    const out = unlockOutcome(status);
+    if (!out.ok) {
+      // A 401 was already handled by request(): token cleared, "token rejected" shown, this form reopened with the message.
+      if (status !== 401) {
+        clearToken();
+        applyLock();
+        const why = (failure && failure.authText) || out.text;
+        setStatus(why);
+        toast(why);
+        openUnlock(why);
+      }
+      return;
+    }
     closeUnlock();
     applyLock();
-    setStatus(kept ? 'Unlocked' : 'token kept for this tab only');
+    setStatus(kept ? out.text : 'token kept for this tab only');
+    toast('Unlocked. Approve and Deny are ready.');
     $('lockBtn').focus();
   };
 }
