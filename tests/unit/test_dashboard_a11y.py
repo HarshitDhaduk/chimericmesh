@@ -212,3 +212,24 @@ def test_live_log_filter_row_aligns_controls_and_keeps_checkbox_inline():
     assert 'class="field inline"><label for="liveAuto">' in page_text
     assert 'class="field"><label for="liveSev">' in page_text and 'class="field"><label for="liveText">' in page_text
     assert re.search(r'\.live-ctl select, \.live-ctl input\[type=text\] \{[^}]*height: 40px', page_text)
+
+
+def _rule(css: str, selector: str) -> str:
+    m = re.search(r"(?m)^\s*" + re.escape(selector) + r"\s*\{([^}]*)\}", css)
+    assert m, selector
+    return m.group(1)
+
+
+def test_terminal_panel_is_not_sticky_on_its_own():
+    """A sticky terminal inside a column makes the Seance log, its sibling, slide under it on scroll."""
+    css = ds.load_page().split("</style>")[0]
+    assert "position: sticky" not in _rule(css, "#termPanel")
+    assert "z-index" not in _rule(css, "#termPanel")
+
+
+def test_right_column_sticks_as_one_unit_and_scrolls_inside():
+    css = ds.load_page().split("</style>")[0]
+    rule = _rule(css, ".col.right")
+    assert "position: sticky" in rule and "overflow-y: auto" in rule and "max-height: calc(100vh - 32px)" in rule
+    narrow = css[css.index("@media (max-width: 960px)"):]
+    assert re.search(r"\.col\.right\s*\{[^}]*position: static", narrow)
